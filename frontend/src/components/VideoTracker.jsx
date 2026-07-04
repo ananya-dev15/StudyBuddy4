@@ -165,13 +165,20 @@ export default function VideoTracker() {
   // --- UTILITY FUNCTIONS ---
   const updateBackendCoins = async (loss) => {
     try {
+      const token = localStorage.getItem("token");
+
       const res = await fetch(`${API_BASE}/api/tracking/coins-loss`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         credentials: "include",
         body: JSON.stringify({ loss }),
       });
+
       const data = await res.json();
+
       if (data.success) {
         setAppState((prev) => ({ ...prev, coins: data.coins }));
       }
