@@ -125,14 +125,20 @@ async function isStudyVideo(videoId) {
 
 const updateVideosSwitched = async (userId) => {
   try {
+    const token = localStorage.getItem("token");
+
     const res = await fetch(`${API_BASE}/api/tracking/videos-switched`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
       credentials: "include",
       body: JSON.stringify({ userId }),
     });
+
     const data = await res.json();
-    return data; // ✅ VERY IMPORTANT
+    return data;
   } catch (err) {
     console.error("Error updating video switch:", err);
   }
