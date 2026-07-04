@@ -599,6 +599,7 @@ export default function VideoTracker() {
       try {
         const res = await fetch(`${API_BASE}/api/tracking/history`, {
           headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
 
         const data = await res.json();

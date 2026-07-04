@@ -132,6 +132,7 @@ const HomePage = () => {
 
       // Remove user from storage & state regardless of API response
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
       setUser(null);
       setDropdownOpen(false);
 
@@ -144,6 +145,7 @@ const HomePage = () => {
       console.error("Error during logout:", error);
       // Ensure frontend logout even if server call fails
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
       setUser(null);
       setDropdownOpen(false);
       alert("An error occurred during logout.");

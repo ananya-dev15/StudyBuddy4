@@ -383,6 +383,7 @@ const AssignmentCard = () => {
 
       
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
       setUser(null);
       setDropdownOpen(false);
 
@@ -395,6 +396,7 @@ const AssignmentCard = () => {
       console.error("Error during logout:", error);
       // Ensure frontend logout even if server call fails
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
       setUser(null);
       setDropdownOpen(false);
       alert("An error occurred during logout.");
@@ -469,6 +471,7 @@ const AssignmentCard = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(newAssignment),
       });
 
@@ -496,6 +499,7 @@ const AssignmentCard = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(newHackathon),
       });
       const data = await res.json();
@@ -519,6 +523,7 @@ const AssignmentCard = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
         body: JSON.stringify(newReminder),
       });
       const data = await res.json();
@@ -541,6 +546,7 @@ const AssignmentCard = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
@@ -573,6 +579,7 @@ const AssignmentCard = () => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        credentials: "include",
       });
       const data = await res.json();
       if (!data.success) {

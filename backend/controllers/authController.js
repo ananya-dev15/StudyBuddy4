@@ -11,10 +11,11 @@ const generateToken = (userId, res) => {
   // Store token in cookie
   res.cookie("token", token, {
     httpOnly: true,
-    secure: false, // change to true in production
-    sameSite: "lax",
+    secure: true, // Secure in production (must be true for SameSite=None)
+    sameSite: "none", // Allowed cross-site cookie
     maxAge: 7 * 24 * 60 * 60 * 1000,
   });
+  return token;
 };
 
 // ✅ SIGNUP — Give 50 coins only to new users
@@ -40,10 +41,11 @@ export const signup = async (req, res) => {
       videosSwitched: 0,
     });
 
-    generateToken(user._id, res);
+    const token = generateToken(user._id, res);
 
     res.status(201).json({
       message: "User registered successfully with 50 coins",
+      token,
       user: { id: user._id, name: user.name, email: user.email, coins: user.coins },
     });
   } catch (err) {
@@ -63,10 +65,11 @@ export const login = async (req, res) => {
     if (!isMatch) return res.status(400).json({ message: "Invalid credentials" });
 
     // 🔒 No coin reset — preserve existing balance
-    generateToken(user._id, res);
+    const token = generateToken(user._id, res);
 
     res.json({
       message: "Login successful",
+      token,
       user: { id: user._id, name: user.name, email: user.email, coins: user.coins },
     });
   } catch (err) {
@@ -76,6 +79,10 @@ export const login = async (req, res) => {
 
 // ✅ LOGOUT
 export const logout = (req, res) => {
-  res.clearCookie("token");
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none"
+  });
   res.json({ message: "Logged out successfully" });
 };

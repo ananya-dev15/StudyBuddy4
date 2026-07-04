@@ -132,8 +132,12 @@ const Analytics = () => {
 
   useEffect(() => {
     const fetchReports = async () => {
+      const token = localStorage.getItem("token");
       try {
-        const res = await fetch(`${API_BASE}/api/reports/my`); // 🔥 simple call
+        const res = await fetch(`${API_BASE}/api/reports/my`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          credentials: "include",
+        }); // 🔥 simple call
 
         const data = await res.json();
 

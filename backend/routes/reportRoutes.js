@@ -7,10 +7,11 @@ const router = express.Router();
 
 router.post(
   "/upload",
+  protect,
   uploadReportPDF.single("pdf"),
   uploadReport
 );
 
-router.get("/my", getMyReports);
+router.get("/my", protect, getMyReports);
 
 export default router;

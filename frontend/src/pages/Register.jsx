@@ -43,8 +43,15 @@ const Register = () => {
 
     if (res.ok) {
       localStorage.setItem("user", JSON.stringify(data.user));
+      if (data.token) localStorage.setItem("token", data.token);
 
-      setAppState({ coins: data.user.coins || 50, streak: data.user.streak || 0, name: data.user.name, email: data.user.email, });
+      setAppState({
+        user: data.user,
+        coins: data.user.coins || 50,
+        streak: data.user.streak || 0,
+        name: data.user.name,
+        email: data.user.email,
+      });
       
       // 🎉 Welcome bonus alert
       if (data.user.coins === 500) {

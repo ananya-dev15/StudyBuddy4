@@ -33,6 +33,7 @@ const Dashboard = () => {
 
       const res = await fetch(`${API_BASE}/api/tracking/monthly-activity`, {
         headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
 
       const data = await res.json();
@@ -63,8 +64,9 @@ const Dashboard = () => {
 
       const data = await res.json();
 
-      // Remove user from storage & state regardless of API response
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
+      setUser(null);
       setDropdownOpen(false);
 
       if (res.ok) {
@@ -76,6 +78,8 @@ const Dashboard = () => {
       console.error("Error during logout:", error);
       // Ensure frontend logout even if server call fails
       localStorage.removeItem("user");
+      localStorage.removeItem("token");
+      setUser(null);
       setDropdownOpen(false);
       alert("An error occurred during logout.");
     }

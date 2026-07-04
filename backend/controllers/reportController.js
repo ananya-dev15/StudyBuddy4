@@ -11,6 +11,7 @@ export const uploadReport = async (req, res) => {
     }
 
     const report = await Report.create({
+      userId: req.user.id,
       title: req.body.title || "StudyBuddy Report",
       fileUrl: `/uploads/reports/${req.file.filename}`,
     });
@@ -27,7 +28,7 @@ export const uploadReport = async (req, res) => {
 
 export const getMyReports = async (req, res) => {
   try {
-    const reports = await Report.find().sort({ createdAt: -1 }); // 👈 YAHI LINE
+    const reports = await Report.find({ userId: req.user.id }).sort({ createdAt: -1 }); // 👈 YAHI LINE
 
     res.json({ success: true, reports });
   } catch (err) {

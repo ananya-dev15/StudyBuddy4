@@ -108,15 +108,30 @@ export const AppProvider = ({ children }) => {
 
   // --- Backend Sync on App Load ---
   useEffect(() => {
+    if (!userId) {
+      setAssignments([]);
+      setHackathons([]);
+      setReminders([]);
+      return;
+    }
     const syncTasks = async () => {
       const token = localStorage.getItem("token");
-      if (!token || !userId) return;
+      if (!token) return;
 
       try {
         const [aRes, hRes, rRes] = await Promise.all([
-          fetch(`${API_BASE}/api/assignments/list`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE}/api/hackathons/list`, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_BASE}/api/reminders/list`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_BASE}/api/assignments/list`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }),
+          fetch(`${API_BASE}/api/hackathons/list`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }),
+          fetch(`${API_BASE}/api/reminders/list`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }),
         ]);
 
         const [aData, hData, rData] = await Promise.all([aRes.json(), hRes.json(), rRes.json()]);
@@ -209,9 +224,13 @@ export const AppProvider = ({ children }) => {
     const fetchUserCoins = async () => {
       const storedUser = JSON.parse(localStorage.getItem("user"));
       if (!storedUser?._id && !storedUser?.id) return; // user not logged in
+      const token = localStorage.getItem("token");
 
       try {
-        const res = await fetch(`${API_BASE}/api/tracking/coins/${storedUser._id || storedUser.id}`);
+        const res = await fetch(`${API_BASE}/api/tracking/coins/${storedUser._id || storedUser.id}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          credentials: "include",
+        });
         if (!res.ok) throw new Error("Failed to fetch coins");
         const data = await res.json();
 
@@ -232,7 +251,7 @@ export const AppProvider = ({ children }) => {
     };
 
     fetchUserCoins();
-  }, []);
+  }, [userId]);
 
 
   // 🕒 Fetch last 5 study sessions
@@ -244,6 +263,7 @@ export const AppProvider = ({ children }) => {
       try {
         const res = await fetch(`${API_BASE}/api/tracking/history`, {
           headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
         });
         if (!res.ok) throw new Error("Failed to fetch history");
         const data = await res.json();
@@ -259,7 +279,7 @@ export const AppProvider = ({ children }) => {
     };
 
     fetchHistory();
-  }, []);
+  }, [userId]);
 
   // 📝 Fetch saved notes + tags once on load
   useEffect(() => {
@@ -289,7 +309,7 @@ export const AppProvider = ({ children }) => {
     };
 
     fetchNotesTags();
-  }, []);
+  }, [userId]);
 
 
   return (

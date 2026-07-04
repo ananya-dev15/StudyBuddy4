@@ -20,6 +20,7 @@ const RemindersPanel = () => {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
+          credentials: "include",
           body: JSON.stringify({ title: newReminderTitle, time: reminderTime }),
         });
         const data = await res.json();
@@ -40,6 +41,7 @@ const RemindersPanel = () => {
       const res = await fetch(`${API_BASE}/api/reminders/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
       });
       const data = await res.json();
       if (data.success) {
