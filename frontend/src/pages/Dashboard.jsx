@@ -17,8 +17,10 @@ import { eachDayOfInterval, format, startOfMonth, endOfMonth } from "date-fns";
 
 const Dashboard = () => {
   const { appState } = useAppContext();
-  const { user, coins, streak, history, videosWatched, videosSwitched } =
-    appState;
+  const storedUser = JSON.parse(localStorage.getItem("user")) || null;
+  const user = appState?.user || storedUser;
+  const { coins = 0, streak = 0, history = [], videosWatched = 0, videosSwitched = 0 } =
+    appState || {};
 
   const [monthlyActivity, setMonthlyActivity] = useState({});
   const [loading, setLoading] = useState(true);
@@ -349,10 +351,10 @@ const Dashboard = () => {
           <h2 className="text-lg font-semibold mb-4 text-gray-700">
             🎬 Last 5 Study Sessions
           </h2>
-          {history.length === 0 ? (
+          {(history || []).length === 0 ? (
             <p className="text-gray-500">No recent study sessions found.</p>
           ) : (
-            history.map((h, i) => (
+            (history || []).map((h, i) => (
               <div
                 key={i}
                 className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 mb-3 rounded-xl border border-purple-200 shadow-sm"

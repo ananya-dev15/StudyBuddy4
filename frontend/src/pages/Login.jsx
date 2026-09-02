@@ -24,26 +24,27 @@ const Login = () => {
       });
       const data = await res.json();
       console.log("Login Response:", data);
-      if (res.ok) {
-        localStorage.setItem("user", JSON.stringify(data.user));
+     if (res.ok) {
+     localStorage.setItem("user", JSON.stringify(data.user));
 
-        if (data.token) localStorage.setItem("token", data.token);
+     if (data.token) localStorage.setItem("token", data.token);
 
-        setAppState({
+        setAppState((prev) => ({
+          ...prev,
           user: data.user,
           coins: data.user.coins,
           streak: data.user.streak || 0,
           name: data.user.name,
           email: data.user.email,
-        });
+        }));
         localStorage.setItem("streak", data.user.streak || 0);
 
 
-        alert(`Welcome back, ${data.user.name}! Coins: ${data.user.coins}`);
-        navigate("/");
-      } else {
-        alert(data.message);
-      }
+     alert(`Welcome back, ${data.user.name}! Coins: ${data.user.coins}`);
+     navigate("/"); 
+    } else {
+    alert(data.message);
+   }
 
     } catch (err) {
       console.error(err);
