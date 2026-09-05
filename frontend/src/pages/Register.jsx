@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
+import { GoogleLogin } from "@react-oauth/google";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -30,52 +31,90 @@ const Register = () => {
 
   // Handle form submit
   const handleSignup = async (e) => {
-  e.preventDefault();
-  try {
-    const res = await fetch(`${API_BASE}/api/auth/signup`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(formData),
-    });
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/signup`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (res.ok) {
-      localStorage.setItem("user", JSON.stringify(data.user));
-      if (data.token) localStorage.setItem("token", data.token);
-
-      setAppState((prev) => ({
-        ...prev,
-        user: data.user,
-        coins: data.user.coins || 50,
-        streak: data.user.streak || 0,
-        name: data.user.name,
-        email: data.user.email,
-      }));
-      
-      // 🎉 Welcome bonus alert
-      if (data.user.coins === 500) {
-        alert("Welcome! You’ve received 500 bonus coins 🎊");
+      if (res.ok) {
+        // No token issued yet – user must verify email first
+        alert(data.message || "Registration successful! Please check your email to verify your account.");
+        // Redirect to login page so they can verify after clicking the email link
+        navigate("/login");
       } else {
-        alert("Register Successful");
+        alert(data.message);
       }
-
-      navigate("/"); // redirect to home or dashboard
-    } else {
-      alert(data.message);
+    } catch (err) {
+      console.error(err);
+      alert("Server error");
     }
-  } catch (err) {
-    console.error(err);
-    alert("Server error");
-  }
-};
+  };
 
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/google-login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: credentialResponse.credential }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+        if (data.token) localStorage.setItem("token", data.token);
+
+        setAppState((prev) => ({
+          ...prev,
+          user: data.user,
+          coins: data.user.coins,
+          streak: data.user.streak || 0,
+          name: data.user.name,
+          email: data.user.email,
+        }));
+        localStorage.setItem("streak", data.user.streak || 0);
+
+        alert(`Welcome, ${data.user.name}! Coins: ${data.user.coins}`);
+        navigate("/");
+      } else {
+        alert(data.message || "Google sign-up failed.");
+      }
+    } catch (err) {
+      console.error("Google signup error:", err);
+      alert("Server error during Google sign-up.");
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 via-purple-200 to-pink-100 px-6">
       <div className="w-full max-w-2xl bg-white/40 backdrop-blur-lg shadow-2xl rounded-2xl p-10">
-        <h2 className="text-3xl font-bold text-center text-indigo-700 mb-8">Sign Up</h2>
+        <h2 className="text-3xl font-bold text-center text-indigo-700 mb-4">Sign Up</h2>
+
+        {/* Google Sign-Up Button */}
+        <div className="flex justify-center mb-4">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => alert("Google sign-up failed. Please try again.")}
+            text="continue_with"
+            shape="rectangular"
+            size="large"
+            width="350"
+            theme="outline"
+          />
+        </div>
+
+        {/* Divider */}
+        <div className="flex items-center mb-6">
+          <div className="flex-1 border-t border-gray-300"></div>
+          <span className="px-4 text-sm text-gray-500 font-medium">or sign up with email</span>
+          <div className="flex-1 border-t border-gray-300"></div>
+        </div>
 
         <form onSubmit={handleSignup} className="grid md:grid-cols-2 gap-6">
           {/* Inputs */}

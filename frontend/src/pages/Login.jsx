@@ -1,16 +1,14 @@
 import React, { useState } from "react";
 import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
-
 import { Link, useNavigate } from "react-router-dom";
-
+import { GoogleLogin } from "@react-oauth/google";
 
 const Login = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const navigate = useNavigate();
   const { setAppState } = useAppContext();
-
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -24,10 +22,9 @@ const Login = () => {
       });
       const data = await res.json();
       console.log("Login Response:", data);
-     if (res.ok) {
-     localStorage.setItem("user", JSON.stringify(data.user));
-
-     if (data.token) localStorage.setItem("token", data.token);
+      if (res.ok) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+        if (data.token) localStorage.setItem("token", data.token);
 
         setAppState((prev) => ({
           ...prev,
@@ -39,16 +36,64 @@ const Login = () => {
         }));
         localStorage.setItem("streak", data.user.streak || 0);
 
-
-     alert(`Welcome back, ${data.user.name}! Coins: ${data.user.coins}`);
-     navigate("/"); 
-    } else {
-    alert(data.message);
-   }
-
+        alert(`Welcome back, ${data.user.name}! Coins: ${data.user.coins}`);
+        navigate("/");
+      } else if (data.needsVerification) {
+        // Show a prompt with a resend button
+        const resend = confirm(data.message + "\nWould you like to resend the verification email?");
+        if (resend) {
+          // Call resend endpoint
+          fetch(`${API_BASE}/api/auth/resend-verification`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+          })
+            .then((r) => r.json())
+            .then((resp) => alert(resp.message || "Verification email sent"))
+            .catch(() => alert("Failed to resend verification email"));
+        }
+      } else {
+        alert(data.message);
+      }
     } catch (err) {
       console.error(err);
       alert("Server error");
+    }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/google-login`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ credential: credentialResponse.credential }),
+      });
+      const data = await res.json();
+
+      if (res.ok) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+        if (data.token) localStorage.setItem("token", data.token);
+
+        setAppState((prev) => ({
+          ...prev,
+          user: data.user,
+          coins: data.user.coins,
+          streak: data.user.streak || 0,
+          name: data.user.name,
+          email: data.user.email,
+        }));
+        localStorage.setItem("streak", data.user.streak || 0);
+
+        alert(`Welcome, ${data.user.name}! Coins: ${data.user.coins}`);
+        navigate("/");
+      } else {
+        alert(data.message || "Google login failed.");
+      }
+    } catch (err) {
+      console.error("Google login error:", err);
+      alert("Server error during Google login.");
     }
   };
 
@@ -86,8 +131,28 @@ const Login = () => {
           </button>
         </form>
 
+        {/* Divider */}
+        <div className="flex items-center my-6">
+          <div className="flex-1 border-t border-gray-300"></div>
+          <span className="px-4 text-sm text-gray-500 font-medium">or</span>
+          <div className="flex-1 border-t border-gray-300"></div>
+        </div>
+
+        {/* Google Login Button */}
+        <div className="flex justify-center">
+          <GoogleLogin
+            onSuccess={handleGoogleSuccess}
+            onError={() => alert("Google login failed. Please try again.")}
+            text="continue_with"
+            shape="rectangular"
+            size="large"
+            width="350"
+            theme="outline"
+          />
+        </div>
+
         <p className="mt-6 text-center text-sm text-gray-700">
-          Don’t have an account?{" "}
+          Don't have an account?{" "}
           <Link to="/register" className="text-indigo-700 font-semibold hover:underline">
             Sign Up
           </Link>

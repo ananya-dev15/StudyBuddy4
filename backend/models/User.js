@@ -30,12 +30,20 @@ const userSchema = new mongoose.Schema(
     year: { type: String },
     domain: { type: String },
     email: { type: String, required: true, unique: true },
-    phone: { type: String, required: true },
-    college: { type: String, required: true },
-    city: { type: String, required: true },
-    state: { type: String, required: true },
-    nation: { type: String, required: true },
-    password: { type: String, required: true },
+    phone: { type: String },
+    college: { type: String },
+    city: { type: String },
+    state: { type: String },
+    nation: { type: String },
+    password: { type: String }, // Not required for Google OAuth users
+
+    // --- Email Verification ---
+    isEmailVerified: { type: Boolean, default: false },
+    verificationToken: { type: String },
+    verificationTokenExpiry: { type: Date },
+
+    // --- Google OAuth ---
+    googleId: { type: String },
 
     // --- Video Tracker Fields ---
     coins: { type: Number, default: 50 },
