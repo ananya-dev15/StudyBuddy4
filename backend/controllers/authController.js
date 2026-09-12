@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
@@ -133,7 +134,19 @@ export const login = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
+        college: user.college,
+        className: user.className,
+        course: user.course,
+        year: user.year,
+        domain: user.domain,
+        city: user.city,
+        state: user.state,
+        nation: user.nation,
         coins: user.coins,
+        streak: user.streak,
+        videosWatched: user.videosWatched,
+        profileImage: user.profileImage || "",
         isEmailVerified: user.isEmailVerified,
       },
     });
@@ -238,6 +251,9 @@ export const googleLogin = async (req, res) => {
       if (!user.googleId) {
         user.googleId = googleId;
         user.isEmailVerified = true; // Google emails are verified
+        if (picture && !user.profileImage) {
+          user.profileImage = picture;
+        }
         await user.save();
       }
     } else {
@@ -247,6 +263,7 @@ export const googleLogin = async (req, res) => {
         email,
         googleId,
         isEmailVerified: true, // Google emails are pre-verified
+        profileImage: picture || "",
         coins: 500,
         videosWatched: 0,
         videosSwitched: 0,
@@ -262,13 +279,177 @@ export const googleLogin = async (req, res) => {
         id: user._id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
+        college: user.college,
+        className: user.className,
+        course: user.course,
+        year: user.year,
+        domain: user.domain,
+        city: user.city,
+        state: user.state,
+        nation: user.nation,
         coins: user.coins,
+        streak: user.streak,
+        videosWatched: user.videosWatched,
+        profileImage: user.profileImage || picture || "",
         isEmailVerified: user.isEmailVerified,
       },
     });
   } catch (err) {
     console.error("Google login error:", err);
     res.status(500).json({ message: "Google authentication failed.", error: err.message });
+  }
+};
+
+// ✅ GET USER PROFILE
+export const getUserProfile = async (req, res) => {
+  try {
+    const userId = req.user?._id || req.user?.id || req.query.userId || req.params.id;
+    const email = req.query.email;
+
+    let user = null;
+    if (userId && userId !== "undefined" && mongoose.Types.ObjectId.isValid(userId)) {
+      user = await User.findById(userId).select("-password");
+    }
+    if (!user && email && email !== "undefined") {
+      user = await User.findOne({ email }).select("-password");
+    }
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        college: user.college,
+        className: user.className,
+        course: user.course,
+        year: user.year,
+        domain: user.domain,
+        city: user.city,
+        state: user.state,
+        nation: user.nation,
+        coins: user.coins,
+        streak: user.streak,
+        videosWatched: user.videosWatched,
+        profileImage: user.profileImage || "",
+        isEmailVerified: user.isEmailVerified,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ✅ UPDATE PROFILE PHOTO
+export const updateProfilePhoto = async (req, res) => {
+  try {
+    const { userId, email, profileImage } = req.body;
+    if (!profileImage) return res.status(400).json({ message: "Profile image is required" });
+
+    let user = null;
+    const targetId = req.user?._id || req.user?.id || userId;
+    if (targetId && targetId !== "undefined" && mongoose.Types.ObjectId.isValid(targetId)) {
+      user = await User.findById(targetId);
+    }
+    const targetEmail = email || req.user?.email;
+    if (!user && targetEmail && targetEmail !== "undefined") {
+      user = await User.findOne({ email: targetEmail });
+    }
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.profileImage = profileImage;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Profile picture updated successfully!",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        college: user.college,
+        className: user.className,
+        course: user.course,
+        year: user.year,
+        domain: user.domain,
+        city: user.city,
+        state: user.state,
+        nation: user.nation,
+        coins: user.coins,
+        streak: user.streak,
+        videosWatched: user.videosWatched,
+        profileImage: user.profileImage,
+        isEmailVerified: user.isEmailVerified,
+      },
+    });
+  } catch (err) {
+    console.error("Error updating profile photo:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// ✅ UPDATE PROFILE DETAILS
+export const updateProfile = async (req, res) => {
+  try {
+    const { userId, email, name, phone, college, className, course, year, domain, city, state, nation } = req.body;
+
+    let user = null;
+    const targetId = req.user?._id || req.user?.id || userId;
+    if (targetId && targetId !== "undefined" && mongoose.Types.ObjectId.isValid(targetId)) {
+      user = await User.findById(targetId);
+    }
+    const targetEmail = email || req.user?.email;
+    if (!user && targetEmail && targetEmail !== "undefined") {
+      user = await User.findOne({ email: targetEmail });
+    }
+
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    if (name !== undefined) user.name = name;
+    if (phone !== undefined) user.phone = phone;
+    if (college !== undefined) user.college = college;
+    if (className !== undefined) user.className = className;
+    if (course !== undefined) user.course = course;
+    if (year !== undefined) user.year = year;
+    if (domain !== undefined) user.domain = domain;
+    if (city !== undefined) user.city = city;
+    if (state !== undefined) user.state = state;
+    if (nation !== undefined) user.nation = nation;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully!",
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        college: user.college,
+        className: user.className,
+        course: user.course,
+        year: user.year,
+        domain: user.domain,
+        city: user.city,
+        state: user.state,
+        nation: user.nation,
+        coins: user.coins,
+        streak: user.streak,
+        videosWatched: user.videosWatched,
+        profileImage: user.profileImage || "",
+        isEmailVerified: user.isEmailVerified,
+      },
+    });
+  } catch (err) {
+    console.error("Error updating profile:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 };
 

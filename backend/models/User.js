@@ -36,6 +36,7 @@ const userSchema = new mongoose.Schema(
     state: { type: String },
     nation: { type: String },
     password: { type: String }, // Not required for Google OAuth users
+    profileImage: { type: String, default: "" },
 
     // --- Email Verification ---
     isEmailVerified: { type: Boolean, default: false },
@@ -65,6 +66,16 @@ const userSchema = new mongoose.Schema(
         watchedAt: { type: Date, default: Date.now },
         secondsWatched: { type: Number, default: 0 },
         tabSwitches: { type: Number, default: 0 },
+        // New optional YouTube fields
+        videoTitle: { type: String, default: "" },
+        channelTitle: { type: String, default: "" },
+        description: { type: String, default: "" },
+        duration: { type: Number, default: 0 }, // seconds
+        playlistId: { type: String, default: "" },
+        playlistTitle: { type: String, default: "" },
+        studyScore: { type: Number, default: 0 },
+        isStudyVideo: { type: Boolean, default: false },
+        lastWatchedPosition: { type: Number, default: 0 },
         note: { type: String, default: "" },
         tag: { type: String, default: "" },
       }

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
+import UserProfileModal from "../components/UserProfileModal";
 import {
   LineChart,
   Line,
@@ -18,13 +19,14 @@ import { eachDayOfInterval, format, startOfMonth, endOfMonth } from "date-fns";
 const Dashboard = () => {
   const { appState } = useAppContext();
   const storedUser = JSON.parse(localStorage.getItem("user")) || null;
-  const user = appState?.user || storedUser;
+  const [user, setUser] = useState(appState?.user || storedUser);
   const { coins = 0, streak = 0, history = [], videosWatched = 0, videosSwitched = 0 } =
     appState || {};
 
   const [monthlyActivity, setMonthlyActivity] = useState({});
   const [loading, setLoading] = useState(true);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const navigate = useNavigate();
 
   // ✅ Fetch monthly activity
@@ -96,21 +98,38 @@ const Dashboard = () => {
       </p>
     );
 
-  // 🔥 FINAL FIX (Backend + Local History Merge — Correct Way)
- 
-  const finalActivity = { ...monthlyActivity };
-
-  // Add watched time from history
-  (history || []).forEach((h) => {
-    const dayKey = new Date(h.watchedAt).toISOString().split("T")[0];
-
-    if (!finalActivity[dayKey]) {
-      finalActivity[dayKey] = { totalSeconds: 0 };
+  const getLocalDateKey = (watchedAt) => {
+    if (!watchedAt) return "";
+    if (typeof watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(watchedAt.trim())) {
+      return watchedAt.trim();
     }
+    const d = new Date(watchedAt);
+    if (isNaN(d.getTime())) return "";
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
 
-    finalActivity[dayKey].totalSeconds += h.secondsWatched || 0;
-  });
- 
+  // Unified daily activity calculation (matches Video Tracker bar chart)
+  const finalActivity = {};
+  const historyList = (history && history.length > 0)
+    ? history
+    : JSON.parse(localStorage.getItem(`userHistory_${user?._id}`)) || [];
+
+  if (historyList.length > 0) {
+    historyList.forEach((h) => {
+      const dayKey = getLocalDateKey(h.watchedAt);
+      if (!dayKey) return;
+      if (!finalActivity[dayKey]) finalActivity[dayKey] = { totalSeconds: 0 };
+      finalActivity[dayKey].totalSeconds += Number(h.seconds ?? h.secondsWatched ?? 0) || 0;
+    });
+  } else if (monthlyActivity && Object.keys(monthlyActivity).length > 0) {
+    Object.keys(monthlyActivity).forEach((key) => {
+      finalActivity[key] = { totalSeconds: monthlyActivity[key]?.totalSeconds || 0 };
+    });
+  }
+
 
   // Full Month Days
   const now = new Date();
@@ -176,12 +195,22 @@ const Dashboard = () => {
 
             {/* Dropdown Menu */}
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-48 bg-white rounded-lg shadow-xl z-50">
+              <div className="absolute right-0 mt-2 py-2 w-52 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    setIsProfileModalOpen(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 font-semibold flex items-center gap-2 transition-colors"
+                >
+                  👤 View Profile
+                </button>
+                <div className="border-t border-gray-100 my-1"></div>
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100"
+                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 font-bold hover:bg-red-50 flex items-center gap-2 transition-colors"
                 >
-                  Logout
+                  🚪 Logout
                 </button>
               </div>
             )}
@@ -389,6 +418,14 @@ const Dashboard = () => {
           )}
         </div>
       </div>
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={user}
+        onUpdateUser={(updated) => setUser(updated)}
+      />
     </div>
   );
 };

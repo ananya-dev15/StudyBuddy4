@@ -208,8 +208,8 @@ router.get("/coins/:id", async (req, res) => {
 
 router.post("/add-history", protect, async (req, res) => {
   try {
-    const user = req.user;
-    const { videoId, url, secondsWatched, tabSwitches } = req.body;
+    const { videoId, url, secondsWatched, tabSwitches, note, tag } = req.body;
+    const user = await User.findById(req.user._id);
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
@@ -218,24 +218,54 @@ router.post("/add-history", protect, async (req, res) => {
       return res.json({ success: false, message: "Session too short, not saved" });
     }
 
-    // ✅ Fetch any persistent note/tag for this video
-    const note = (user.notes && user.notes[videoId]) || "";
-    const tag = (user.tags && user.tags[videoId]) || "";
+    const todayStr = getLocalDateString();
 
-    const newEntry = {
-      videoId,
-      url,
-      secondsWatched: Math.round(secondsWatched),
-      tabSwitches: tabSwitches || 0,
-      watchedAt: getLocalDateString(), // ✅ Use local date string (YYYY-MM-DD)
-      note,
-      tag,
-    };
+    // Fetch persistent note/tag if available
+    const persistentNote = (user.notes && user.notes[videoId]) || note || "";
+    const persistentTag = (user.tags && user.tags[videoId]) || tag || "";
 
-    // ✅ Keep full history in DB
-    user.history.unshift(newEntry);
+    // Find if there's ALREADY an entry for THIS video ON TODAY'S DATE
+    let existingIndex = user.history.findIndex((h) => {
+      if (h.videoId !== videoId) return false;
+      let dateKey = "";
+      if (h.watchedAt) {
+        if (typeof h.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.watchedAt.trim())) {
+          dateKey = h.watchedAt.trim();
+        } else if (typeof h.watchedAt === "string" && h.watchedAt.includes("T")) {
+          dateKey = h.watchedAt.split("T")[0];
+        } else {
+          dateKey = getLocalDateString(h.watchedAt);
+        }
+      }
+      return dateKey === todayStr;
+    });
+
+    if (existingIndex !== -1) {
+      const existing = user.history[existingIndex];
+      existing.secondsWatched = (existing.secondsWatched || 0) + Math.round(secondsWatched);
+      existing.tabSwitches = (existing.tabSwitches || 0) + (tabSwitches || 0);
+      existing.watchedAt = todayStr;
+      if (persistentNote) existing.note = persistentNote;
+      if (persistentTag) existing.tag = persistentTag;
+
+      // Move updated entry to top
+      user.history.splice(existingIndex, 1);
+      user.history.unshift(existing);
+    } else {
+      const newEntry = {
+        videoId,
+        url: url || `https://youtu.be/${videoId}`,
+        secondsWatched: Math.round(secondsWatched),
+        tabSwitches: tabSwitches || 0,
+        watchedAt: todayStr,
+        note: persistentNote,
+        tag: persistentTag,
+      };
+      user.history.unshift(newEntry);
+    }
+
+    user.markModified("history");
     await user.save();
-
     res.json({ success: true, history: user.history });
   } catch (err) {
     console.error("❌ Error adding history:", err);
@@ -279,12 +309,19 @@ router.get("/weekly-stats", protect, async (req, res) => {
     for (let i = 0; i < 7; i++) {
       const date = new Date(pastWeek);
       date.setDate(pastWeek.getDate() + i);
-      const key = date.toISOString().split("T")[0];
+      const key = getLocalDateString(date);
       stats[key] = 0;
     }
 
     recentHistory.forEach((entry) => {
-      const dateKey = new Date(entry.watchedAt).toISOString().split("T")[0];
+      let dateKey = "";
+      if (entry.watchedAt) {
+        if (typeof entry.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(entry.watchedAt.trim())) {
+          dateKey = entry.watchedAt.trim();
+        } else {
+          dateKey = getLocalDateString(entry.watchedAt);
+        }
+      }
       if (stats[dateKey] !== undefined) {
         stats[dateKey] += Math.round(entry.secondsWatched / 60); // convert to minutes
       }
@@ -326,7 +363,15 @@ router.get("/monthly-activity", protect, async (req, res) => {
     // Group by date
     const activity = {};
     user.history.forEach((session) => {
-      const date = new Date(session.watchedAt).toISOString().split("T")[0];
+      let date = "";
+      if (session.watchedAt) {
+        if (typeof session.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(session.watchedAt.trim())) {
+          date = session.watchedAt.trim();
+        } else {
+          date = getLocalDateString(session.watchedAt);
+        }
+      }
+      if (!date) return;
       if (!activity[date]) activity[date] = { totalSeconds: 0 };
       activity[date].totalSeconds += session.secondsWatched || 0;
     });
@@ -344,7 +389,7 @@ router.get("/monthly-activity", protect, async (req, res) => {
 router.post("/save-note-tag", protect, async (req, res) => {
   try {
     const { videoId, noteText, tagText } = req.body;
-    const user = req.user;
+    const user = await User.findById(req.user._id);
 
     if (!user)
       return res

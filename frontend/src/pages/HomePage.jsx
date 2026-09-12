@@ -5,6 +5,7 @@ import API_BASE from "../services/apiBase";
 import AssignmentCard from "../components/AssignmentCard";
 import VideoTracker from "../components/VideoTracker";
 import AuthModal from "../components/AuthModal";
+import UserProfileModal from "../components/UserProfileModal";
 import Leaderboard from "../components/Leaderboard";
 import Lottie from "lottie-react";
 import chatAnimation from "../assets/chatAnimation.json";
@@ -112,6 +113,7 @@ const HomePage = () => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false); // ✨ NEW: State for modal
   const [isDashboardModalOpen, setDashboardModalOpen] = useState(false); // ✨ NEW: Dashboard modal state
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const navigate = useNavigate();
 
@@ -152,22 +154,21 @@ const HomePage = () => {
     }
   };
 
-  // ✨ NEW: Click handler for all protected links
+  // Click handler for all protected links
   const handleProtectedLinkClick = (e, path) => {
     if (!user) {
       // If user is not logged in
       e.preventDefault(); // Stop the <Link> from navigating
       setAuthModalOpen(true); // Open the login/signup modal
     } else if (path === "/chatbot") {
-      // Special case for the AI Chatbot card
+      // AI Chatbot opens the Chatbot modal (8501)
       e.preventDefault(); // Stop navigation
-      setChatOpen(true); // Just open the chat window
-    } else if (path === "/reminders") {
-      // ✨ NEW: Smart Reminders opens the full-screen dashboard modal
+      setChatOpen(true); // Open the chat window
+    } else if (path === "/dashboard" || path === "/reminders") {
+      // Dashboard opens the full-screen dashboard modal (8502)
       e.preventDefault();
       setDashboardModalOpen(true);
     }
-    // If user is logged in (and path is not /chatbot), the <Link> component will navigate normally.
   };
 
   // ✨ NEW: Click handler for the floating chat button
@@ -243,12 +244,22 @@ const HomePage = () => {
 
             {/* Dropdown Menu */}
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-48 bg-white rounded-lg shadow-xl z-50">
+              <div className="absolute right-0 mt-2 py-2 w-52 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    setIsProfileModalOpen(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 font-semibold flex items-center gap-2 transition-colors"
+                >
+                  👤 View Profile
+                </button>
+                <div className="border-t border-gray-100 my-1"></div>
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100"
+                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 font-bold hover:bg-red-50 flex items-center gap-2 transition-colors"
                 >
-                  Logout
+                  🚪 Logout
                 </button>
               </div>
             )}
@@ -559,6 +570,14 @@ const HomePage = () => {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setAuthModalOpen(false)}
+      />
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={user}
+        onUpdateUser={(updated) => setUser(updated)}
       />
 
       {/* Dashboard Modal */}

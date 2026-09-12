@@ -165,7 +165,8 @@ export const AppProvider = ({ children }) => {
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
-      const today = new Date().toISOString().split("T")[0];
+      const dNow = new Date();
+      const today = `${dNow.getFullYear()}-${String(dNow.getMonth() + 1).padStart(2, "0")}-${String(dNow.getDate()).padStart(2, "0")}`;
       const updatedTriggers = { ...reminderTriggers };
       let changed = false;
 

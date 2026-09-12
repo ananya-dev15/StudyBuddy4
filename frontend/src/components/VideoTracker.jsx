@@ -7,6 +7,7 @@ import { jsPDF } from "jspdf";
 import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
 import AuthModal from "./AuthModal";
+import UserProfileModal from "./UserProfileModal";
 import API_BASE from "../services/apiBase";
 
 
@@ -85,11 +86,30 @@ function extractYouTubeId(urlOrId) {
 
 // --- STUDY VIDEO FILTER ---
 const ALLOWED_KEYWORDS = [
+  // Preserved original keywords
   "study", "lecture", "tutorial", "math", "science",
   "coding", "programming", "react", "java", "ds algo",
-  "data structures", "education", "exam", "motivation", "MySQL"
+  "data structures", "education", "exam", "motivation", "MySQL",
+  // Expanded educational & placement keywords for high recall
+  "aptitude", "placement", "nqt", "tcs", "reasoning", "verbal", "quantitative",
+  "interview", "preparation", "course", "learn", "learning", "solution", "questions",
+  "gate", "jee", "neet", "dbms", "sql", "engineering", "class", "chapter", "guide",
+  "algorithm", "computer", "system", "development", "web", "python", "cpp", "c++",
+  "physics", "chemistry", "biology", "history", "geography", "civics", "economics",
+  "revision", "notes", "crash course", "one shot", "syllabus", "paper", "mock", "solved"
 ];
 
+const NON_STUDY_KEYWORDS = [
+  "official music video", "official video", "full movie", "movie trailer",
+  "lyric video", "remix song", "entertainment vlog", "funny prank",
+  "bhajan", "bhakti", "kirtan", "aarti", "chalisa", "mantra", "geeta path", "devotional", "stotra", "pravachan", "satsang", "shyam baba", "krishna bhajan", "ram bhajan", "shiv bhajan",
+  "comedy", "funny", "standup", "stand-up", "roast", "prank", "jokes", "mimicry", "lallantop comedy", "kapil sharma", "chotu dada",
+  "movie", "film", "teaser", "cinema", "scene", "climax", "full movie hindi", "south movie",
+  "song", "music", "singing", "dance", "dj", "remix", "lyrics", "album song", "punjabi song", "bhojpuri", "bollywood",
+  "gaming", "gameplay", "gta", "gta5", "minecraft", "bgmi", "pubg", "freefire", "valorant", "techno gamerz",
+  "vlog", "daily vlog", "family vlog", "lifestyle vlog", "travel vlog", "sourav joshi",
+  "serial", "drama", "episode", "natak", "tarak mehta", "tmkoc"
+];
 
 async function isStudyVideo(videoId) {
   try {
@@ -105,9 +125,24 @@ async function isStudyVideo(videoId) {
 
     const title = data.title.toLowerCase();
 
-    return ALLOWED_KEYWORDS.some((keyword) =>
+    // 1. Explicit NON-STUDY check first (highest priority)
+    const isExplicitNonStudy = NON_STUDY_KEYWORDS.some((keyword) =>
       title.includes(keyword.toLowerCase())
     );
+    if (isExplicitNonStudy) {
+      console.log("⛔ Non-study keyword detected:", title);
+      return false;
+    }
+
+    // 2. Study / Educational keyword check
+    const hasStudyKeyword = ALLOWED_KEYWORDS.some((keyword) =>
+      title.includes(keyword.toLowerCase())
+    );
+    if (hasStudyKeyword) return true;
+
+    // 3. Block videos lacking educational keywords
+    console.log("⛔ No educational keywords found in title:", title);
+    return false;
   } catch (e) {
     console.error("Video title check failed:", e);
     return true;
@@ -243,6 +278,7 @@ export default function VideoTracker() {
   const [user, setUser] = useState(null);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
@@ -296,6 +332,8 @@ export default function VideoTracker() {
   const [tagText, setTagText] = useState("");
   const [showNoteModal, setShowNoteModal] = useState(false);
   const [selectedNote, setSelectedNote] = useState("");
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [selectedVideoForLogs, setSelectedVideoForLogs] = useState(null);
   const [showTimerPopup, setShowTimerPopup] = useState(false);
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [focusRemaining, setFocusRemaining] = useState(null);
@@ -304,7 +342,30 @@ export default function VideoTracker() {
   const [youtubePlayerInstance, setYoutubePlayerInstance] = useState(null);
   const [earnedThisSessionCoins, setEarnedThisSessionCoins] = useState(false);
   const [showZeroCoinsPopup, setShowZeroCoinsPopup] = useState(false);
+  // NEW states for YouTube metadata and playlist
+  const [videoMeta, setVideoMeta] = useState(null);
+  const [playlistItems, setPlaylistItems] = useState([]);
+  const [currentPlaylistIndex, setCurrentPlaylistIndex] = useState(0);
+  const [showPlaylist, setShowPlaylist] = useState(false);
+  const [metaLoading, setMetaLoading] = useState(false);
+  const [metaError, setMetaError] = useState('');
   const [coinsLoaded, setCoinsLoaded] = useState(false);
+  const [resumePosition, setResumePosition] = useState(0);
+
+
+  // --- AI QUIZ STATES ---
+  const [showQuizConfigModal, setShowQuizConfigModal] = useState(false);
+  const [quizNumQuestions, setQuizNumQuestions] = useState(5);
+  const [quizDifficulty, setQuizDifficulty] = useState("Medium");
+  const [isQuizGenerating, setIsQuizGenerating] = useState(false);
+  const [quizError, setQuizError] = useState("");
+  const [quizQuestions, setQuizQuestions] = useState([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [selectedOption, setSelectedOption] = useState("");
+  const [isAnswerSubmitted, setIsAnswerSubmitted] = useState(false);
+  const [userAnswers, setUserAnswers] = useState([]);
+  const [quizCompleted, setQuizCompleted] = useState(false);
+  const [quizResult, setQuizResult] = useState(null);
 
 
   // State for starting timer on play
@@ -331,6 +392,9 @@ export default function VideoTracker() {
   const wheelLastRef = useRef(0);
   const touchStartXRef = useRef(null);
   const wheelAccumRef = useRef(0);
+  const resumeIntervalRef = useRef(null);
+  const lastProgressSaveRef = useRef(0);
+  const hasResumedRef = useRef(false);
 
   // const [showWarning, setShowWarning] = useState(false);
   // const [warningText, setWarningText] = useState("");
@@ -412,38 +476,54 @@ export default function VideoTracker() {
 
 
 
-  // 🧠 Split-screen detection
-  // 🧠 Split-Screen Detection — Improved Version
+  // 🧠 Split-Screen Detection — Deducts 5 Coins Penalty
   useEffect(() => {
     let lastAlertTime = 0;
-    let alertCooldown = 2000; // 2 sec cooldown to avoid spam
+    let alertCooldown = 5000; // 5 sec cooldown to avoid rapid spam
 
-    const detectSplitScreen = () => {
-      if (!isPlaying || focusRemaining <= 0) return;
+    const detectSplitScreen = async () => {
+      if (!isPlaying) return;
 
       const screenWidth = window.screen.width;
       const windowWidth = window.innerWidth;
       const ratio = windowWidth / screenWidth;
 
-      // 🚨 Trigger when window width < 70%
+      // 🚨 Trigger when window width < 70% (Split Screen / Resized Window)
       if (ratio < 0.7) {
         const now = Date.now();
 
         // Avoid rapid-fire alerts (only allow after cooldown)
         if (now - lastAlertTime > alertCooldown) {
+          lastAlertTime = now;
 
-          // Show alert TWICE — BACK TO BACK
-          alert("⚠️ Focus Alert: Split screen detected!");
+          // 💰 Deduct 5 coins penalty
+          const deducted = 5;
+          try {
+            await updateBackendCoins(deducted);
+
+            setAppState((prev) => {
+              const newCoins = Math.max((prev.coins || 0) - deducted, 0);
+              if (newCoins <= 0) setShowZeroCoinsPopup(true);
+              return { ...prev, coins: newCoins };
+            });
+
+            await updateVideosSwitched(userId);
+            setTabSwitches((prev) => prev + 1);
+            console.log("📊 Split screen detected: -5 coins deducted!");
+          } catch (e) {
+            console.error("❌ Split screen coin deduction failed:", e);
+          }
+
+          // Show alerts
+          alert("⚠️ Focus Alert: Split screen detected! 5 Coins Deducted!");
           alert("⚠️ Please maximize the study window to continue!");
 
-          // OPTIONAL: Send event to backend
           if (socketRef.current) {
             socketRef.current.emit("split_screen_detected", {
               timestamp: Date.now(),
+              deducted: 5,
             });
           }
-
-          lastAlertTime = now;
         }
       }
     };
@@ -455,7 +535,7 @@ export default function VideoTracker() {
       window.removeEventListener("resize", detectSplitScreen);
       document.removeEventListener("visibilitychange", detectSplitScreen);
     };
-  }, [isPlaying, focusRemaining]);
+  }, [isPlaying, userId]);
 
 
   useEffect(() => {
@@ -586,20 +666,27 @@ export default function VideoTracker() {
     saveState(appState);
   }, [appState]);
 
-  // Focus timer countdown - PAUSES when video is not playing
+  // Focus timer countdown & session watched timer - PAUSES when video is not playing
   useEffect(() => {
-    if (focusRemaining === null || !isPlaying) return;
+    if (!isPlaying) return;
 
-    if (focusRemaining <= 0) {
-      setFocusRemaining(null);
-      alert("🎉 Focus session complete! You've earned +1 coin.");
-      setAppState(prev => ({
-        ...prev,
-        coins: prev.coins + 1
-      }));
-      return;
-    }
-    const t = setTimeout(() => setFocusRemaining((s) => s - 1), 1000);
+    const t = setTimeout(() => {
+      if (focusRemaining !== null) {
+        if (focusRemaining <= 1) {
+          setFocusRemaining(null);
+          setSessionPlayedSeconds((s) => s + 1);
+          alert("🎉 Focus session complete! You've earned +1 coin.");
+          setAppState((prev) => ({
+            ...prev,
+            coins: prev.coins + 1,
+          }));
+          return;
+        }
+        setFocusRemaining((s) => s - 1);
+      }
+      setSessionPlayedSeconds((s) => s + 1);
+    }, 1000);
+
     return () => clearTimeout(t);
   }, [focusRemaining, isPlaying]);
 
@@ -808,12 +895,21 @@ export default function VideoTracker() {
               setPlayerReady(true);
               setYoutubePlayerInstance(p);
               lastSampleRef.current = p.getCurrentTime() || 0;
+              // Resume from saved position if available
+              if (resumePosition > 0 && !hasResumedRef.current) {
+                p.seekTo(resumePosition, true);
+                hasResumedRef.current = true;
+              }
             },
             onStateChange: (e) => {
               const state = e.data;
               if (state === window.YT.PlayerState.PLAYING) {
                 setIsPlaying(true);
                 startPolling();
+                if (resumePosition > 0 && !hasResumedRef.current) {
+                  p.seekTo(resumePosition, true);
+                  hasResumedRef.current = true;
+                }
                 if (isFocusTimerPending && !hasPlaybackStarted) {
                   setFocusRemaining(focusDuration);
                   setIsFocusTimerPending(false);
@@ -822,7 +918,13 @@ export default function VideoTracker() {
               } else {
                 setIsPlaying(false);
                 stopPolling();
+                // Save resume progress on pause
+                if (state === window.YT.PlayerState.PAUSED) {
+                  const pos = p.getCurrentTime?.() || 0;
+                  saveResumeProgress(videoId, pos);
+                }
                 if (state === window.YT.PlayerState.ENDED) {
+                  saveResumeProgress(videoId, 0); // Reset position on completion
                   finalizeSession(true);
                   updateVideosWatched(userId);
                 }
@@ -886,8 +988,39 @@ export default function VideoTracker() {
     return () => stopPolling();
   }, [videoId, localVideoObjectUrl, focusDuration, hasPlaybackStarted, isFocusTimerPending]);
 
+  // ─── Resume progress save: every 60 seconds while playing ──────────
+  useEffect(() => {
+    if (!videoId || !isPlaying) {
+      if (resumeIntervalRef.current) {
+        clearInterval(resumeIntervalRef.current);
+        resumeIntervalRef.current = null;
+      }
+      return;
+    }
+    resumeIntervalRef.current = setInterval(() => {
+      const player = youtubePlayerRef.current;
+      if (player?.getCurrentTime) {
+        const pos = player.getCurrentTime();
+        saveResumeProgress(videoId, pos);
+      }
+    }, 60000); // every 60 seconds
+    return () => {
+      if (resumeIntervalRef.current) {
+        clearInterval(resumeIntervalRef.current);
+        resumeIntervalRef.current = null;
+      }
+    };
+  }, [videoId, isPlaying]);
 
-
+  // Save progress on unmount
+  useEffect(() => {
+    return () => {
+      if (videoId && youtubePlayerRef.current?.getCurrentTime) {
+        const pos = youtubePlayerRef.current.getCurrentTime();
+        saveResumeProgress(videoId, pos);
+      }
+    };
+  }, [videoId]);
 
 
   // useEffect(() => {
@@ -1014,16 +1147,9 @@ export default function VideoTracker() {
     lastSampleRef.current = getPlayerCurrentTime();
     pollRef.current = setInterval(() => {
       const now = getPlayerCurrentTime();
-      const last = lastSampleRef.current || 0;
-      if (now >= last) {
-        const delta = now - last;
-        if (delta > 0 && delta < 60) {
-          setSessionPlayedSeconds((s) => s + delta);
-        }
-      }
       lastSampleRef.current = now;
       setCurrentTime(now);
-    }, 800);
+    }, 1000);
   };
   const stopPolling = () => {
     if (pollRef.current) {
@@ -1380,6 +1506,146 @@ export default function VideoTracker() {
 
 
 
+  // ─── YouTube Data Fetchers ───────────────────────────────────────────
+  const loadYouTubeData = async (vid) => {
+    if (!vid) return;
+    setMetaLoading(true);
+    setMetaError('');
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/api/youtube/video?videoId=${vid}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setVideoMeta({
+          title: data.title,
+          description: data.description,
+          channelTitle: data.channelTitle,
+          thumbnail: data.thumbnail,
+          duration: data.duration,
+          studyScore: data.studyScore,
+        });
+        if (data.lastWatchedPosition) {
+          setResumePosition(data.lastWatchedPosition);
+        }
+      } else {
+        setMetaError(data.message || 'Failed to load video info');
+      }
+    } catch (err) {
+      console.error("loadYouTubeData error:", err);
+      setMetaError('Could not fetch video metadata');
+    } finally {
+      setMetaLoading(false);
+    }
+  };
+
+  const saveResumeProgress = async (vid, position) => {
+    if (!vid || position == null) return;
+    try {
+      const token = localStorage.getItem("token");
+      await fetch(`${API_BASE}/api/youtube/save-progress`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: "include",
+        body: JSON.stringify({ videoId: vid, position: Math.floor(position) }),
+      });
+      lastProgressSaveRef.current = Date.now();
+    } catch (err) {
+      console.error("saveResumeProgress error:", err);
+    }
+  };
+
+  // Extract playlistId from a YouTube URL if present
+  const extractPlaylistId = (url) => {
+    if (!url) return null;
+    const m = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+    return m ? m[1] : null;
+  };
+
+  const loadPlaylistForUrl = async (url) => {
+    const plId = extractPlaylistId(url);
+    if (!plId) { setPlaylistItems([]); return; }
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/api/youtube/playlist?playlistId=${plId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (data.success && data.items) {
+        setPlaylistItems(data.items);
+      }
+    } catch (err) {
+      console.error("loadPlaylistForUrl error:", err);
+    }
+  };
+
+  // Handle clicking a video from the playlist panel
+  const handlePlaylistVideoClick = async (vid) => {
+    if (!vid) return;
+    const allowed = await isStudyVideo(vid);
+    if (!allowed) {
+      setBlockedTitle("This video is not study related!");
+      setShowBlockedPopup(true);
+      playRestrictionSound();
+      return;
+    }
+    const currentPlId = extractPlaylistId(inputUrl);
+    const newUrl = currentPlId
+      ? `https://www.youtube.com/watch?v=${vid}&list=${currentPlId}`
+      : `https://www.youtube.com/watch?v=${vid}`;
+
+    setInputUrl(newUrl);
+    setVideoId(vid);
+    setLocalVideoFile(null);
+    setVideoMeta(null);
+    setResumePosition(0);
+    hasResumedRef.current = false;
+    loadYouTubeData(vid);
+
+    // Command active YouTube player to load & play video in-place inside the tracker
+    if (youtubePlayerRef.current) {
+      try {
+        if (typeof youtubePlayerRef.current.loadVideoById === "function") {
+          youtubePlayerRef.current.loadVideoById({ videoId: vid });
+        }
+      } catch (err) {
+        console.error("Error loading video in YT player:", err);
+      }
+    }
+
+    // Smooth scroll up to top player container so user sees the video playing
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Handle clicking a saved session card to re-open in tracker
+  const handleSessionCardClick = async (e, historyEntry) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (!historyEntry?.videoId) return;
+    const vid = historyEntry.videoId;
+    const allowed = await isStudyVideo(vid);
+    if (!allowed) {
+      setBlockedTitle("This video is not study related!");
+      setShowBlockedPopup(true);
+      playRestrictionSound();
+      return;
+    }
+    const pos = historyEntry.lastWatchedPosition || historyEntry.secondsWatched || 0;
+    setInputUrl(`https://youtu.be/${vid}`);
+    setVideoId(vid);
+    setLocalVideoFile(null);
+    setVideoMeta(null);
+    setResumePosition(pos);
+    hasResumedRef.current = false;
+    loadYouTubeData(vid);
+    setShowTimerPopup(true);
+  };
+
   const handleLoadContent = async () => {
 
     if (appState.coins === 0) {
@@ -1416,8 +1682,13 @@ export default function VideoTracker() {
       }
 
 
+      // Set video ID and reset local file
       setVideoId(id);
       setLocalVideoFile(null);
+      // Fetch video metadata and transcript from backend
+      loadYouTubeData(id);
+      // Load playlist if URL contains a playlist parameter
+      loadPlaylistForUrl(inputUrl);
       setShowTimerPopup(true);
       return;
     }
@@ -1426,6 +1697,7 @@ export default function VideoTracker() {
     if (localVideoFile) {
       setVideoId(null);
       setShowTimerPopup(true);
+      // Local video handling unchanged
     }
   };
 
@@ -1470,35 +1742,82 @@ export default function VideoTracker() {
 
   const handleStopSave = async () => {
     try {
+      // 1. Instant Player Pause & Resume Save
       if (youtubePlayerInstance?.pauseVideo) youtubePlayerInstance.pauseVideo();
       else if (localVideoRef.current && !localVideoRef.current.paused)
         localVideoRef.current.pause();
+
+      const currentVideoKey = videoId || localVideoFile?.name;
+      if (videoId && youtubePlayerRef.current?.getCurrentTime) {
+        saveResumeProgress(videoId, youtubePlayerRef.current.getCurrentTime());
+      }
 
       if (!sessionPlayedSeconds || sessionPlayedSeconds < 5) {
         alert("⚠️ Watch at least 5 seconds before saving!");
         return;
       }
 
-      const token = localStorage.getItem("token");
       const watchedSeconds = Math.round(sessionPlayedSeconds);
       const totalTabSwitches = tabSwitches;
+      const currentNoteToSave = noteText.trim();
+      const currentTagToSave = tagText.trim();
 
-      const currentVideoKey = videoId || localVideoFile?.name;
+      const existingNote = appState.notes?.[currentVideoKey] || "";
+      const cumulativeNote = (existingNote ? existingNote + (currentNoteToSave ? "\n" + currentNoteToSave : "") : currentNoteToSave).trim();
 
-      console.log("🎬 Saving session with notes & tag:", {
-        videoId,
-        watchedSeconds,
-        totalTabSwitches,
-        noteText,
-        tagText,
+      const token = localStorage.getItem("token");
+
+      // 2. INSTANT Optimistic UI Update (Zero Latency)
+      setAppState((prev) => {
+        const updatedNotes = { ...(prev.notes || {}), [currentVideoKey]: cumulativeNote };
+        const updatedTags = { ...(prev.tags || {}), [currentVideoKey]: currentTagToSave };
+
+        const todayStr = getLocalDateString();
+        const updatedHistory = [...(prev.history || [])];
+        const existingIdx = updatedHistory.findIndex(
+          (h) => h.videoId === currentVideoKey && (h.watchedAt ? (h.watchedAt.split("T")[0] || h.watchedAt) : "") === todayStr
+        );
+
+        if (existingIdx !== -1) {
+          const item = { ...updatedHistory[existingIdx] };
+          item.secondsWatched = (item.secondsWatched || item.seconds || 0) + watchedSeconds;
+          item.tabSwitches = (item.tabSwitches || 0) + totalTabSwitches;
+          item.watchedAt = todayStr;
+          if (cumulativeNote) item.note = cumulativeNote;
+          if (currentTagToSave) item.tag = currentTagToSave;
+          updatedHistory.splice(existingIdx, 1);
+          updatedHistory.unshift(item);
+        } else {
+          updatedHistory.unshift({
+            videoId: currentVideoKey,
+            videoTitle: videoMeta?.title || currentVideoKey,
+            url: videoId ? `https://youtu.be/${videoId}` : localVideoFile?.name || "Local File",
+            secondsWatched: watchedSeconds,
+            tabSwitches: totalTabSwitches,
+            watchedAt: todayStr,
+            note: cumulativeNote,
+            tag: currentTagToSave,
+          });
+        }
+
+        return {
+          ...prev,
+          notes: updatedNotes,
+          tags: updatedTags,
+          history: updatedHistory,
+        };
       });
 
-      // ✅ Send ALL data including notes + tag in ONE request
-      const response = await fetch(`${API_BASE}/api/tracking/add-history`, {
+      // Clear note textarea and finalize session UI immediately
+      setNoteText("");
+      finalizeSession(true);
+
+      // 3. Parallel background API requests (All in 1 click)
+      fetch(`${API_BASE}/api/tracking/add-history`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : undefined,
         },
         body: JSON.stringify({
           videoId: currentVideoKey,
@@ -1507,29 +1826,47 @@ export default function VideoTracker() {
             : localVideoFile?.name || "Local File",
           secondsWatched: watchedSeconds,
           tabSwitches: totalTabSwitches,
-          note: (appState.notes?.[currentVideoKey] ? appState.notes[currentVideoKey] + "\n" + noteText : noteText).trim(),
-          tag: tagText,
+          note: cumulativeNote,
+          tag: currentTagToSave,
         }),
-      });
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.history) {
+            setAppState((prev) => ({ ...prev, history: data.history }));
+            localStorage.setItem(`userHistory_${userId}`, JSON.stringify(data.history));
+          }
+        })
+        .catch((err) => console.error("Error saving history:", err));
 
-      const data = await response.json();
-      if (!data.success) throw new Error(data.message);
+      if (currentNoteToSave || currentTagToSave) {
+        fetch(`${API_BASE}/api/tracking/save-note-tag`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : undefined,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            videoId: currentVideoKey,
+            noteText: cumulativeNote,
+            tagText: currentTagToSave,
+          }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              setAppState((prev) => ({
+                ...prev,
+                notes: data.notes || prev.notes,
+                tags: data.tags || prev.tags,
+              }));
+            }
+          })
+          .catch((err) => console.error("Error saving note/tag:", err));
+      }
 
-      // Update UI history and stats
-      setAppState((prev) => ({
-        ...prev,
-        history: data.history,
-        notes: { ...(prev.notes || {}), [currentVideoKey]: (prev.notes?.[currentVideoKey] ? prev.notes[currentVideoKey] + "\n" + noteText : noteText).trim() }
-      }));
-      localStorage.setItem(`userHistory_${userId}`, JSON.stringify(data.history));
-
-
-      // Chart is automatically updated via useEffect [appState.history]
-
-      // Clean up session
-      finalizeSession(true);
-
-      alert("✅ Session + Notes + Tag saved!");
+      alert("✅ Session, Notes & Tag saved!");
     } catch (error) {
       console.error("❌ Error saving session:", error);
     }
@@ -1787,9 +2124,505 @@ export default function VideoTracker() {
     }, 500);
   };
 
+  // ─── Render Panels for YouTube Metadata, Transcript, Playlist ──────
 
+  const formatDuration = (totalSeconds) => {
+    if (!totalSeconds) return '';
+    const h = Math.floor(totalSeconds / 3600);
+    const m = Math.floor((totalSeconds % 3600) / 60);
+    const s = totalSeconds % 60;
+    if (h) return `${h}h ${m}m ${s}s`;
+    return m ? `${m}m ${s}s` : `${s}s`;
+  };
 
+  const renderMetadataPanel = () => {
+    if (!videoId || (!videoMeta && !metaLoading && !metaError)) return null;
+    return (
+      <div style={styles.panel}>
+        <h3 style={styles.sectionTitle}>📋 Video Info</h3>
+        {metaLoading && <p style={{ color: '#6b7280' }}>Loading video info...</p>}
+        {metaError && <p style={{ color: '#dc2626' }}>⚠️ {metaError}</p>}
+        {videoMeta && (
+          <div>
+            <h4 style={{ margin: '0 0 8px 0', fontSize: '1.1rem', fontWeight: '700', color: '#1f2937' }}>
+              {videoMeta.title}
+            </h4>
+            <p style={{ margin: '0 0 6px 0', fontSize: '0.9rem', color: '#6b7280' }}>
+              📺 {videoMeta.channelTitle}
+              {videoMeta.duration > 0 && <> &nbsp;·&nbsp; ⏱ {formatDuration(videoMeta.duration)}</>}
+              {videoMeta.studyScore > 0 && <> &nbsp;·&nbsp; 📊 Study Score: {videoMeta.studyScore}%</>}
+            </p>
+            {videoMeta.description && (
+              <details style={{ marginTop: '8px' }}>
+                <summary style={{ cursor: 'pointer', color: '#4f46e5', fontWeight: '600', fontSize: '0.9rem' }}>
+                  📝 Show Full Description
+                </summary>
+                <p style={{
+                  marginTop: '8px',
+                  fontSize: '0.85rem',
+                  color: '#374151',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap',
+                  maxHeight: '300px',
+                  overflowY: 'auto',
+                  padding: '12px',
+                  background: '#f9fafb',
+                  borderRadius: '8px',
+                  border: '1px solid #e5e7eb',
+                }}>
+                  {videoMeta.description}
+                </p>
+              </details>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
+  const renderPlaylistPanel = () => {
+    if (!playlistItems || playlistItems.length === 0) return null;
+    return (
+      <div style={styles.panel}>
+        <h3 style={styles.sectionTitle}>📃 Playlist ({playlistItems.length} videos)</h3>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '400px', overflowY: 'auto' }}>
+          {playlistItems.map((item, idx) => (
+            <div
+              key={item.videoId || idx}
+              onClick={() => handlePlaylistVideoClick(item.videoId)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '10px',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                background: item.videoId === videoId ? '#eef2ff' : '#fff',
+                border: item.videoId === videoId ? '2px solid #4f46e5' : '1px solid #e5e7eb',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => { if (item.videoId !== videoId) e.currentTarget.style.background = '#f9fafb'; }}
+              onMouseLeave={(e) => { if (item.videoId !== videoId) e.currentTarget.style.background = '#fff'; }}
+            >
+              {item.thumbnail && (
+                <img
+                  src={item.thumbnail}
+                  alt=""
+                  style={{ width: '80px', height: '45px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }}
+                />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{
+                  margin: 0,
+                  fontSize: '0.85rem',
+                  fontWeight: item.videoId === videoId ? '700' : '500',
+                  color: item.videoId === videoId ? '#4f46e5' : '#1f2937',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {item.videoId === videoId ? '▶ ' : ''}{item.title}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // --- AI QUIZ HANDLERS ---
+  const handleGenerateQuiz = async () => {
+    if (!videoId) {
+      alert("Please load a YouTube video first to generate a quiz.");
+      return;
+    }
+    setShowQuizConfigModal(false);
+    setIsQuizGenerating(true);
+    setQuizError("");
+    setQuizQuestions([]);
+    setQuizCompleted(false);
+    setQuizResult(null);
+
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE}/api/quiz/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: token ? `Bearer ${token}` : undefined,
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          videoId,
+          numQuestions: quizNumQuestions,
+          difficulty: quizDifficulty,
+          videoTitle: videoMeta?.title || "",
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success && Array.isArray(data.questions) && data.questions.length > 0) {
+        setQuizQuestions(data.questions);
+        setCurrentQuestionIndex(0);
+        setSelectedOption("");
+        setIsAnswerSubmitted(false);
+        setUserAnswers([]);
+        setQuizCompleted(false);
+        setQuizResult(null);
+        setTimeout(() => {
+          const quizEl = document.getElementById("ai-quiz-section");
+          if (quizEl) quizEl.scrollIntoView({ behavior: "smooth" });
+        }, 300);
+      } else {
+        setQuizError(data.message || "Unable to analyze this video for quiz generation. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error generating quiz:", err);
+      setQuizError("Unable to analyze this video for quiz generation. Please try again.");
+    } finally {
+      setIsQuizGenerating(false);
+    }
+  };
+
+  const handleSubmitQuizAnswer = () => {
+    if (!selectedOption || isAnswerSubmitted) return;
+    const currentQ = quizQuestions[currentQuestionIndex];
+    if (!currentQ) return;
+
+    const isCorrect = selectedOption === currentQ.correctAnswer;
+    setIsAnswerSubmitted(true);
+
+    setUserAnswers((prev) => [
+      ...prev,
+      {
+        questionIndex: currentQuestionIndex,
+        question: currentQ.question,
+        selectedOption,
+        correctAnswer: currentQ.correctAnswer,
+        isCorrect,
+      },
+    ]);
+  };
+
+  const handleNextQuizQuestion = async () => {
+    const currentQ = quizQuestions[currentQuestionIndex];
+    const isCorrect = selectedOption === currentQ.correctAnswer;
+    const updatedAnswers = [
+      ...userAnswers.filter((a) => a.questionIndex !== currentQuestionIndex),
+      {
+        questionIndex: currentQuestionIndex,
+        question: currentQ.question,
+        selectedOption,
+        correctAnswer: currentQ.correctAnswer,
+        isCorrect,
+      },
+    ];
+    setUserAnswers(updatedAnswers);
+
+    if (currentQuestionIndex + 1 < quizQuestions.length) {
+      setCurrentQuestionIndex((prev) => prev + 1);
+      setSelectedOption("");
+      setIsAnswerSubmitted(false);
+    } else {
+      const correctCount = updatedAnswers.filter((a) => a.isCorrect).length;
+      const total = quizQuestions.length;
+      const accuracy = Math.round((correctCount / total) * 100);
+
+      setQuizResult({
+        score: correctCount,
+        accuracy,
+        total,
+      });
+      setQuizCompleted(true);
+
+      // Save to MongoDB
+      try {
+        const token = localStorage.getItem("token");
+        await fetch(`${API_BASE}/api/quiz/save-attempt`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token ? `Bearer ${token}` : undefined,
+          },
+          credentials: "include",
+          body: JSON.stringify({
+            videoId,
+            videoTitle: videoMeta?.title || "",
+            difficulty: quizDifficulty,
+            questionCount: total,
+            score: correctCount,
+            accuracy,
+          }),
+        });
+      } catch (err) {
+        console.error("Error saving quiz attempt:", err);
+      }
+    }
+  };
+
+  const renderQuizSection = () => {
+    if (!videoId && !isQuizGenerating && quizQuestions.length === 0 && !quizError) return null;
+
+    return (
+      <div id="ai-quiz-section" style={{ ...styles.panel, marginTop: "24px" }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid #e5e7eb", paddingBottom: "12px" }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: "800", color: "#4f46e5", display: "flex", alignItems: "center", gap: "8px" }}>
+              🧠 AI Quiz
+            </h3>
+            <p style={{ margin: "2px 0 0 0", fontSize: "0.8rem", color: "#6b7280" }}>
+              Generated from actual video content
+            </p>
+          </div>
+          {videoId && !isQuizGenerating && (
+            <button
+              onClick={() => setShowQuizConfigModal(true)}
+              style={{
+                padding: "8px 16px",
+                background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "8px",
+                fontWeight: "700",
+                fontSize: "0.8rem",
+                cursor: "pointer",
+                boxShadow: "0 2px 6px rgba(99, 102, 241, 0.3)",
+              }}
+            >
+              ✨ Generate Quiz
+            </button>
+          )}
+        </div>
+
+        {/* Loading State */}
+        {isQuizGenerating && (
+          <div style={{ padding: "32px", textAlign: "center", background: "#f8fafc", borderRadius: "12px", border: "1px dashed #cbd5e1" }}>
+            <div style={{ fontSize: "2rem", marginBottom: "12px" }}>🤖</div>
+            <h4 style={{ margin: "0 0 6px 0", fontSize: "1rem", fontWeight: "700", color: "#334155" }}>
+              Gemini AI is analyzing the actual video content & generating your quiz...
+            </h4>
+            <p style={{ margin: 0, fontSize: "0.85rem", color: "#64748b" }}>
+              Please wait a moment while questions are generated directly from the lecture.
+            </p>
+          </div>
+        )}
+
+        {/* Error Banner */}
+        {quizError && !isQuizGenerating && (
+          <div style={{ padding: "16px", background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "10px", textAlign: "center", fontSize: "0.9rem", fontWeight: "600" }}>
+            ⚠️ {quizError}
+          </div>
+        )}
+
+        {/* Active Quiz Question */}
+        {!isQuizGenerating && quizQuestions.length > 0 && !quizCompleted && (
+          <div>
+            {/* Progress & Difficulty Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <span style={{ fontSize: "0.85rem", fontWeight: "700", color: "#4f46e5", background: "#eef2ff", padding: "4px 12px", borderRadius: "20px" }}>
+                Question {currentQuestionIndex + 1} / {quizQuestions.length}
+              </span>
+              <span style={{ fontSize: "0.75rem", fontWeight: "700", color: quizDifficulty === "Hard" ? "#dc2626" : quizDifficulty === "Medium" ? "#d97706" : "#059669", background: "#f9fafb", border: "1px solid #e5e7eb", padding: "4px 10px", borderRadius: "12px" }}>
+                {quizDifficulty} Difficulty
+              </span>
+            </div>
+
+            {/* Question Text */}
+            <h4 style={{ fontSize: "1.05rem", fontWeight: "700", color: "#1f2937", marginBottom: "16px", lineHeight: "1.5" }}>
+              {quizQuestions[currentQuestionIndex]?.question}
+            </h4>
+
+            {/* 4 Radio Options */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginBottom: "20px" }}>
+              {quizQuestions[currentQuestionIndex]?.options.map((opt, idx) => {
+                const isSelected = selectedOption === opt;
+                const isCorrectOpt = opt === quizQuestions[currentQuestionIndex].correctAnswer;
+                let bg = "#ffffff";
+                let border = "1px solid #e5e7eb";
+                let textColor = "#1f2937";
+                let icon = isSelected ? "🔘" : "○";
+
+                if (isAnswerSubmitted) {
+                  if (isCorrectOpt) {
+                    bg = "#ecfdf5";
+                    border = "2px solid #10b981";
+                    textColor = "#065f46";
+                    icon = "✅";
+                  } else if (isSelected && !isCorrectOpt) {
+                    bg = "#fef2f2";
+                    border = "2px solid #ef4444";
+                    textColor = "#991b1b";
+                    icon = "❌";
+                  } else {
+                    bg = "#f9fafb";
+                    textColor = "#9ca3af";
+                  }
+                } else if (isSelected) {
+                  bg = "#eef2ff";
+                  border = "2px solid #6366f1";
+                  textColor = "#4f46e5";
+                }
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => {
+                      if (!isAnswerSubmitted) setSelectedOption(opt);
+                    }}
+                    style={{
+                      padding: "12px 16px",
+                      borderRadius: "10px",
+                      background: bg,
+                      border: border,
+                      color: textColor,
+                      fontWeight: isSelected || (isAnswerSubmitted && isCorrectOpt) ? "700" : "500",
+                      cursor: isAnswerSubmitted ? "default" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "12px",
+                      fontSize: "0.9rem",
+                      transition: "all 0.15s ease",
+                    }}
+                  >
+                    <span>{icon}</span>
+                    <span>{opt}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Explanation Box */}
+            {isAnswerSubmitted && (
+              <div style={{ padding: "14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "10px", color: "#166534", fontSize: "0.85rem", marginBottom: "20px" }}>
+                <strong>💡 Explanation:</strong>
+                <p style={{ margin: "4px 0 0 0", lineHeight: "1.4" }}>
+                  {quizQuestions[currentQuestionIndex]?.explanation}
+                </p>
+              </div>
+            )}
+
+            {/* Action Button */}
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              {!isAnswerSubmitted ? (
+                <button
+                  onClick={handleSubmitQuizAnswer}
+                  disabled={!selectedOption}
+                  style={{
+                    padding: "10px 24px",
+                    background: selectedOption ? "#4f46e5" : "#cbd5e1",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontWeight: "700",
+                    fontSize: "0.9rem",
+                    cursor: selectedOption ? "pointer" : "not-allowed",
+                  }}
+                >
+                  Submit Answer
+                </button>
+              ) : (
+                <button
+                  onClick={handleNextQuizQuestion}
+                  style={{
+                    padding: "10px 24px",
+                    background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontWeight: "700",
+                    fontSize: "0.9rem",
+                    cursor: "pointer",
+                  }}
+                >
+                  {currentQuestionIndex + 1 < quizQuestions.length ? "Next Question ➡️" : "View Results 🏆"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Quiz Completion Screen */}
+        {!isQuizGenerating && quizCompleted && quizResult && (
+          <div style={{ textAlign: "center", padding: "20px 10px" }}>
+            <div style={{ fontSize: "3rem", marginBottom: "8px" }}>🏆</div>
+            <h3 style={{ margin: "0 0 4px 0", fontSize: "1.4rem", fontWeight: "800", color: "#1f2937" }}>
+              Quiz Completed
+            </h3>
+            <p style={{ margin: "0 0 20px 0", fontSize: "0.85rem", color: "#6b7280" }}>
+              Here is your performance summary for this video lecture:
+            </p>
+
+            {/* Score Chips */}
+            <div style={{ display: "flex", justifyContent: "center", gap: "16px", marginBottom: "20px" }}>
+              <div style={{ padding: "12px 24px", background: "#eef2ff", borderRadius: "12px", border: "1px solid #c7d2fe" }}>
+                <span style={{ fontSize: "0.75rem", color: "#6366f1", fontWeight: "700", display: "block" }}>SCORE</span>
+                <span style={{ fontSize: "1.5rem", fontWeight: "800", color: "#3730a3" }}>
+                  {quizResult.score} / {quizResult.total}
+                </span>
+              </div>
+              <div style={{ padding: "12px 24px", background: "#ecfdf5", borderRadius: "12px", border: "1px solid #a7f3d0" }}>
+                <span style={{ fontSize: "0.75rem", color: "#10b981", fontWeight: "700", display: "block" }}>ACCURACY</span>
+                <span style={{ fontSize: "1.5rem", fontWeight: "800", color: "#065f46" }}>
+                  {quizResult.accuracy}%
+                </span>
+              </div>
+            </div>
+
+            {/* Performance Message */}
+            <div style={{ padding: "12px 18px", background: "#f8fafc", borderRadius: "10px", border: "1px solid #e2e8f0", fontSize: "0.9rem", fontWeight: "600", color: "#334155", marginBottom: "24px" }}>
+              {quizResult.accuracy >= 80
+                ? "🌟 Outstanding! You demonstrated strong understanding of the video content!"
+                : quizResult.accuracy >= 50
+                ? "👍 Good effort! Review the missed concepts to solidify your knowledge."
+                : "📚 Keep practicing! Watch the video again to strengthen your understanding."}
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", justifyContent: "center", gap: "12px" }}>
+              <button
+                onClick={() => {
+                  setCurrentQuestionIndex(0);
+                  setSelectedOption("");
+                  setIsAnswerSubmitted(false);
+                  setUserAnswers([]);
+                  setQuizCompleted(false);
+                }}
+                style={{
+                  padding: "10px 20px",
+                  background: "#f3f4f6",
+                  color: "#374151",
+                  border: "1px solid #d1d5db",
+                  borderRadius: "10px",
+                  fontWeight: "700",
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                🔄 Retake Quiz
+              </button>
+              <button
+                onClick={() => setShowQuizConfigModal(true)}
+                style={{
+                  padding: "10px 20px",
+                  background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+                  color: "#ffffff",
+                  border: "none",
+                  borderRadius: "10px",
+                  fontWeight: "700",
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                }}
+              >
+                ✨ Generate New Quiz
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ ...styles.page, padding: 0 }}>
@@ -1832,12 +2665,22 @@ export default function VideoTracker() {
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-48 bg-white rounded-lg shadow-xl z-50">
+              <div className="absolute right-0 mt-2 py-2 w-52 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+                <button
+                  onClick={() => {
+                    setDropdownOpen(false);
+                    setIsProfileModalOpen(true);
+                  }}
+                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 font-semibold flex items-center gap-2 transition-colors"
+                >
+                  👤 View Profile
+                </button>
+                <div className="border-t border-gray-100 my-1"></div>
                 <button
                   onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100"
+                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 font-bold hover:bg-red-50 flex items-center gap-2 transition-colors"
                 >
-                  Logout
+                  🚪 Logout
                 </button>
               </div>
             )}
@@ -1889,6 +2732,29 @@ export default function VideoTracker() {
               >
                 {appState.coins <= 0 ? "Locked" : (videoId || localVideoFile ? "Load New" : "Load Video")}
               </button>
+              {videoId && (
+                <button
+                  onClick={() => setShowQuizConfigModal(true)}
+                  style={{
+                    padding: "10px 18px",
+                    background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
+                    color: "#ffffff",
+                    border: "none",
+                    borderRadius: "10px",
+                    fontWeight: "700",
+                    fontSize: "0.88rem",
+                    cursor: "pointer",
+                    boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    whiteSpace: "nowrap",
+                    transition: "all 0.2s ease",
+                  }}
+                >
+                  ✨ Generate Quiz
+                </button>
+              )}
             </div>
             <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
               <label htmlFor="local-video-upload" style={{ ...styles.button, ...styles.secondaryButton, flex: 1, textAlign: 'center' }}>
@@ -2365,200 +3231,572 @@ export default function VideoTracker() {
         {/* ✅ IMPORTANT: This section shows ONLY the last 5 sessions (sliced). */}
         {/* The graph above uses ALL sessions from the database (unsliced). */}
         <div style={styles.panel}>
-          <h3 style={styles.sectionTitle}>🎬 Last 5 Study Sessions</h3>
+          <h3 style={styles.sectionTitle}>🎬 Study Video Cards</h3>
 
-          {(appState.history || []).length === 0 ? (
-            <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No recent study sessions found.</p>
-          ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
-              {/* ✅ Only show last 5 sessions in cards - graph above uses ALL sessions */}
-              {(appState.history || []).slice(0, 5).map((h, i) => {
-                const seconds = h.seconds || h.secondsWatched || 0;
-                const minutes = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
-                const switches = h.tabSwitches || 0;
+          {(() => {
+            const getUniqueVideoCards = (historyArr = []) => {
+              const cardsMap = new Map();
+              historyArr.forEach((item) => {
+                const key = item.videoId || item.url;
+                if (!key) return;
+                const secs = Number(item.secondsWatched ?? item.seconds ?? 0) || 0;
+                const switches = Number(item.tabSwitches || 0);
+                const note = item.note || appState.notes?.[key] || "";
+                const tag = item.tag || appState.tags?.[key] || "";
 
-                const watchDate = h.watchedAt
-                  ? h.watchedAt.includes("T")
-                    ? new Date(h.watchedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                    : h.watchedAt
-                  : "N/A";
+                if (!cardsMap.has(key)) {
+                  cardsMap.set(key, {
+                    ...item,
+                    totalSecondsWatched: secs,
+                    totalTabSwitches: switches,
+                    latestWatchedAt: item.watchedAt,
+                    note,
+                    tag,
+                  });
+                } else {
+                  const existing = cardsMap.get(key);
+                  existing.totalSecondsWatched += secs;
+                  existing.totalTabSwitches += switches;
+                  if (note) existing.note = note;
+                  if (tag) existing.tag = tag;
+                  if (item.videoTitle) existing.videoTitle = item.videoTitle;
+                  if (item.watchedAt) existing.latestWatchedAt = item.watchedAt;
+                }
+              });
+              return Array.from(cardsMap.values());
+            };
 
-                return (
-                  <div
-                    key={i}
-                    style={{
-                      background: "#ffffff",
-                      borderRadius: "10px",
-                      padding: "12px",
-                      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
-                      border: "1px solid #e5e7eb",
-                      display: "flex",
-                      flexDirection: "column",
-                      transition: "all 0.2s ease",
-                      cursor: "pointer",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.boxShadow = "0 3px 8px rgba(0, 0, 0, 0.12)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.08)";
-                    }}
-                  >
-                    {/* Title */}
-                    <h4 style={{ margin: "0 0 8px 0", fontSize: "0.9rem", fontWeight: "600", color: "#1f2937", wordBreak: "break-word" }}>
-                      <a
-                        href={h.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        style={{
-                          color: "#4f46e5",
-                          textDecoration: "none",
-                          fontSize: "0.85rem",
-                          display: "block",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {h.videoId}
-                      </a>
-                    </h4>
+            const uniqueCards = getUniqueVideoCards(appState.history || []);
 
-                    {/* Stats Grid */}
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-                      <div>
-                        <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
-                          Duration
-                        </p>
-                        <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: "#059669" }}>
-                          {displayDuration}
-                        </p>
-                      </div>
-                      <div>
-                        <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
-                          Switches
-                        </p>
-                        <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: switches > 0 ? "#dc2626" : "#6b7280" }}>
-                          {switches}
-                        </p>
-                      </div>
-                    </div>
+            if (uniqueCards.length === 0) {
+              return <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No study video cards found.</p>;
+            }
 
-                    {/* Date */}
-                    <p style={{ margin: "0 0 8px 0", fontSize: "0.75rem", color: "#9ca3af" }}>
-                      {watchDate}
-                    </p>
+            return (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
+                {uniqueCards.slice(0, 10).map((h, i) => {
+                  const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
+                  const minutes = Math.floor(seconds / 60);
+                  const secs = seconds % 60;
+                  const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+                  const switches = h.totalTabSwitches ?? h.tabSwitches ?? 0;
 
-                    {/* Tag & Note */}
-                    <div style={{ marginTop: "auto" }}>
-                      {h.tag && (
-                        <div style={{ marginBottom: "8px" }}>
-                          <span
-                            style={{
-                              display: "inline-block",
-                              background: "#f0f4ff",
-                              color: "#4f46e5",
-                              padding: "3px 8px",
-                              borderRadius: "5px",
-                              fontSize: "0.7rem",
-                              fontWeight: "600",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            #{h.tag}
-                          </span>
+                  const rawDate = h.latestWatchedAt || h.watchedAt;
+                  const watchDate = rawDate
+                    ? rawDate.includes("T")
+                      ? new Date(rawDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                      : rawDate
+                    : "N/A";
+
+                  return (
+                    <div
+                      key={i}
+                      onClick={(e) => handleSessionCardClick(e, h)}
+                      style={{
+                        background: "#ffffff",
+                        borderRadius: "10px",
+                        padding: "12px",
+                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
+                        border: "1px solid #e5e7eb",
+                        display: "flex",
+                        flexDirection: "column",
+                        transition: "all 0.2s ease",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.boxShadow = "0 3px 8px rgba(0, 0, 0, 0.12)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.08)";
+                      }}
+                    >
+                      {/* Title */}
+                      <h4 style={{ margin: "0 0 8px 0", fontSize: "0.9rem", fontWeight: "600", color: "#1f2937", wordBreak: "break-word" }}>
+                        <a
+                          href="#"
+                          onClick={(e) => handleSessionCardClick(e, h)}
+                          style={{
+                            color: "#4f46e5",
+                            textDecoration: "none",
+                            fontSize: "0.85rem",
+                            display: "block",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {h.videoTitle || h.videoId}
+                        </a>
+                      </h4>
+
+                      {/* Stats Grid */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                        <div>
+                          <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
+                            Duration
+                          </p>
+                          <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: "#059669" }}>
+                            {displayDuration}
+                          </p>
                         </div>
-                      )}
-                      {(h.note || h.notes) && (
+                        <div>
+                          <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
+                            Switches
+                          </p>
+                          <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: switches > 0 ? "#dc2626" : "#6b7280" }}>
+                            {switches}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Date */}
+                      <p style={{ margin: "0 0 8px 0", fontSize: "0.75rem", color: "#9ca3af" }}>
+                        {watchDate}
+                      </p>
+
+                      {/* Tag & Note */}
+                      <div style={{ marginTop: "auto" }}>
+                        {h.tag && (
+                          <div style={{ marginBottom: "8px" }}>
+                            <span
+                              style={{
+                                display: "inline-block",
+                                background: "#f0f4ff",
+                                color: "#4f46e5",
+                                padding: "3px 8px",
+                                borderRadius: "5px",
+                                fontSize: "0.7rem",
+                                fontWeight: "600",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              #{h.tag}
+                            </span>
+                          </div>
+                        )}
+
                         <button
                           onClick={(e) => {
                             e.preventDefault();
-                            const actualNote = h.note || h.notes;
-                            setSelectedNote(actualNote);
-                            setShowNoteModal(true);
+                            e.stopPropagation();
+                            setSelectedVideoForLogs(h);
+                            setShowLogsModal(true);
                           }}
                           style={{
                             width: "100%",
                             padding: "6px 12px",
-                            backgroundColor: "#f0f4ff",
-                            border: "1px solid #c7d2fe",
+                            backgroundColor: "#eff6ff",
+                            border: "1px solid #bfdbfe",
                             borderRadius: "5px",
                             fontSize: "0.75rem",
                             fontWeight: "600",
-                            color: "#4f46e5",
+                            color: "#2563eb",
                             cursor: "pointer",
                             transition: "all 0.2s ease",
-                            marginBottom: "6px"
+                            marginBottom: "6px",
                           }}
                           onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = "#e0e7ff";
+                            e.target.style.backgroundColor = "#dbeafe";
                           }}
                           onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = "#f0f4ff";
+                            e.target.style.backgroundColor = "#eff6ff";
                           }}
                         >
-                          📝 View Note
+                          📊 Daily Watch Logs
                         </button>
-                      )}
 
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const actualNote = h.note || h.notes;
-                            generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'view');
-                          }}
-                          disabled={!(h.note || h.notes)}
-                          style={{
-                            flex: 1,
-                            padding: "6px 4px",
-                            backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
-                            border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
-                            borderRadius: "5px",
-                            fontSize: "0.65rem",
-                            fontWeight: "600",
-                            color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
-                            cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
-                          }}
-                        >
-                          📄 View PDF
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            const actualNote = h.note || h.notes;
-                            generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'download');
-                          }}
-                          disabled={!(h.note || h.notes)}
-                          style={{
-                            flex: 1,
-                            padding: "6px 4px",
-                            backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
-                            border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
-                            borderRadius: "5px",
-                            fontSize: "0.65rem",
-                            fontWeight: "600",
-                            color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
-                            cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
-                          }}
-                        >
-                          📥 Download PDF
-                        </button>
+                        {(h.note || h.notes) && (
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const actualNote = h.note || h.notes;
+                              setSelectedNote(actualNote);
+                              setShowNoteModal(true);
+                            }}
+                            style={{
+                              width: "100%",
+                              padding: "6px 12px",
+                              backgroundColor: "#f0f4ff",
+                              border: "1px solid #c7d2fe",
+                              borderRadius: "5px",
+                              fontSize: "0.75rem",
+                              fontWeight: "600",
+                              color: "#4f46e5",
+                              cursor: "pointer",
+                              transition: "all 0.2s ease",
+                              marginBottom: "6px"
+                            }}
+                            onMouseEnter={(e) => {
+                              e.target.style.backgroundColor = "#e0e7ff";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.target.style.backgroundColor = "#f0f4ff";
+                            }}
+                          >
+                            📝 View Note
+                          </button>
+                        )}
+
+                        <div style={{ display: "flex", gap: "6px" }}>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const actualNote = h.note || h.notes;
+                              generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'view');
+                            }}
+                            disabled={!(h.note || h.notes)}
+                            style={{
+                              flex: 1,
+                              padding: "6px 4px",
+                              backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
+                              border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
+                              borderRadius: "5px",
+                              fontSize: "0.65rem",
+                              fontWeight: "600",
+                              color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
+                              cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
+                            }}
+                          >
+                            📄 View PDF
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              const actualNote = h.note || h.notes;
+                              generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'download');
+                            }}
+                            disabled={!(h.note || h.notes)}
+                            style={{
+                              flex: 1,
+                              padding: "6px 4px",
+                              backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
+                              border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
+                              borderRadius: "5px",
+                              fontSize: "0.65rem",
+                              fontWeight: "600",
+                              color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
+                              cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
+                            }}
+                          >
+                            📥 Download PDF
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
+
+        {/* ─── YouTube Enhancement Panels ─── */}
+        {renderMetadataPanel()}
+        {renderPlaylistPanel()}
+        {renderQuizSection()}
 
 
 
 
       </div>
+
+      {/* Quiz Config Modal */}
+      {showQuizConfigModal && (
+        <div
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: "rgba(0,0,0,0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 10000,
+            padding: "20px",
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={() => setShowQuizConfigModal(false)}
+        >
+          <div
+            style={{
+              width: "100%",
+              maxWidth: "460px",
+              background: "#ffffff",
+              borderRadius: "20px",
+              padding: "24px",
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: "800", color: "#1f2937" }}>
+                ✨ AI Quiz Generator
+              </h3>
+              <button
+                onClick={() => setShowQuizConfigModal(false)}
+                style={{ background: "none", border: "none", fontSize: "1.2rem", cursor: "pointer", color: "#9ca3af" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <p style={{ fontSize: "0.85rem", color: "#6b7280", margin: "0 0 20px 0" }}>
+              Gemini AI will analyze the actual educational video content and generate questions. Select your quiz options:
+            </p>
+
+            {/* Number of Questions */}
+            <div style={{ marginBottom: "20px" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "700", color: "#374151", marginBottom: "8px" }}>
+                Number of Questions:
+              </label>
+              <div style={{ display: "flex", gap: "12px" }}>
+                {[5, 10].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setQuizNumQuestions(num)}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      borderRadius: "10px",
+                      border: quizNumQuestions === num ? "2px solid #6366f1" : "1px solid #e5e7eb",
+                      background: quizNumQuestions === num ? "#eef2ff" : "#ffffff",
+                      color: quizNumQuestions === num ? "#4f46e5" : "#374151",
+                      fontWeight: "700",
+                      fontSize: "0.9rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {num} Questions
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Difficulty */}
+            <div style={{ marginBottom: "24px" }}>
+              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "700", color: "#374151", marginBottom: "8px" }}>
+                Difficulty:
+              </label>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {[
+                  { level: "Easy", icon: "🟢" },
+                  { level: "Medium", icon: "🟡" },
+                  { level: "Hard", icon: "🔴" },
+                ].map(({ level, icon }) => (
+                  <button
+                    key={level}
+                    type="button"
+                    onClick={() => setQuizDifficulty(level)}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      borderRadius: "10px",
+                      border: quizDifficulty === level ? "2px solid #6366f1" : "1px solid #e5e7eb",
+                      background: quizDifficulty === level ? "#eef2ff" : "#ffffff",
+                      color: quizDifficulty === level ? "#4f46e5" : "#374151",
+                      fontWeight: "700",
+                      fontSize: "0.85rem",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {icon} {level}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "12px" }}>
+              <button
+                type="button"
+                onClick={() => setShowQuizConfigModal(false)}
+                style={{ flex: 1, padding: "12px", borderRadius: "10px", border: "1px solid #d1d5db", background: "#ffffff", color: "#374151", fontWeight: "600", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateQuiz}
+                style={{ flex: 2, padding: "12px", borderRadius: "10px", border: "none", background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)", color: "#ffffff", fontWeight: "700", cursor: "pointer", boxShadow: "0 4px 12px rgba(99,102,241,0.3)" }}
+              >
+                🚀 Start Quiz Generation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Watch Logs Modal */}
+      {showLogsModal && selectedVideoForLogs && (
+        <div
+          style={{
+            position: "fixed",
+            top: "0",
+            left: "0",
+            right: "0",
+            bottom: "0",
+            backgroundColor: "rgba(0, 0, 0, 0.6)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: "10000",
+            padding: "20px",
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={() => setShowLogsModal(false)}
+        >
+          <div
+            style={{
+              backgroundColor: "#ffffff",
+              borderRadius: "16px",
+              boxShadow: "0 20px 50px rgba(0, 0, 0, 0.25)",
+              maxWidth: "650px",
+              width: "100%",
+              maxHeight: "85vh",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: "18px 24px",
+                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                color: "#ffffff",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <div>
+                <h3 style={{ margin: "0 0 4px 0", fontSize: "1.15rem", fontWeight: "700" }}>
+                  📊 Daily Watch Logs
+                </h3>
+                <p style={{ margin: 0, fontSize: "0.85rem", opacity: 0.9, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "450px" }}>
+                  {selectedVideoForLogs.videoTitle || selectedVideoForLogs.videoId}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowLogsModal(false)}
+                style={{
+                  background: "rgba(255,255,255,0.2)",
+                  border: "none",
+                  color: "#ffffff",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                  borderRadius: "50%",
+                  width: "32px",
+                  height: "32px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Body - Logs Table */}
+            <div style={{ padding: "20px", overflowY: "auto", flex: 1 }}>
+              {(() => {
+                const vidKey = selectedVideoForLogs.videoId || selectedVideoForLogs.url;
+                const logs = (appState.history || []).filter(
+                  (item) => item.videoId === vidKey || item.url === vidKey
+                );
+
+                const totalSecs = selectedVideoForLogs.totalSecondsWatched ?? selectedVideoForLogs.secondsWatched ?? 0;
+                const totalMins = Math.floor(totalSecs / 60);
+                const totalRemSecs = totalSecs % 60;
+                const totalDurStr = totalMins > 0 ? `${totalMins}m ${totalRemSecs}s` : `${totalRemSecs}s`;
+
+                if (logs.length === 0) {
+                  return (
+                    <p style={{ color: "#6b7280", textAlign: "center", margin: "20px 0" }}>
+                      No per-day log history recorded yet for this video.
+                    </p>
+                  );
+                }
+
+                return (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", padding: "14px 18px", background: "#f3f4f6", borderRadius: "12px" }}>
+                      <div>
+                        <span style={{ fontSize: "0.7rem", color: "#6b7280", fontWeight: "700", textTransform: "uppercase" }}>TOTAL CUMULATIVE WATCH TIME</span>
+                        <h4 style={{ margin: "2px 0 0 0", color: "#059669", fontWeight: "700", fontSize: "1.1rem" }}>
+                          {totalDurStr}
+                        </h4>
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          setShowLogsModal(false);
+                          handleSessionCardClick(e, selectedVideoForLogs);
+                        }}
+                        style={{
+                          backgroundColor: "#4f46e5",
+                          color: "#ffffff",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "8px 16px",
+                          fontWeight: "600",
+                          fontSize: "0.85rem",
+                          cursor: "pointer",
+                          boxShadow: "0 2px 5px rgba(79, 70, 229, 0.3)",
+                        }}
+                      >
+                        ▶️ Resume Video
+                      </button>
+                    </div>
+
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.85rem" }}>
+                      <thead>
+                        <tr style={{ borderBottom: "2px solid #e5e7eb", textAlign: "left", color: "#4b5563" }}>
+                          <th style={{ padding: "10px" }}>📅 Date</th>
+                          <th style={{ padding: "10px" }}>⏱️ Duration Watched</th>
+                          <th style={{ padding: "10px" }}>🔄 Tab Switches</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {logs.map((log, idx) => {
+                          const rawDate = log.watchedAt;
+                          const formattedDate = rawDate
+                            ? rawDate.includes("T")
+                              ? new Date(rawDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                              : rawDate
+                            : "N/A";
+                          const secs = log.secondsWatched ?? log.seconds ?? 0;
+                          const mins = Math.floor(secs / 60);
+                          const remSecs = secs % 60;
+                          const durStr = mins > 0 ? `${mins}m ${remSecs}s` : `${remSecs}s`;
+
+                          return (
+                            <tr key={idx} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                              <td style={{ padding: "12px 10px", fontWeight: "600", color: "#1f2937" }}>
+                                {formattedDate}
+                              </td>
+                              <td style={{ padding: "12px 10px", color: "#059669", fontWeight: "700" }}>
+                                {durStr}
+                              </td>
+                              <td style={{ padding: "12px 10px", color: log.tabSwitches > 0 ? "#dc2626" : "#6b7280" }}>
+                                {log.tabSwitches || 0}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Note Modal */}
       {showNoteModal && (
@@ -2716,6 +3954,14 @@ export default function VideoTracker() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setAuthModalOpen(false)}
+      />
+
+      {/* User Profile Modal */}
+      <UserProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => setIsProfileModalOpen(false)}
+        user={user}
+        onUpdateUser={(updated) => setUser(updated)}
       />
     </div>
   );
