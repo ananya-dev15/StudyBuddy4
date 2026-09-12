@@ -11,9 +11,10 @@ def download_audio(video_id, output_path):
         "no_warnings": True,
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "mweb", "android"]
+                "player_client": ["android", "ios", "mweb"]
             }
         }
+
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
