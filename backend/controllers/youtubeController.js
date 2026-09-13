@@ -24,6 +24,7 @@ async function getOrCreateHistoryEntry(user, videoId) {
       watchedAt: getLocalDateString(),
     };
     user.history.unshift(entry);
+    user.markModified("history");
     await user.save();
   }
   return entry;
@@ -65,6 +66,7 @@ export async function getVideoInfo(req, res) {
     entry.isStudyVideo = isStudyVideo;
     entry.studyScore = studyScore;
     entry.lastWatchedPosition = entry.lastWatchedPosition || 0;
+    user.markModified("history");
     await user.save();
     return res.json({
       success: true,
@@ -127,3 +129,4 @@ export async function saveProgress(req, res) {
     return res.status(500).json({ success: false, message: err.message });
   }
 }
+

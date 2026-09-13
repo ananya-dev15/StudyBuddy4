@@ -213,20 +213,28 @@ router.post("/add-history", protect, async (req, res) => {
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // 🚫 Don’t save empty sessions
+    // 🚫 Don’t save empty sessions (< 5 seconds)
     if (!secondsWatched || secondsWatched < 5) {
       return res.json({ success: false, message: "Session too short, not saved" });
     }
 
+    const cleanId = (str) => {
+      if (!str) return "";
+      const match = String(str).match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+      return match ? match[1] : String(str).trim();
+    };
+
+    const targetId = cleanId(videoId || url);
     const todayStr = getLocalDateString();
 
     // Fetch persistent note/tag if available
-    const persistentNote = (user.notes && user.notes[videoId]) || note || "";
-    const persistentTag = (user.tags && user.tags[videoId]) || tag || "";
+    const persistentNote = (user.notes && user.notes[targetId]) || (user.notes && user.notes[videoId]) || note || "";
+    const persistentTag = (user.tags && user.tags[targetId]) || (user.tags && user.tags[videoId]) || tag || "";
 
     // Find if there's ALREADY an entry for THIS video ON TODAY'S DATE
     let existingIndex = user.history.findIndex((h) => {
-      if (h.videoId !== videoId) return false;
+      const hId = cleanId(h.videoId || h.url);
+      if (hId !== targetId) return false;
       let dateKey = "";
       if (h.watchedAt) {
         if (typeof h.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.watchedAt.trim())) {
@@ -253,8 +261,8 @@ router.post("/add-history", protect, async (req, res) => {
       user.history.unshift(existing);
     } else {
       const newEntry = {
-        videoId,
-        url: url || `https://youtu.be/${videoId}`,
+        videoId: targetId,
+        url: url || `https://youtu.be/${targetId}`,
         secondsWatched: Math.round(secondsWatched),
         tabSwitches: tabSwitches || 0,
         watchedAt: todayStr,

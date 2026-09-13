@@ -1775,7 +1775,7 @@ export default function VideoTracker() {
         const todayStr = getLocalDateString();
         const updatedHistory = [...(prev.history || [])];
         const existingIdx = updatedHistory.findIndex(
-          (h) => h.videoId === currentVideoKey && (h.watchedAt ? (h.watchedAt.split("T")[0] || h.watchedAt) : "") === todayStr
+          (h) => (h.videoId === currentVideoKey || h.url?.includes(currentVideoKey) || currentVideoKey?.includes(h.videoId)) && (h.watchedAt ? (typeof h.watchedAt === "string" ? (h.watchedAt.split("T")[0] || h.watchedAt) : getLocalDateString(h.watchedAt)) : "") === todayStr
         );
 
         if (existingIdx !== -1) {
@@ -1808,8 +1808,9 @@ export default function VideoTracker() {
         };
       });
 
-      // Clear note textarea and finalize session UI immediately
+      // Clear note textarea and reset session timer
       setNoteText("");
+      setSessionPlayedSeconds(0);
       finalizeSession(true);
 
       // 3. Parallel background API requests (All in 1 click)
@@ -1834,9 +1835,12 @@ export default function VideoTracker() {
         .then((data) => {
           if (data.success && data.history) {
             setAppState((prev) => ({ ...prev, history: data.history }));
-            localStorage.setItem(`userHistory_${userId}`, JSON.stringify(data.history));
+            if (userId) {
+              localStorage.setItem(`userHistory_${userId}`, JSON.stringify(data.history));
+            }
           }
         })
+
         .catch((err) => console.error("Error saving history:", err));
 
       if (currentNoteToSave || currentTagToSave) {
@@ -3237,8 +3241,12 @@ export default function VideoTracker() {
             const getUniqueVideoCards = (historyArr = []) => {
               const cardsMap = new Map();
               historyArr.forEach((item) => {
-                const key = item.videoId || item.url;
-                if (!key) return;
+                const rawId = item.videoId || item.url;
+                if (!rawId) return;
+                let key = String(rawId).trim();
+                const match = key.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                if (match) key = match[1];
+
                 const secs = Number(item.secondsWatched ?? item.seconds ?? 0) || 0;
                 const switches = Number(item.tabSwitches || 0);
                 const note = item.note || appState.notes?.[key] || "";
@@ -3247,6 +3255,7 @@ export default function VideoTracker() {
                 if (!cardsMap.has(key)) {
                   cardsMap.set(key, {
                     ...item,
+                    videoId: key,
                     totalSecondsWatched: secs,
                     totalTabSwitches: switches,
                     latestWatchedAt: item.watchedAt,
@@ -3267,6 +3276,7 @@ export default function VideoTracker() {
             };
 
             const uniqueCards = getUniqueVideoCards(appState.history || []);
+
 
             if (uniqueCards.length === 0) {
               return <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No study video cards found.</p>;
