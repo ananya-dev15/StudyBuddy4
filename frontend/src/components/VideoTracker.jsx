@@ -680,8 +680,10 @@ export default function VideoTracker() {
             ...prev,
             coins: prev.coins + 1,
           }));
+          setTimeout(() => handleStopSave(), 100);
           return;
         }
+
         setFocusRemaining((s) => s - 1);
       }
       setSessionPlayedSeconds((s) => s + 1);

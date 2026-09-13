@@ -4,6 +4,12 @@
 import { fetchVideoDetails, fetchPlaylistItems, evaluateStudyVideo } from "../utils/youtube.js";
 import User from "../models/User.js";
 
+function cleanVideoId(str) {
+  if (!str) return "";
+  const match = String(str).match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+  return match ? match[1] : String(str).trim();
+}
+
 function getLocalDateString(date = new Date()) {
   const d = new Date(date);
   const year = d.getFullYear();
@@ -13,8 +19,9 @@ function getLocalDateString(date = new Date()) {
 }
 
 // Helper to find or create a history entry for a video
-async function getOrCreateHistoryEntry(user, videoId) {
-  let entry = user.history.find((h) => h.videoId === videoId);
+async function getOrCreateHistoryEntry(user, rawVideoId) {
+  const videoId = cleanVideoId(rawVideoId);
+  let entry = user.history.find((h) => cleanVideoId(h.videoId || h.url) === videoId);
   if (!entry) {
     entry = {
       videoId,
@@ -33,11 +40,12 @@ async function getOrCreateHistoryEntry(user, videoId) {
 // GET /api/youtube/video?videoId=...
 export async function getVideoInfo(req, res) {
   try {
-    const { videoId } = req.query;
-    if (!videoId) return res.status(400).json({ success: false, message: "Missing videoId" });
+    const { videoId: rawVideoId } = req.query;
+    if (!rawVideoId) return res.status(400).json({ success: false, message: "Missing videoId" });
+    const videoId = cleanVideoId(rawVideoId);
     const user = req.user;
     // Check cache in user.history
-    let cached = user.history.find((h) => h.videoId === videoId && h.videoTitle);
+    let cached = user.history.find((h) => cleanVideoId(h.videoId || h.url) === videoId && h.videoTitle);
     if (cached) {
       // Use stored metadata if present
       return res.json({
@@ -102,12 +110,13 @@ export async function getPlaylistInfo(req, res) {
 // POST /api/youtube/save-progress
 export async function saveProgress(req, res) {
   try {
-    const { videoId, position } = req.body;
-    if (!videoId) return res.status(400).json({ success: false, message: "Missing videoId" });
+    const { videoId: rawVideoId, position } = req.body;
+    if (!rawVideoId) return res.status(400).json({ success: false, message: "Missing videoId" });
+    const videoId = cleanVideoId(rawVideoId);
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    let entry = user.history.find((h) => h.videoId === videoId);
+    let entry = user.history.find((h) => cleanVideoId(h.videoId || h.url) === videoId);
     if (!entry) {
       entry = {
         videoId,
@@ -129,4 +138,5 @@ export async function saveProgress(req, res) {
     return res.status(500).json({ success: false, message: err.message });
   }
 }
+
 
