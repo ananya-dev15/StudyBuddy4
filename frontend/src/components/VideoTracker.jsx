@@ -3286,8 +3286,9 @@ export default function VideoTracker() {
 
             return (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
-                {uniqueCards.slice(0, 10).map((h, i) => {
+                {uniqueCards.map((h, i) => {
                   const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
+
                   const minutes = Math.floor(seconds / 60);
                   const secs = seconds % 60;
                   const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
