@@ -75,10 +75,6 @@ router.post("/coins-loss", protect, async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
-  } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
-  }
-});
 
 router.post("/coins-gain", async (req, res) => {
   try {
