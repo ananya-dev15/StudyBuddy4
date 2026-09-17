@@ -334,6 +334,7 @@ export default function VideoTracker() {
   const [selectedNote, setSelectedNote] = useState("");
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [selectedVideoForLogs, setSelectedVideoForLogs] = useState(null);
+  const [showWatchHistoryModal, setShowWatchHistoryModal] = useState(false);
   const [showTimerPopup, setShowTimerPopup] = useState(false);
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [focusRemaining, setFocusRemaining] = useState(null);
@@ -3237,271 +3238,369 @@ export default function VideoTracker() {
         {/* ✅ IMPORTANT: This section shows ONLY the last 5 sessions (sliced). */}
         {/* The graph above uses ALL sessions from the database (unsliced). */}
         <div style={styles.panel}>
-          <h3 style={styles.sectionTitle}>🎬 Study Video Cards</h3>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px" }}>
+            <h3 style={styles.sectionTitle}>🎬 Study Video Cards</h3>
+            <button
+              onClick={() => setShowWatchHistoryModal(true)}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: "#4f46e5",
+                color: "#ffffff",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "0.85rem",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                boxShadow: "0 2px 5px rgba(79, 70, 229, 0.25)",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#4338ca")}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "#4f46e5")}
+            >
+              📜 View Watch History
+            </button>
+          </div>
 
-          {(() => {
-            const getUniqueVideoCards = (historyArr = []) => {
-              const cardsMap = new Map();
-              historyArr.forEach((item) => {
-                const rawId = item.videoId || item.url;
-                if (!rawId) return;
-                let key = String(rawId).trim();
-                const match = key.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-                if (match) key = match[1];
+          {/* Watch History Cards Modal */}
+          {showWatchHistoryModal && (
+            <div
+              style={{
+                position: "fixed",
+                top: "0",
+                left: "0",
+                right: "0",
+                bottom: "0",
+                backgroundColor: "rgba(0, 0, 0, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: "10000",
+                padding: "20px",
+                backdropFilter: "blur(4px)",
+              }}
+              onClick={() => setShowWatchHistoryModal(false)}
+            >
+              <div
+                style={{
+                  backgroundColor: "#ffffff",
+                  borderRadius: "16px",
+                  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.25)",
+                  maxWidth: "950px",
+                  width: "100%",
+                  maxHeight: "85vh",
+                  display: "flex",
+                  flexDirection: "column",
+                  overflow: "hidden",
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header */}
+                <div
+                  style={{
+                    padding: "16px 24px",
+                    borderBottom: "1px solid #e5e7eb",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    backgroundColor: "#f9fafb",
+                  }}
+                >
+                  <h3 style={{ margin: 0, fontSize: "1.1rem", fontWeight: "700", color: "#1f2937" }}>
+                    📜 Study Watch History Cards
+                  </h3>
+                  <button
+                    onClick={() => setShowWatchHistoryModal(false)}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      fontSize: "1.2rem",
+                      cursor: "pointer",
+                      color: "#6b7280",
+                      padding: "4px 8px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
 
-                const secs = Number(item.secondsWatched ?? item.seconds ?? 0) || 0;
-                const switches = Number(item.tabSwitches || 0);
-                const note = item.note || appState.notes?.[key] || "";
-                const tag = item.tag || appState.tags?.[key] || "";
+                {/* Content Body */}
+                <div style={{ padding: "20px", overflowY: "auto" }}>
+                  {(() => {
+                    const getUniqueVideoCards = (historyArr = []) => {
+                      const cardsMap = new Map();
+                      historyArr.forEach((item) => {
+                        const rawId = item.videoId || item.url;
+                        if (!rawId) return;
+                        let key = String(rawId).trim();
+                        const match = key.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+                        if (match) key = match[1];
 
-                if (!cardsMap.has(key)) {
-                  cardsMap.set(key, {
-                    ...item,
-                    videoId: key,
-                    totalSecondsWatched: secs,
-                    totalTabSwitches: switches,
-                    latestWatchedAt: item.watchedAt,
-                    note,
-                    tag,
-                  });
-                } else {
-                  const existing = cardsMap.get(key);
-                  existing.totalSecondsWatched += secs;
-                  existing.totalTabSwitches += switches;
-                  if (note) existing.note = note;
-                  if (tag) existing.tag = tag;
-                  if (item.videoTitle) existing.videoTitle = item.videoTitle;
-                  if (item.watchedAt) existing.latestWatchedAt = item.watchedAt;
-                }
-              });
-              return Array.from(cardsMap.values());
-            };
+                        const secs = Number(item.secondsWatched ?? item.seconds ?? 0) || 0;
+                        const switches = Number(item.tabSwitches || 0);
+                        const note = item.note || appState.notes?.[key] || "";
+                        const tag = item.tag || appState.tags?.[key] || "";
 
-            const uniqueCards = getUniqueVideoCards(appState.history || []);
+                        if (!cardsMap.has(key)) {
+                          cardsMap.set(key, {
+                            ...item,
+                            videoId: key,
+                            totalSecondsWatched: secs,
+                            totalTabSwitches: switches,
+                            latestWatchedAt: item.watchedAt,
+                            note,
+                            tag,
+                          });
+                        } else {
+                          const existing = cardsMap.get(key);
+                          existing.totalSecondsWatched += secs;
+                          existing.totalTabSwitches += switches;
+                          if (note) existing.note = note;
+                          if (tag) existing.tag = tag;
+                          if (item.videoTitle) existing.videoTitle = item.videoTitle;
+                          if (item.watchedAt) existing.latestWatchedAt = item.watchedAt;
+                        }
+                      });
+                      return Array.from(cardsMap.values());
+                    };
 
+                    const uniqueCards = getUniqueVideoCards(appState.history || []);
 
-            if (uniqueCards.length === 0) {
-              return <p style={{ color: "#9ca3af", fontSize: "0.9rem" }}>No study video cards found.</p>;
-            }
+                    if (uniqueCards.length === 0) {
+                      return <p style={{ color: "#9ca3af", fontSize: "0.9rem", textAlign: "center" }}>No study video cards found.</p>;
+                    }
 
-            return (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "10px" }}>
-                {uniqueCards.map((h, i) => {
-                  const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
+                    return (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "12px" }}>
+                        {uniqueCards.map((h, i) => {
+                          const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
 
-                  const minutes = Math.floor(seconds / 60);
-                  const secs = seconds % 60;
-                  const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
-                  const switches = h.totalTabSwitches ?? h.tabSwitches ?? 0;
+                          const minutes = Math.floor(seconds / 60);
+                          const secs = seconds % 60;
+                          const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+                          const switches = h.totalTabSwitches ?? h.tabSwitches ?? 0;
 
-                  const rawDate = h.latestWatchedAt || h.watchedAt;
-                  const watchDate = rawDate
-                    ? rawDate.includes("T")
-                      ? new Date(rawDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
-                      : rawDate
-                    : "N/A";
+                          const rawDate = h.latestWatchedAt || h.watchedAt;
+                          const watchDate = rawDate
+                            ? rawDate.includes("T")
+                              ? new Date(rawDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                              : rawDate
+                            : "N/A";
 
-                  return (
-                    <div
-                      key={i}
-                      onClick={(e) => handleSessionCardClick(e, h)}
-                      style={{
-                        background: "#ffffff",
-                        borderRadius: "10px",
-                        padding: "12px",
-                        boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
-                        border: "1px solid #e5e7eb",
-                        display: "flex",
-                        flexDirection: "column",
-                        transition: "all 0.2s ease",
-                        cursor: "pointer",
-                      }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.boxShadow = "0 3px 8px rgba(0, 0, 0, 0.12)";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.08)";
-                      }}
-                    >
-                      {/* Title */}
-                      <h4 style={{ margin: "0 0 8px 0", fontSize: "0.9rem", fontWeight: "600", color: "#1f2937", wordBreak: "break-word" }}>
-                        <a
-                          href="#"
-                          onClick={(e) => handleSessionCardClick(e, h)}
-                          style={{
-                            color: "#4f46e5",
-                            textDecoration: "none",
-                            fontSize: "0.85rem",
-                            display: "block",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                            cursor: "pointer",
-                          }}
-                        >
-                          {h.videoTitle || h.videoId}
-                        </a>
-                      </h4>
-
-                      {/* Stats Grid */}
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-                        <div>
-                          <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
-                            Duration
-                          </p>
-                          <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: "#059669" }}>
-                            {displayDuration}
-                          </p>
-                        </div>
-                        <div>
-                          <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
-                            Switches
-                          </p>
-                          <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: switches > 0 ? "#dc2626" : "#6b7280" }}>
-                            {switches}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Date */}
-                      <p style={{ margin: "0 0 8px 0", fontSize: "0.75rem", color: "#9ca3af" }}>
-                        {watchDate}
-                      </p>
-
-                      {/* Tag & Note */}
-                      <div style={{ marginTop: "auto" }}>
-                        {h.tag && (
-                          <div style={{ marginBottom: "8px" }}>
-                            <span
+                          return (
+                            <div
+                              key={i}
+                              onClick={(e) => {
+                                handleSessionCardClick(e, h);
+                                setShowWatchHistoryModal(false);
+                              }}
                               style={{
-                                display: "inline-block",
-                                background: "#f0f4ff",
-                                color: "#4f46e5",
-                                padding: "3px 8px",
-                                borderRadius: "5px",
-                                fontSize: "0.7rem",
-                                fontWeight: "600",
-                                whiteSpace: "nowrap",
+                                background: "#ffffff",
+                                borderRadius: "10px",
+                                padding: "12px",
+                                boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
+                                border: "1px solid #e5e7eb",
+                                display: "flex",
+                                flexDirection: "column",
+                                transition: "all 0.2s ease",
+                                cursor: "pointer",
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.boxShadow = "0 3px 8px rgba(0, 0, 0, 0.12)";
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.08)";
                               }}
                             >
-                              #{h.tag}
-                            </span>
-                          </div>
-                        )}
+                              {/* Title */}
+                              <h4 style={{ margin: "0 0 8px 0", fontSize: "0.9rem", fontWeight: "600", color: "#1f2937", wordBreak: "break-word" }}>
+                                <a
+                                  href="#"
+                                  onClick={(e) => {
+                                    handleSessionCardClick(e, h);
+                                    setShowWatchHistoryModal(false);
+                                  }}
+                                  style={{
+                                    color: "#4f46e5",
+                                    textDecoration: "none",
+                                    fontSize: "0.85rem",
+                                    display: "block",
+                                    whiteSpace: "nowrap",
+                                    overflow: "hidden",
+                                    textOverflow: "ellipsis",
+                                    cursor: "pointer",
+                                  }}
+                                >
+                                  {h.videoTitle || h.videoId}
+                                </a>
+                              </h4>
 
-                        <button
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setSelectedVideoForLogs(h);
-                            setShowLogsModal(true);
-                          }}
-                          style={{
-                            width: "100%",
-                            padding: "6px 12px",
-                            backgroundColor: "#eff6ff",
-                            border: "1px solid #bfdbfe",
-                            borderRadius: "5px",
-                            fontSize: "0.75rem",
-                            fontWeight: "600",
-                            color: "#2563eb",
-                            cursor: "pointer",
-                            transition: "all 0.2s ease",
-                            marginBottom: "6px",
-                          }}
-                          onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = "#dbeafe";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = "#eff6ff";
-                          }}
-                        >
-                          📊 Daily Watch Logs
-                        </button>
+                              {/* Stats Grid */}
+                              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
+                                <div>
+                                  <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
+                                    Duration
+                                  </p>
+                                  <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: "#059669" }}>
+                                    {displayDuration}
+                                  </p>
+                                </div>
+                                <div>
+                                  <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
+                                    Switches
+                                  </p>
+                                  <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: switches > 0 ? "#dc2626" : "#6b7280" }}>
+                                    {switches}
+                                  </p>
+                                </div>
+                              </div>
 
-                        {(h.note || h.notes) && (
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              const actualNote = h.note || h.notes;
-                              setSelectedNote(actualNote);
-                              setShowNoteModal(true);
-                            }}
-                            style={{
-                              width: "100%",
-                              padding: "6px 12px",
-                              backgroundColor: "#f0f4ff",
-                              border: "1px solid #c7d2fe",
-                              borderRadius: "5px",
-                              fontSize: "0.75rem",
-                              fontWeight: "600",
-                              color: "#4f46e5",
-                              cursor: "pointer",
-                              transition: "all 0.2s ease",
-                              marginBottom: "6px"
-                            }}
-                            onMouseEnter={(e) => {
-                              e.target.style.backgroundColor = "#e0e7ff";
-                            }}
-                            onMouseLeave={(e) => {
-                              e.target.style.backgroundColor = "#f0f4ff";
-                            }}
-                          >
-                            📝 View Note
-                          </button>
-                        )}
+                              {/* Date */}
+                              <p style={{ margin: "0 0 8px 0", fontSize: "0.75rem", color: "#9ca3af" }}>
+                                {watchDate}
+                              </p>
 
-                        <div style={{ display: "flex", gap: "6px" }}>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              const actualNote = h.note || h.notes;
-                              generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'view');
-                            }}
-                            disabled={!(h.note || h.notes)}
-                            style={{
-                              flex: 1,
-                              padding: "6px 4px",
-                              backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
-                              border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
-                              borderRadius: "5px",
-                              fontSize: "0.65rem",
-                              fontWeight: "600",
-                              color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
-                              cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
-                            }}
-                          >
-                            📄 View PDF
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.preventDefault();
-                              const actualNote = h.note || h.notes;
-                              generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'download');
-                            }}
-                            disabled={!(h.note || h.notes)}
-                            style={{
-                              flex: 1,
-                              padding: "6px 4px",
-                              backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
-                              border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
-                              borderRadius: "5px",
-                              fontSize: "0.65rem",
-                              fontWeight: "600",
-                              color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
-                              cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
-                            }}
-                          >
-                            📥 Download PDF
-                          </button>
-                        </div>
+                              {/* Tag & Note */}
+                              <div style={{ marginTop: "auto" }}>
+                                {h.tag && (
+                                  <div style={{ marginBottom: "8px" }}>
+                                    <span
+                                      style={{
+                                        display: "inline-block",
+                                        background: "#f0f4ff",
+                                        color: "#4f46e5",
+                                        padding: "3px 8px",
+                                        borderRadius: "5px",
+                                        fontSize: "0.7rem",
+                                        fontWeight: "600",
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      #{h.tag}
+                                    </span>
+                                  </div>
+                                )}
+
+                                <button
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setSelectedVideoForLogs(h);
+                                    setShowLogsModal(true);
+                                  }}
+                                  style={{
+                                    width: "100%",
+                                    padding: "6px 12px",
+                                    backgroundColor: "#eff6ff",
+                                    border: "1px solid #bfdbfe",
+                                    borderRadius: "5px",
+                                    fontSize: "0.75rem",
+                                    fontWeight: "600",
+                                    color: "#2563eb",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease",
+                                    marginBottom: "6px",
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    e.target.style.backgroundColor = "#dbeafe";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    e.target.style.backgroundColor = "#eff6ff";
+                                  }}
+                                >
+                                  📊 Daily Watch Logs
+                                </button>
+
+                                {(h.note || h.notes) && (
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const actualNote = h.note || h.notes;
+                                      setSelectedNote(actualNote);
+                                      setShowNoteModal(true);
+                                    }}
+                                    style={{
+                                      width: "100%",
+                                      padding: "6px 12px",
+                                      backgroundColor: "#f0f4ff",
+                                      border: "1px solid #c7d2fe",
+                                      borderRadius: "5px",
+                                      fontSize: "0.75rem",
+                                      fontWeight: "600",
+                                      color: "#4f46e5",
+                                      cursor: "pointer",
+                                      transition: "all 0.2s ease",
+                                      marginBottom: "6px"
+                                    }}
+                                    onMouseEnter={(e) => {
+                                      e.target.style.backgroundColor = "#e0e7ff";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                      e.target.style.backgroundColor = "#f0f4ff";
+                                    }}
+                                  >
+                                    📝 View Note
+                                  </button>
+                                )}
+
+                                <div style={{ display: "flex", gap: "6px" }}>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const actualNote = h.note || h.notes;
+                                      generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'view');
+                                    }}
+                                    disabled={!(h.note || h.notes)}
+                                    style={{
+                                      flex: 1,
+                                      padding: "6px 4px",
+                                      backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
+                                      border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
+                                      borderRadius: "5px",
+                                      fontSize: "0.65rem",
+                                      fontWeight: "600",
+                                      color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
+                                      cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
+                                    }}
+                                  >
+                                    📄 View PDF
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      const actualNote = h.note || h.notes;
+                                      generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'download');
+                                    }}
+                                    disabled={!(h.note || h.notes)}
+                                    style={{
+                                      flex: 1,
+                                      padding: "6px 4px",
+                                      backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
+                                      border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
+                                      borderRadius: "5px",
+                                      fontSize: "0.65rem",
+                                      fontWeight: "600",
+                                      color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
+                                      cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
+                                    }}
+                                  >
+                                    📥 Download PDF
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })()}
+                </div>
               </div>
-            );
-          })()}
+            </div>
+          )}
         </div>
 
         {/* ─── YouTube Enhancement Panels ─── */}
