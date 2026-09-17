@@ -2,28 +2,25 @@
 import express from "express";
 import User from "../models/User.js";
 import protect from "../middlewares/authMiddleware.js";
-// ✅ use JWT middleware
+import {
+  getLocalDateString,
+  getLocalDateKey,
+  calculateStreak,
+  updateUserStreak,
+  saveUserWithRetry,
+} from "../utils/streakUtils.js";
 
 const router = express.Router();
-
-// ✅ Helper: Get local date string in YYYY-MM-DD format (respects timezone)
-const getLocalDateString = (date = new Date()) => {
-  const d = new Date(date);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
 
 // Increment coins (userId comes from token)
 router.post("/coins", protect, async (req, res) => {
   try {
     const { amount } = req.body;
-    const user = req.user; // ✅ got from JWT
+    const user = req.user;
     if (!user) return res.status(404).json({ message: "User not found" });
 
     user.coins = (user.coins || 0) + (amount || 1);
-    await user.save();
+    await saveUserWithRetry(user);
     res.json({ success: true, coins: user.coins });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -31,39 +28,17 @@ router.post("/coins", protect, async (req, res) => {
 });
 
 // Increment videos watched + maintain streak
-// ✅ Increment videos watched + maintain streak
 router.post("/videos-watched", protect, async (req, res) => {
   try {
-    const user = req.user;
+    const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const today = getLocalDateString();
-    const lastWatchedDate = user.lastDayWatched; // now a String (YYYY-MM-DD or null)
-
-    // ✅ Increment total videos watched
     user.videosWatched = (user.videosWatched || 0) + 1;
-
-    if (!lastWatchedDate) {
-      // First time studying
-      user.streak = 1;
-    } else if (lastWatchedDate === today) {
-      // Already studied today - keep current streak
-    } else {
-      // Check if it's exactly the next day
-      const lastDate = new Date(lastWatchedDate);
-      const todayDate = new Date(today);
-      const diffTime = Math.abs(todayDate - lastDate);
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-      if (diffDays === 1) {
-        user.streak = (user.streak || 0) + 1;
-      } else {
-        user.streak = 1;
-      }
-    }
-
     user.lastDayWatched = today;
-    await user.save();
+    const streak = updateUserStreak(user);
+
+    await saveUserWithRetry(user);
 
     res.json({
       success: true,
@@ -77,20 +52,18 @@ router.post("/videos-watched", protect, async (req, res) => {
   }
 });
 
-
-
 // Reduce coins when user switches tab
 router.post("/coins-loss", protect, async (req, res) => {
   try {
     const { loss = 1 } = req.body;
-    const user = req.user;
+    const user = await User.findById(req.user._id);
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
     user.coins = Math.max(0, (user.coins || 0) - loss); // never negative
     user.videosSwitched = (user.videosSwitched || 0) + 1;
 
-    await user.save();
+    await saveUserWithRetry(user);
 
     res.json({
       success: true,
@@ -98,6 +71,10 @@ router.post("/coins-loss", protect, async (req, res) => {
       coins: user.coins,
       videosSwitched: user.videosSwitched,
     });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
@@ -157,10 +134,13 @@ router.get("/coins/:id", async (req, res) => {
     if (!user)
       return res.status(404).json({ success: false, message: "User not found" });
 
+    const streak = updateUserStreak(user);
+    await saveUserWithRetry(user);
+
     res.json({
       success: true,
       coins: user.coins || 0,
-      streak: user.streak || 0,
+      streak: streak,
       videosWatched: user.videosWatched || 0,
       videosSwitched: user.videosSwitched || 0,
     });
@@ -169,42 +149,6 @@ router.get("/coins/:id", async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
-
-
-
-// ✅ Add video watch history (keeps last 5 days)
-// router.post("/add-history", protect, async (req, res) => {
-//   try {
-//     const { videoId, url, secondsWatched, tabSwitches } = req.body;
-//     const user = req.user;
-//     if (!user) return res.status(404).json({ message: "User not found" });
-
-//     // create history entry
-//     const newEntry = {
-//       videoId,
-//       url,
-//       secondsWatched: secondsWatched || 0,
-//       tabSwitches: tabSwitches || 0,
-//       watchedAt: new Date(),
-//     };
-
-//     // push new entry
-//     user.history.push(newEntry);
-
-//     // only keep last 5 entries
-//     if (user.history.length > 5) {
-//       user.history = user.history.slice(-5);
-//     }
-
-//     await user.save();
-
-//     res.json({ success: true, history: user.history });
-//   } catch (err) {
-//     console.error("⚠️ Error adding history:", err);
-//     res.status(500).json({ success: false, message: err.message });
-//   }
-// });
-
 
 router.post("/add-history", protect, async (req, res) => {
   try {
@@ -272,9 +216,12 @@ router.post("/add-history", protect, async (req, res) => {
       user.history.unshift(newEntry);
     }
 
+    user.lastDayWatched = todayStr;
+    updateUserStreak(user);
+
     user.markModified("history");
-    await user.save();
-    res.json({ success: true, history: user.history });
+    await saveUserWithRetry(user);
+    res.json({ success: true, history: user.history, streak: user.streak, lastDayWatched: user.lastDayWatched });
   } catch (err) {
     console.error("❌ Error adding history:", err);
     res.status(500).json({ success: false, message: err.message });
@@ -345,15 +292,18 @@ router.get("/weekly-stats", protect, async (req, res) => {
 
 router.get("/dashboard", protect, async (req, res) => {
   try {
-    const user = req.user;
+    const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
+
+    const streak = updateUserStreak(user);
+    await saveUserWithRetry(user);
 
     res.json({
       success: true,
       coins: user.coins,
       videosWatched: user.videosWatched,
       videosSwitched: user.videosSwitched,
-      streak: user.streak,
+      streak: streak,
       history: user.history.slice(-5).reverse(), // last 5 sessions
     });
   } catch (err) {
@@ -391,8 +341,6 @@ router.get("/monthly-activity", protect, async (req, res) => {
   }
 });
 
-
-// ✅ Save or update notes & tags for a specific video
 // ✅ Save or update notes & tags for a specific video
 router.post("/save-note-tag", protect, async (req, res) => {
   try {
@@ -430,8 +378,7 @@ router.post("/save-note-tag", protect, async (req, res) => {
       }
     });
 
-    if (!entryFound) {
-      // If no entry found (edge case), add one cleanly
+    if (!entryFound && (noteText || tagText)) {
       user.history.unshift({
         videoId,
         url: `https://youtu.be/${videoId}`,
@@ -444,8 +391,7 @@ router.post("/save-note-tag", protect, async (req, res) => {
     }
 
     user.markModified("history");
-
-    await user.save();
+    await saveUserWithRetry(user);
 
     // Return clean objects for frontend
     res.json({
@@ -463,13 +409,11 @@ router.post("/save-note-tag", protect, async (req, res) => {
   }
 });
 
-
-
 // ✅ Fetch notes + tags
 router.get("/notes-tags", protect, async (req, res) => {
   try {
     const user = req.user;
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    if (!user) return res.status(404).json({ message: "User not found" });
 
     res.json({
       success: true,
@@ -481,8 +425,5 @@ router.get("/notes-tags", protect, async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
-
-
-
 
 export default router;

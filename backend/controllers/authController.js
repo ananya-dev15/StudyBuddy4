@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { OAuth2Client } from "google-auth-library";
 import User from "../models/User.js";
 import { sendVerificationEmail } from "../utils/sendEmail.js";
+import { updateUserStreak, saveUserWithRetry } from "../utils/streakUtils.js";
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -317,6 +318,8 @@ export const getUserProfile = async (req, res) => {
 
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    const streak = updateUserStreak(user);
+
     res.json({
       success: true,
       user: {
@@ -333,7 +336,7 @@ export const getUserProfile = async (req, res) => {
         state: user.state,
         nation: user.nation,
         coins: user.coins,
-        streak: user.streak,
+        streak: streak,
         videosWatched: user.videosWatched,
         profileImage: user.profileImage || "",
         isEmailVerified: user.isEmailVerified,
