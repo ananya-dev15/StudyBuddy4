@@ -87,11 +87,11 @@ function extractYouTubeId(urlOrId) {
 // --- STUDY VIDEO FILTER ---
 const ALLOWED_KEYWORDS = [
   // Preserved original keywords
-  "study", "lecture", "tutorial", "math", "science",
+  "study", "lecture", "tutorial", "math", "science", "google",
   "coding", "programming", "react", "java", "ds algo",
   "data structures", "education", "exam", "motivation", "MySQL",
   // Expanded educational & placement keywords for high recall
-  "aptitude", "placement", "nqt", "tcs", "reasoning", "verbal", "quantitative",
+  "aptitude", "leetcode", "placement", "nqt", "tcs", "reasoning", "verbal", "quantitative",
   "interview", "preparation", "course", "learn", "learning", "solution", "questions",
   "gate", "jee", "neet", "dbms", "sql", "engineering", "class", "chapter", "guide",
   "algorithm", "computer", "system", "development", "web", "python", "cpp", "c++",
@@ -2582,8 +2582,8 @@ export default function VideoTracker() {
               {quizResult.accuracy >= 80
                 ? "🌟 Outstanding! You demonstrated strong understanding of the video content!"
                 : quizResult.accuracy >= 50
-                ? "👍 Good effort! Review the missed concepts to solidify your knowledge."
-                : "📚 Keep practicing! Watch the video again to strengthen your understanding."}
+                  ? "👍 Good effort! Review the missed concepts to solidify your knowledge."
+                  : "📚 Keep practicing! Watch the video again to strengthen your understanding."}
             </div>
 
             {/* Actions */}
