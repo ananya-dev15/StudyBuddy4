@@ -16,6 +16,21 @@ import {
 } from "recharts";
 import { eachDayOfInterval, format, startOfMonth, endOfMonth } from "date-fns";
 
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 const Dashboard = () => {
   const { appState } = useAppContext();
   const storedUser = JSON.parse(localStorage.getItem("user")) || null;
@@ -27,6 +42,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const navigate = useNavigate();
 
   // ✅ Fetch monthly activity
@@ -330,12 +347,39 @@ const Dashboard = () => {
 
         {/* Calendar */}
         <div className="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-lg mb-8">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">
-            Study Activity — {format(now, "MMMM yyyy")}
-          </h2>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+            <h2 className="text-lg font-semibold text-gray-700">
+              Study Activity — {MONTHS[selectedMonth]} {selectedYear}
+            </h2>
+
+            {/* Month & Year Selectors */}
+            <div className="flex items-center gap-2">
+              <select
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+              >
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={i}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(Number(e.target.value))}
+                className="w-20 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+              />
+            </div>
+          </div>
 
           <div className="grid grid-cols-7 gap-2 text-center">
-            {days.map((day, i) => {
+            {eachDayOfInterval({
+              start: startOfMonth(new Date(selectedYear, selectedMonth, 1)),
+              end: endOfMonth(new Date(selectedYear, selectedMonth, 1)),
+            }).map((day, i) => {
               const dateKey = format(day, "yyyy-MM-dd");
               const totalSeconds = finalActivity[dateKey]?.totalSeconds || 0;
               const totalMins = totalSeconds / 60;
@@ -367,7 +411,7 @@ const Dashboard = () => {
             })}
           </div>
 
-          <div className="flex justify-around mt-6 text-sm text-gray-600">
+          <div className="flex justify-around mt-6 text-sm text-gray-600 flex-wrap gap-2">
             <Legend color="bg-red-500" text="0–2 hrs" />
             <Legend color="bg-orange-400" text="2–5 hrs" />
             <Legend color="bg-yellow-400" text="5–9 hrs" />
