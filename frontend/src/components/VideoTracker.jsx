@@ -1329,24 +1329,14 @@ export default function VideoTracker() {
   // --- SESSION FINALIZE ---
   // ✅ Finalize and reward focus session
   const finalizeSession = async (ended = false) => {
-
-    //new add
     if (window.__alreadyFinalized) {
       console.log("⛔ finalize blocked (already ran)");
       return;
     }
     window.__alreadyFinalized = true;
 
-    //window.__alreadyFinalized = true;
-
     const currentVideoIdentifier = videoId || localVideoFile?.name;
     if (!currentVideoIdentifier) return;
-
-    const secondsWatched = Math.floor(sessionPlayedSeconds);
-    if (secondsWatched <= 0 && sessionViewsTaken === 0) {
-      cleanupAfterSession();
-      return;
-    }
 
     // ✅ +1 reward for completing focus session
     const reward = 1;
@@ -1357,94 +1347,21 @@ export default function VideoTracker() {
       // 🕒 Small delay ensures any -5 deduction from tab switch is processed first
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // ✅ Prevent multiple +1 rewards
-      if (earnedThisSessionCoins) {
-        console.log("⚠️ Coins for this session already awarded, skipping duplicate +1");
-        cleanupAfterSession();
-        return;
-      }
-
       // ✅ Reward 1 coin for focus session completion
       if (!earnedThisSessionCoins) {
         await updateBackendCoinsGain(reward);
         setEarnedThisSessionCoins(true);
+        console.log(`🎉 Focus session complete — +${reward} coin saved!`);
       }
-
-      cleanupAfterSession();
-      console.log(`🎉 Focus session complete — +${reward} coin saved!`);
     } catch (error) {
       console.error("❌ Error finalizing session:", error);
+    } finally {
+      cleanupAfterSession(ended);
+      setTimeout(() => {
+        window.__alreadyFinalized = false;
+        console.log("🔓 finalize unlocked");
+      }, 2000);
     }
-
-
-
-
-    const now = new Date();
-    const todayStr = getLocalDateString(now);
-    const dayChanged = appState.lastDayWatched !== todayStr;
-
-    const newHistoryEntry = {
-      videoId: currentVideoIdentifier,
-      url: videoId ? `https://youtu.be/${videoId}` : `file://${localVideoFile.name}`,
-      watchedAt: todayStr,
-      seconds: secondsWatched,
-      viewsTaken: sessionViewsTaken,
-      note: noteText || appState.notes?.[currentVideoIdentifier] || "",
-      tag: tagText || "",
-    };
-
-    setAppState((prev) => {
-      const stats = { ...(prev.stats || {}) };
-      const prevStat = stats[currentVideoIdentifier] || { totalSeconds: 0, totalViews: 0 };
-      stats[currentVideoIdentifier] = {
-        totalSeconds: prevStat.totalSeconds + secondsWatched,
-        totalViews: prevStat.totalViews + sessionViewsTaken,
-      };
-
-      let coins = prev.coins ?? 0;
-      let streak = prev.streak ?? 0;
-      let lastDayStr = prev.lastDayWatched || null;
-
-      if (dayChanged) {
-        coins += DAILY_BONUS;
-        // Simple streak logic for frontend display, backend handles it robustly
-        if (lastDayStr) {
-          const lastUTC = new Date(lastDayStr).getTime();
-          const todayUTC = new Date(todayStr).getTime();
-          const diffDays = Math.round((todayUTC - lastUTC) / (1000 * 60 * 60 * 24));
-          if (diffDays === 1) streak += 1;
-          else if (diffDays > 1) streak = 1;
-        } else {
-          streak = 1;
-        }
-        lastDayStr = todayStr;
-      }
-
-      const notes = { ...(prev.notes || {}), [currentVideoIdentifier]: (prev.notes?.[currentVideoIdentifier] ? prev.notes[currentVideoIdentifier] + "\n" + noteText : noteText).trim() };
-      const history = [...(prev.history || []), newHistoryEntry];
-
-      return {
-        ...prev,
-        history,
-        stats,
-        notes,
-        coins,
-        streak,
-        lastDayWatched: lastDayStr,
-      };
-    });
-
-    // ✅ Backend sync outside setAppState for reliability
-    await updateVideosWatched();
-
-    cleanupAfterSession(ended);
-
-    // Finalize lock
-    setTimeout(() => {
-      window.__alreadyFinalized = false;
-      console.log("🔓 finalize unlocked");
-    }, 2000);
-
   };
 
 
