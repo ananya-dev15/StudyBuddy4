@@ -80,6 +80,17 @@ export const AppProvider = ({ children }) => {
     clean = clean.replace(/_([^_]+)_/g, "$1");
     clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
     clean = clean.replace(/^[\s*-]+\s+/gm, "");
+    
+    // Remove all Emojis & Pictographs so TTS reads only text
+    try {
+      clean = clean.replace(/[\p{Extended_Pictographic}\p{Emoji_Component}]/gu, "");
+    } catch (e) {
+      clean = clean.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/gu, "");
+    }
+
+    clean = clean.replace(/\\rightarrow/g, "leads to");
+    clean = clean.replace(/[\$\\]/g, "");
+
     return clean.replace(/\s+/g, " ").trim();
   };
 
@@ -93,23 +104,51 @@ export const AppProvider = ({ children }) => {
 
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
       const voices = window.speechSynthesis.getVoices();
-      const indianVoice = voices.find(
-        (v) => v.lang === "en-IN" || v.lang === "en_IN" || v.name.includes("India") || v.name.includes("Indian")
-      );
-      const englishVoice = voices.find((v) => v.lang.startsWith("en"));
 
-      if (indianVoice) {
-        utterance.voice = indianVoice;
-        utterance.lang = "en-IN";
-      } else if (englishVoice) {
-        utterance.voice = englishVoice;
-        utterance.lang = englishVoice.lang || "en-US";
+      // Common female voice identifiers across macOS, Windows, Chrome, Safari & Android
+      const femaleVoiceNames = [
+        "veena", "sangeeta", "neerja", "heera", "zira", "samantha", "karen",
+        "victoria", "fiona", "moira", "tessa", "jenny", "aria", "eva", "susan",
+        "female", "woman", "google uk english female"
+      ];
+
+      // 1. Prefer female English (India) voice (e.g., Veena, Neerja, Sangeeta, Heera)
+      let selectedVoice = voices.find(
+        (v) =>
+          (v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")) &&
+          femaleVoiceNames.some((kw) => v.name.toLowerCase().includes(kw))
+      );
+
+      // 2. Fallback to any female English voice (e.g., Samantha, Zira, Jenny, Karen)
+      if (!selectedVoice) {
+        selectedVoice = voices.find(
+          (v) =>
+            v.lang.startsWith("en") &&
+            femaleVoiceNames.some((kw) => v.name.toLowerCase().includes(kw))
+        );
+      }
+
+      // 3. Fallback to any en-IN voice
+      if (!selectedVoice) {
+        selectedVoice = voices.find(
+          (v) => v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")
+        );
+      }
+
+      // 4. Fallback to any English voice
+      if (!selectedVoice) {
+        selectedVoice = voices.find((v) => v.lang.startsWith("en"));
+      }
+
+      if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang || "en-IN";
       } else {
         utterance.lang = "en-IN";
       }
 
       utterance.rate = 1.0;
-      utterance.pitch = 1.0;
+      utterance.pitch = 1.15; // Soft & clear female voice tone
 
       window.speechSynthesis.speak(utterance);
     } catch (err) {
