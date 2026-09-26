@@ -19,6 +19,7 @@ import youtubeRoutes from "./routes/youtubeRoutes.js";
 import hackathonRoutes from "./routes/hackathonRoutes.js";
 import reminderRoutes from "./routes/reminderRoutes.js";
 import quizRoutes from "./routes/quizRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
 
 import connectDB from "./config/db.js";
 
@@ -70,6 +71,7 @@ app.use("/api/youtube", youtubeRoutes);
 app.use("/api/hackathons", hackathonRoutes);
 app.use("/api/reminders", reminderRoutes);
 app.use("/api/quiz", quizRoutes);
+app.use("/api/chat", chatRoutes);
 
 // Start server
 const PORT = process.env.PORT || 6000;

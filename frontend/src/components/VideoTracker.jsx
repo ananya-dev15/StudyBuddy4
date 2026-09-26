@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useAppContext } from "../context/AppContext";
 // import { FaceMesh } from "@mediapipe/face_mesh";
 // import { Camera } from "@mediapipe/camera_utils";
@@ -201,7 +201,16 @@ export default function VideoTracker() {
   const userId = storedUser?.id;
 
   // App state
-  const { appState, setAppState } = useAppContext();
+  const {
+    appState,
+    setAppState,
+    setIsChatOpen,
+    isChatOpen,
+    startVoiceRecognition,
+    isVoiceListening,
+    setActiveVideoContext,
+    processVoiceQuestion,
+  } = useAppContext();
 
   // --- UTILITY FUNCTIONS ---
   const updateBackendCoins = async (loss) => {
@@ -349,6 +358,49 @@ export default function VideoTracker() {
   const [currentPlaylistIndex, setCurrentPlaylistIndex] = useState(0);
   const [showPlaylist, setShowPlaylist] = useState(false);
   const [metaLoading, setMetaLoading] = useState(false);
+
+  // Sync active video context for ChatBot AI
+  useEffect(() => {
+    if (videoId) {
+      setActiveVideoContext({
+        source: "video_tracker",
+        videoId: videoId,
+        videoTitle: videoMeta?.title || "Educational Lecture",
+      });
+    } else {
+      setActiveVideoContext(null);
+    }
+  }, [videoId, videoMeta, setActiveVideoContext]);
+
+  const playerContainerRef = useRef(null);
+
+  const handleVoiceDoubtInTracker = useCallback(() => {
+    startVoiceRecognition((transcript) => {
+      if (transcript && transcript.trim()) {
+        processVoiceQuestion(transcript.trim(), {
+          source: "video_tracker",
+          videoId: videoId,
+          videoTitle: videoMeta?.title || "Educational Lecture",
+        });
+      }
+    });
+  }, [startVoiceRecognition, processVoiceQuestion, videoId, videoMeta]);
+
+  const toggleMaximizePlayer = () => {
+    setIsPlayerMaximized((prev) => !prev);
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
+      if (e.key === "v" || e.key === "V") {
+        e.preventDefault();
+        handleVoiceDoubtInTracker();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [handleVoiceDoubtInTracker]);
   const [metaError, setMetaError] = useState('');
   const [coinsLoaded, setCoinsLoaded] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
@@ -2950,14 +3002,74 @@ export default function VideoTracker() {
           {isVideoLoaded ? (
             <>
               <div
+                ref={playerContainerRef}
                 style={isPlayerMaximized ? styles.playerMax : styles.player}
               >
-                {videoId && (
-                  <div
-                    id="vt-youtube-player"
-                    style={{ width: "100%", height: "100%" }}
-                  />
-                )}
+                <div style={{ display: isPlayerMaximized ? "flex" : "none", position: "absolute", top: "16px", right: "20px", zIndex: 210, gap: "10px", alignItems: "center" }}>
+                  <button
+                    onClick={handleVoiceDoubtInTracker}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: "10px",
+                      background: isVoiceListening ? "#ef4444" : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "14px",
+                      border: "none",
+                      cursor: "pointer",
+                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}
+                    title="Speak doubt out loud to StudyBuddy AI (or press V)"
+                  >
+                    {isVoiceListening ? "🎙️ Listening... Speak Now" : "🎙️ Voice Doubt (V)"}
+                  </button>
+                  <button
+                    onClick={() => setIsChatOpen((s) => !s)}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: "10px",
+                      background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "14px",
+                      border: "none",
+                      cursor: "pointer",
+                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}
+                  >
+                    💬 {isChatOpen ? "Close AI Chat" : "Open AI Chat"}
+                  </button>
+                  <button
+                    onClick={toggleMaximizePlayer}
+                    style={{
+                      padding: "10px 18px",
+                      borderRadius: "10px",
+                      background: "rgba(0,0,0,0.7)",
+                      color: "#fff",
+                      fontWeight: "bold",
+                      fontSize: "14px",
+                      border: "1px solid rgba(255,255,255,0.3)",
+                      cursor: "pointer",
+                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)"
+                    }}
+                  >
+                    📉 Minimize
+                  </button>
+                </div>
+                <div style={{ width: "100%", height: "100%" }}>
+                  {videoId && (
+                    <div
+                      id="vt-youtube-player"
+                      style={{ width: "100%", height: "100%" }}
+                    />
+                  )}
+                </div>
                 {localVideoObjectUrl && (
                   <video
                     ref={localVideoRef}
@@ -2967,14 +3079,14 @@ export default function VideoTracker() {
                   />
                 )}
                 <button
-                  onClick={() => setIsPlayerMaximized((s) => !s)}
+                  onClick={toggleMaximizePlayer}
                   style={styles.toggleMaxMinButton}
                 >
                   {isPlayerMaximized ? "Minimize" : "Maximize"}
                 </button>
               </div>
               <div style={styles.controlsAndStats}>
-                <div>
+                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                   <button
                     onClick={handleStopSave}
                     style={{
@@ -2983,6 +3095,31 @@ export default function VideoTracker() {
                     }}
                   >
                     Stop & Save
+                  </button>
+                  <button
+                    onClick={handleVoiceDoubtInTracker}
+                    style={{
+                      ...styles.smallBtn,
+                      background: isVoiceListening
+                        ? "#ef4444"
+                        : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                      color: "#ffffff",
+                      fontWeight: "bold",
+                    }}
+                    title="Speak your doubt out loud to StudyBuddy AI"
+                  >
+                    {isVoiceListening ? "🎙️ Listening..." : "🎙️ Voice Doubt"}
+                  </button>
+                  <button
+                    onClick={() => setIsChatOpen((s) => !s)}
+                    style={{
+                      ...styles.smallBtn,
+                      background: "#6366f1",
+                      color: "#ffffff",
+                      fontWeight: "bold",
+                    }}
+                  >
+                    💬 AI Chat
                   </button>
                 </div>
                 <div style={styles.statsText}>

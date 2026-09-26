@@ -9,6 +9,7 @@ import UserProfileModal from "../components/UserProfileModal";
 import Leaderboard from "../components/Leaderboard";
 import Lottie from "lottie-react";
 import chatAnimation from "../assets/chatAnimation.json";
+import { useAppContext } from "../context/AppContext";
 import ankit from "../assets/ankit1.jpeg"
 import anshika from "../assets/anshika1.jpeg"
 import ananya from "../assets/ananya1.jpeg"
@@ -108,7 +109,7 @@ const Chatbot = () => {
 
 // ------------------- HomePage Component -------------------
 const HomePage = () => {
-  const [chatOpen, setChatOpen] = useState(false);
+  const { isChatOpen, setIsChatOpen } = useAppContext();
   const [user, setUser] = useState(null);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false); // ✨ NEW: State for modal
@@ -161,9 +162,9 @@ const HomePage = () => {
       e.preventDefault(); // Stop the <Link> from navigating
       setAuthModalOpen(true); // Open the login/signup modal
     } else if (path === "/chatbot") {
-      // AI Chatbot opens the Chatbot modal (8501)
+      // AI Chatbot opens the Chatbot modal
       e.preventDefault(); // Stop navigation
-      setChatOpen(true); // Open the chat window
+      setIsChatOpen(true); // Open the chat window
     } else if (path === "/dashboard" || path === "/reminders") {
       // Dashboard opens the full-screen dashboard modal (8502)
       e.preventDefault();
@@ -176,7 +177,7 @@ const HomePage = () => {
     if (!user) {
       setAuthModalOpen(true); // Show modal if not logged in
     } else {
-      setChatOpen(!chatOpen); // Toggle chat window if logged in
+      setIsChatOpen(!isChatOpen); // Toggle chat window if logged in
     }
   };
 
@@ -520,51 +521,6 @@ const HomePage = () => {
           © {new Date().getFullYear()} StudyBuddy. All rights reserved.
         </p>
       </footer>
-
-      {/* Floating Chat Icon */}
-      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
-        {chatOpen && (
-          <div className="mb-2 w-[550px] h-[520px] bg-white shadow-2xl rounded-xl overflow-hidden flex flex-col">
-            <div className="bg-indigo-700 text-white p-4 font-semibold flex justify-between items-center text-lg">
-              Chat with AI
-              <button
-                onClick={() => setChatOpen(false)}
-                className="ml-2 font-bold text-xl leading-none"
-              >
-                ✕
-              </button>
-            </div>
-
-            <iframe
-              src="http://localhost:8501"
-              className="flex-1"
-              style={{ border: "none" }}
-              title="StudyBuddy"
-            />
-          </div>
-
-        )}
-        {/* <button
-    onClick={handleChatClick} // ✨ MODIFIED: Use new handler
-    className="w-16 h-16 rounded-full bg-indigo-700 shadow-xl flex items-center justify-center text-white text-2xl hover:bg-indigo-800 transition-colors"
-  >
-    💬
-  </button> */}
-
-        <div
-          onClick={handleChatClick}
-          className="cursor-pointer "
-        >
-          <Lottie
-            animationData={chatAnimation}
-            loop={true}
-            className="w-32 h-[130px]"
-          />
-        </div>
-
-
-
-      </div>
 
       {/* ✨ NEW: Render the modal component */}
       <AuthModal

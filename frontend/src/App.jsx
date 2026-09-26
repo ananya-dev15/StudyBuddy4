@@ -27,7 +27,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/videos" element={<VideoTracker />} />
-          <Route path="/chatbot" element={<ChatBot />} />
+          <Route path="/chatbot" element={<ChatBot standalone={true} />} />
           <Route path="/reminders" element={<RemindersPanel />} /> {/* ✅ route */}
           <Route path="/assignments" element={<AssignmentCard/>} />
           <Route path="/blogs" element={<Blog />} />
@@ -37,6 +37,7 @@ function App() {
           <Route path="/contact" element={<Contact/>} />
           <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
+        <ChatBot />
       </BrowserRouter>
     </GoogleOAuthProvider>
   );

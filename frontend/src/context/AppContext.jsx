@@ -57,6 +57,157 @@ export const AppProvider = ({ children }) => {
   });
   const [activeToast, setActiveToast] = useState(null);
 
+  // --- Global Chatbot State ---
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    { sender: "bot", text: "Hey there! I’m StudyBuddy AI 🤖, your personal study companion." },
+    { sender: "bot", text: "My goal is to help you stay organized, focused, and answer any doubt while studying." },
+    { sender: "bot", text: "What's on your mind? Type a question or ask by voice!" },
+  ]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [activeVideoContext, setActiveVideoContext] = useState(null);
+
+  const cleanTextForSpeech = (rawText) => {
+    if (!rawText) return "";
+    let clean = rawText;
+    clean = clean.replace(/```[\s\S]*?```/g, " code snippet ");
+    clean = clean.replace(/`([^`]+)`/g, "$1");
+    clean = clean.replace(/^#+\s+/gm, "");
+    clean = clean.replace(/\*\*([^*]+)\*\*/g, "$1");
+    clean = clean.replace(/\*([^*]+)\*/g, "$1");
+    clean = clean.replace(/__([^_]+)__/g, "$1");
+    clean = clean.replace(/_([^_]+)_/g, "$1");
+    clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+    clean = clean.replace(/^[\s*-]+\s+/gm, "");
+    return clean.replace(/\s+/g, " ").trim();
+  };
+
+  const speakText = (text) => {
+    try {
+      if (!("speechSynthesis" in window)) return;
+      window.speechSynthesis.cancel();
+
+      const textToSpeak = cleanTextForSpeech(text);
+      if (!textToSpeak) return;
+
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      const voices = window.speechSynthesis.getVoices();
+      const indianVoice = voices.find(
+        (v) => v.lang === "en-IN" || v.lang === "en_IN" || v.name.includes("India") || v.name.includes("Indian")
+      );
+      const englishVoice = voices.find((v) => v.lang.startsWith("en"));
+
+      if (indianVoice) {
+        utterance.voice = indianVoice;
+        utterance.lang = "en-IN";
+      } else if (englishVoice) {
+        utterance.voice = englishVoice;
+        utterance.lang = englishVoice.lang || "en-US";
+      } else {
+        utterance.lang = "en-IN";
+      }
+
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn("SpeechSynthesis error:", err);
+    }
+  };
+
+  const sendMessageToChatbot = async (text, overrideContext = null) => {
+    if (!text || !text.trim()) return;
+    const cleanText = text.trim();
+
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+
+    setChatMessages((prev) => [...prev, { sender: "user", text: cleanText }]);
+    setChatLoading(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/chat/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: cleanText,
+          context: overrideContext || activeVideoContext,
+        }),
+      });
+
+      const data = await res.json();
+      const botReply = data.reply || "I couldn't process that. Please try asking again!";
+      setChatMessages((prev) => [...prev, { sender: "bot", text: botReply }]);
+      speakText(botReply);
+    } catch (err) {
+      console.error("Chat error:", err);
+      setChatMessages((prev) => [
+        ...prev,
+        { sender: "bot", text: "Sorry, I had trouble reaching the server. Please try again!" },
+      ]);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const processVoiceQuestion = (transcript, overrideContext = null) => {
+    if (!transcript || !transcript.trim()) return;
+    setIsChatOpen(true);
+    sendMessageToChatbot(transcript.trim(), overrideContext);
+  };
+
+  const startVoiceRecognition = (onTranscript, onError) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("Voice Recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      return null;
+    }
+    try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = "en-US";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        setIsVoiceListening(true);
+        if ("speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+        }
+      };
+
+      recognition.onresult = (event) => {
+        const transcript = event.results?.[0]?.[0]?.transcript;
+        if (transcript && transcript.trim()) {
+          if (onTranscript) {
+            onTranscript(transcript.trim());
+          } else {
+            processVoiceQuestion(transcript.trim());
+          }
+        }
+      };
+
+      recognition.onerror = (err) => {
+        console.warn("Speech recognition error:", err);
+        setIsVoiceListening(false);
+        if (onError) onError(err);
+      };
+
+      recognition.onend = () => {
+        setIsVoiceListening(false);
+      };
+
+      recognition.start();
+      return recognition;
+    } catch (e) {
+      console.error("Failed to start speech recognition:", e);
+      setIsVoiceListening(false);
+      return null;
+    }
+  };
+
   // --- Adders (Append NOT Replace) ---
   const addAssignment = (newAssignment) => {
     if (!userId) return;
@@ -331,6 +482,19 @@ export const AppProvider = ({ children }) => {
         activeToast,
         clearToast,
         highlightedReminders,
+        isChatOpen,
+        setIsChatOpen,
+        chatMessages,
+        setChatMessages,
+        chatLoading,
+        isVoiceListening,
+        setIsVoiceListening,
+        activeVideoContext,
+        setActiveVideoContext,
+        sendMessageToChatbot,
+        processVoiceQuestion,
+        startVoiceRecognition,
+        speakText,
       }}
     >
       {activeToast && (
