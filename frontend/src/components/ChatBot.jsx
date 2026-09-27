@@ -11,7 +11,7 @@ export default function ChatBot({ standalone = false }) {
     chatLoading,
     isVoiceListening,
     sendMessageToChatbot,
-    startVoiceRecognition,
+    toggleVoiceRecognition,
     activeVideoContext,
     speakText,
   } = useAppContext();
@@ -39,8 +39,7 @@ export default function ChatBot({ standalone = false }) {
   };
 
   const handleVoiceClick = () => {
-    if (isVoiceListening) return;
-    startVoiceRecognition((transcript) => {
+    toggleVoiceRecognition((transcript) => {
       if (transcript && transcript.trim()) {
         sendMessageToChatbot(transcript.trim());
       }

@@ -206,7 +206,7 @@ export default function VideoTracker() {
     setAppState,
     setIsChatOpen,
     isChatOpen,
-    startVoiceRecognition,
+    toggleVoiceRecognition,
     isVoiceListening,
     setActiveVideoContext,
     processVoiceQuestion,
@@ -375,7 +375,7 @@ export default function VideoTracker() {
   const playerContainerRef = useRef(null);
 
   const handleVoiceDoubtInTracker = useCallback(() => {
-    startVoiceRecognition((transcript) => {
+    toggleVoiceRecognition((transcript) => {
       if (transcript && transcript.trim()) {
         processVoiceQuestion(transcript.trim(), {
           source: "video_tracker",
@@ -384,23 +384,11 @@ export default function VideoTracker() {
         });
       }
     });
-  }, [startVoiceRecognition, processVoiceQuestion, videoId, videoMeta]);
+  }, [toggleVoiceRecognition, processVoiceQuestion, videoId, videoMeta]);
 
   const toggleMaximizePlayer = () => {
     setIsPlayerMaximized((prev) => !prev);
   };
-
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (["INPUT", "TEXTAREA"].includes(document.activeElement?.tagName)) return;
-      if (e.key === "v" || e.key === "V") {
-        e.preventDefault();
-        handleVoiceDoubtInTracker();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [handleVoiceDoubtInTracker]);
   const [metaError, setMetaError] = useState('');
   const [coinsLoaded, setCoinsLoaded] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);

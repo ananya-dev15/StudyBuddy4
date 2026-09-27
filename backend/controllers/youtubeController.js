@@ -113,26 +113,40 @@ export async function saveProgress(req, res) {
     const { videoId: rawVideoId, position } = req.body;
     if (!rawVideoId) return res.status(400).json({ success: false, message: "Missing videoId" });
     const videoId = cleanVideoId(rawVideoId);
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+    const userId = req.user._id;
+    const floorPos = Math.floor(position || 0);
 
-    let entry = user.history.find((h) => cleanVideoId(h.videoId || h.url) === videoId);
-    if (!entry) {
-      entry = {
-        videoId,
-        url: `https://youtu.be/${videoId}`,
-        secondsWatched: 0,
-        tabSwitches: 0,
-        watchedAt: getLocalDateString(),
-        lastWatchedPosition: Math.floor(position),
-      };
-      user.history.unshift(entry);
-    } else {
-      entry.lastWatchedPosition = Math.floor(position);
+    // Try updating existing history entry atomically
+    const updateResult = await User.updateOne(
+      { _id: userId, "history.videoId": videoId },
+      { $set: { "history.$.lastWatchedPosition": floorPos } }
+    );
+
+    // If no existing entry matched, push new entry
+    if (updateResult.matchedCount === 0) {
+      await User.updateOne(
+        { _id: userId },
+        {
+          $push: {
+            history: {
+              $each: [
+                {
+                  videoId,
+                  url: `https://youtu.be/${videoId}`,
+                  secondsWatched: 0,
+                  tabSwitches: 0,
+                  watchedAt: getLocalDateString(),
+                  lastWatchedPosition: floorPos,
+                },
+              ],
+              $position: 0,
+            },
+          },
+        }
+      );
     }
-    user.markModified("history");
-    await user.save();
-    return res.json({ success: true, message: "Progress saved", position });
+
+    return res.json({ success: true, message: "Progress saved", position: floorPos });
   } catch (err) {
     console.error("Error in saveProgress:", err);
     return res.status(500).json({ success: false, message: err.message });

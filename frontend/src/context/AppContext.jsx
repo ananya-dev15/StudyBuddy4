@@ -1,5 +1,5 @@
 // context/AppContext.js
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import API_BASE from "../services/apiBase";
 
 export const AppContext = createContext();
@@ -67,6 +67,7 @@ export const AppProvider = ({ children }) => {
   const [chatLoading, setChatLoading] = useState(false);
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [activeVideoContext, setActiveVideoContext] = useState(null);
+  const activeRecognitionRef = useRef(null);
 
   const cleanTextForSpeech = (rawText) => {
     if (!rawText) return "";
@@ -198,27 +199,52 @@ export const AppProvider = ({ children }) => {
     sendMessageToChatbot(transcript.trim(), overrideContext);
   };
 
+  const stopVoiceRecognition = () => {
+    if (activeRecognitionRef.current) {
+      try {
+        if (typeof activeRecognitionRef.current.abort === "function") {
+          activeRecognitionRef.current.abort();
+        } else if (typeof activeRecognitionRef.current.stop === "function") {
+          activeRecognitionRef.current.stop();
+        }
+      } catch (err) {
+        console.warn("Error stopping voice recognition:", err);
+      }
+      activeRecognitionRef.current = null;
+    }
+    setIsVoiceListening(false);
+  };
+
   const startVoiceRecognition = (onTranscript, onError) => {
+    if (activeRecognitionRef.current || isVoiceListening) {
+      stopVoiceRecognition();
+      return null;
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
       alert("Voice Recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
       return null;
     }
     try {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+
       const recognition = new SpeechRecognition();
+      activeRecognitionRef.current = recognition;
       recognition.lang = "en-US";
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
         setIsVoiceListening(true);
-        if ("speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-        }
       };
 
       recognition.onresult = (event) => {
         const transcript = event.results?.[0]?.[0]?.transcript;
+        activeRecognitionRef.current = null;
+        setIsVoiceListening(false);
         if (transcript && transcript.trim()) {
           if (onTranscript) {
             onTranscript(transcript.trim());
@@ -230,11 +256,13 @@ export const AppProvider = ({ children }) => {
 
       recognition.onerror = (err) => {
         console.warn("Speech recognition error:", err);
+        activeRecognitionRef.current = null;
         setIsVoiceListening(false);
         if (onError) onError(err);
       };
 
       recognition.onend = () => {
+        activeRecognitionRef.current = null;
         setIsVoiceListening(false);
       };
 
@@ -242,10 +270,35 @@ export const AppProvider = ({ children }) => {
       return recognition;
     } catch (e) {
       console.error("Failed to start speech recognition:", e);
+      activeRecognitionRef.current = null;
       setIsVoiceListening(false);
       return null;
     }
   };
+
+  const toggleVoiceRecognition = (onTranscript, onError) => {
+    if (isVoiceListening || activeRecognitionRef.current) {
+      stopVoiceRecognition();
+    } else {
+      startVoiceRecognition(onTranscript, onError);
+    }
+  };
+
+  // 🎙️ Global Hotkey: Press 'V' to toggle voice recognition on/off
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeTag = document.activeElement?.tagName;
+      const isEditable = document.activeElement?.isContentEditable;
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(activeTag) || isEditable) return;
+
+      if (e.key === "v" || e.key === "V") {
+        e.preventDefault();
+        toggleVoiceRecognition();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isVoiceListening]);
 
   // --- Adders (Append NOT Replace) ---
   const addAssignment = (newAssignment) => {
@@ -533,6 +586,8 @@ export const AppProvider = ({ children }) => {
         sendMessageToChatbot,
         processVoiceQuestion,
         startVoiceRecognition,
+        stopVoiceRecognition,
+        toggleVoiceRecognition,
         speakText,
       }}
     >
