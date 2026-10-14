@@ -8,7 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
 import AuthModal from "./AuthModal";
 import UserProfileModal from "./UserProfileModal";
-import API_BASE from "../services/apiBase";
+import API_BASE, { STREAMLIT_URL } from "../services/apiBase";
 
 
 
@@ -2802,7 +2802,7 @@ export default function VideoTracker() {
       <h3>📊 Focus Dashboard</h3>
 
       <iframe
-        src="http://localhost:8501"
+        src={STREAMLIT_URL}
         style={{
           width: "100%",
           height: "400px",

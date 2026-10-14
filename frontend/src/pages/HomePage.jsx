@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
-import API_BASE from "../services/apiBase";
+import API_BASE, { STREAMLIT_URL } from "../services/apiBase";
 import AssignmentCard from "../components/AssignmentCard";
 import VideoTracker from "../components/VideoTracker";
 import AuthModal from "../components/AuthModal";
@@ -552,7 +552,7 @@ const HomePage = () => {
               </div>
               <div className="flex items-center gap-4">
                 <a
-                  href="http://localhost:8501"
+                  href={STREAMLIT_URL}
                   target="_blank"
                   rel="noreferrer"
                   className="hidden md:inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl transition-all text-sm font-semibold"
@@ -570,7 +570,7 @@ const HomePage = () => {
 
             {/* Dashboard Iframe */}
             <iframe
-              src="http://localhost:8501"
+              src={STREAMLIT_URL}
               className="flex-1 w-full border-none"
               title="Streamlit Dashboard"
             />
