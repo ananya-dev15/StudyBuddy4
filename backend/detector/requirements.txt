@@ -1,0 +1,15 @@
+# Dependencies for Streamlit Dashboard & Detection Stream Server
+streamlit>=1.30.0
+pandas>=2.0.0
+matplotlib>=3.7.0
+reportlab>=4.0.0
+requests>=2.31.0
+Pillow>=10.0.0
+
+# Flask & Detection Dependencies
+flask>=2.3.0
+flask-cors>=4.0.0
+opencv-python-headless>=4.8.0
+mediapipe>=0.10.0
+ultralytics>=8.0.0
+numpy>=1.24.0

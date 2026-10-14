@@ -10,6 +10,8 @@ export default function ChatBot({ standalone = false }) {
     chatMessages,
     chatLoading,
     isVoiceListening,
+    isSpeaking,
+    stopSpeakingText,
     sendMessageToChatbot,
     toggleVoiceRecognition,
     activeVideoContext,
@@ -51,7 +53,18 @@ export default function ChatBot({ standalone = false }) {
     return (
       <div className="max-w-4xl mx-auto my-6 p-4 bg-white shadow-xl rounded-2xl border border-gray-100 flex flex-col h-[650px]">
         <div className="bg-gradient-to-r from-indigo-700 to-purple-700 text-white p-4 font-bold text-xl rounded-t-xl flex justify-between items-center">
-          <span>📚 StudyBuddy AI Assistant</span>
+          <div className="flex items-center gap-2">
+            <span>📚 StudyBuddy AI Assistant</span>
+            {isSpeaking && (
+              <button
+                onClick={stopSpeakingText}
+                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all"
+                title="Stop Voice Speech"
+              >
+                ⏹️ Stop Voice
+              </button>
+            )}
+          </div>
           {activeVideoContext && (
             <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium">
               📺 Video: {activeVideoContext.videoTitle || activeVideoContext.videoId}
@@ -72,13 +85,23 @@ export default function ChatBot({ standalone = false }) {
               <div>{m.text}</div>
               {m.sender === "bot" && (
                 <div className="mt-1 flex justify-end">
-                  <button
-                    onClick={() => speakText(m.text)}
-                    className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors font-medium flex items-center gap-1"
-                    title="Listen to response"
-                  >
-                    🔊 Listen
-                  </button>
+                  {isSpeaking ? (
+                    <button
+                      onClick={stopSpeakingText}
+                      className="text-xs text-red-600 hover:text-red-800 transition-colors font-bold flex items-center gap-1 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200"
+                      title="Stop Spoken Answer"
+                    >
+                      ⏹️ Stop Voice
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => speakText(m.text)}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors font-medium flex items-center gap-1"
+                      title="Listen to response"
+                    >
+                      🔊 Listen
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -149,12 +172,23 @@ export default function ChatBot({ standalone = false }) {
               <span className="text-xl">🤖</span>
               <span>StudyBuddy AI</span>
             </div>
-            <button
-              onClick={() => setIsChatOpen(false)}
-              className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-bold text-sm transition-colors"
-            >
-              ✕
-            </button>
+            <div className="flex items-center gap-2">
+              {isSpeaking && (
+                <button
+                  onClick={stopSpeakingText}
+                  className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all"
+                  title="Stop Assistant Voice"
+                >
+                  ⏹️ Stop Voice
+                </button>
+              )}
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-bold text-sm transition-colors"
+              >
+                ✕
+              </button>
+            </div>
           </div>
 
           {/* Context Notice if in Video Tracker */}
@@ -178,13 +212,23 @@ export default function ChatBot({ standalone = false }) {
                 <div>{m.text}</div>
                 {m.sender === "bot" && (
                   <div className="mt-1 flex justify-end">
-                    <button
-                      onClick={() => speakText(m.text)}
-                      className="text-[10px] text-indigo-600 hover:text-indigo-800 transition-colors font-medium flex items-center gap-0.5"
-                      title="Replay Spoken Answer"
-                    >
-                      🔊 Listen
-                    </button>
+                    {isSpeaking ? (
+                      <button
+                        onClick={stopSpeakingText}
+                        className="text-[10px] text-red-600 hover:text-red-800 transition-colors font-bold flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-200"
+                        title="Stop Reading Answer"
+                      >
+                        ⏹️ Stop Voice
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => speakText(m.text)}
+                        className="text-[10px] text-indigo-600 hover:text-indigo-800 transition-colors font-medium flex items-center gap-0.5"
+                        title="Replay Spoken Answer"
+                      >
+                        🔊 Listen
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

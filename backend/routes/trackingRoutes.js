@@ -131,7 +131,9 @@ router.get("/coins/:id", async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
 
     const streak = updateUserStreak(user);
-    await saveUserWithRetry(user);
+    if (user.isModified("streak")) {
+      await saveUserWithRetry(user);
+    }
 
     res.json({
       success: true,

@@ -157,6 +157,12 @@ const HomePage = () => {
 
   // Click handler for all protected links
   const handleProtectedLinkClick = (e, path) => {
+    if (path === "/dashboard") {
+      // Focus Score Dashboard opens the full-screen dashboard modal (8501)
+      e.preventDefault();
+      setDashboardModalOpen(true);
+      return;
+    }
     if (!user) {
       // If user is not logged in
       e.preventDefault(); // Stop the <Link> from navigating
@@ -165,10 +171,6 @@ const HomePage = () => {
       // AI Chatbot opens the Chatbot modal
       e.preventDefault(); // Stop navigation
       setIsChatOpen(true); // Open the chat window
-    } else if (path === "/dashboard" || path === "/reminders") {
-      // Dashboard opens the full-screen dashboard modal (8502)
-      e.preventDefault();
-      setDashboardModalOpen(true);
     }
   };
 
@@ -316,7 +318,7 @@ const HomePage = () => {
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-10 text-center">
           {[
             { icon: "🎥", title: "Video Tracker", desc: "Log study videos and monitor progress effortlessly.", link: "/videos" },
-            { icon: "🎯", title: "Focus Score Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/reminders" },
+            { icon: "🎯", title: "Focus Score Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/dashboard" },
             { icon: "🤖", title: "AI Chatbot", desc: "Instant help, Q&A, and motivation while studying.", link: "/chatbot" },
             { icon: "📊", title: "Analytics", desc: "Visualize your learning trends and stay consistent.", link: "/analytics" },
             { icon: "📝", title: "Assignments", desc: "Organize, track, and submit assignments on time.", link: "/assignments" },
@@ -325,13 +327,13 @@ const HomePage = () => {
             <Link
               to={f.link}
               key={idx}
-              onClick={(e) => handleProtectedLinkClick(e, f.link)} // ✨ MODIFIED: Added onClick
+              onClick={(e) => handleProtectedLinkClick(e, f.link)}
               className="p-8 rounded-3xl bg-white/20 backdrop-blur-lg border border-white/20 shadow-xl hover:shadow-2xl transform hover:-translate-y-3 transition-all duration-300 flex flex-col items-center"
             >
               <div className="text-5xl mb-4">{f.icon}</div>
               <h3 className="text-xl font-semibold text-gray-900">{f.title}</h3>
               <p className="text-gray-800 mt-2">{f.desc}</p>
-              {f.link === "/reminders" && (
+              {f.link === "/dashboard" && (
                 <span className="mt-4 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Open Dashboard Dash →</span>
               )}
             </Link>
@@ -549,13 +551,14 @@ const HomePage = () => {
                 <p className="text-sm opacity-80 hidden md:block">Real-time analytics and smart reminder insights</p>
               </div>
               <div className="flex items-center gap-4">
-                {/* <Link
-                  to="/reminders"
-                  className="hidden md:block bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl transition-all text-sm font-semibold"
-                  onClick={() => setDashboardModalOpen(false)}
+                <a
+                  href="http://localhost:8501"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="hidden md:inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl transition-all text-sm font-semibold"
                 >
-                  Go to Reminders Page
-                </Link> */}
+                  Open in New Tab ↗
+                </a>
                 <button
                   onClick={() => setDashboardModalOpen(false)}
                   className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-2xl transition-all"
@@ -567,7 +570,7 @@ const HomePage = () => {
 
             {/* Dashboard Iframe */}
             <iframe
-              src="http://localhost:8502"
+              src="http://localhost:8501"
               className="flex-1 w-full border-none"
               title="Streamlit Dashboard"
             />

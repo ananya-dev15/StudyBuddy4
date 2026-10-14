@@ -89,14 +89,38 @@ def get_head_pose(landmarks, img_shape):
     else:
         return "away"
 
+import threading
+
 # ===== Global state =====
-cap = cv2.VideoCapture(0)
+camera_lock = threading.Lock()
+is_camera_active = False
+cap = None
 focus_score = 100
 last_tick = time.time()
 last_alert_time = 0.0
 sound_enabled = True
 frame_counter_for_log = 0
 look_away_start = None
+
+def start_camera():
+    global cap, is_camera_active
+    with camera_lock:
+        if cap is None or not cap.isOpened():
+            cap = cv2.VideoCapture(0)
+        is_camera_active = True
+    return True
+
+def stop_camera():
+    global cap, is_camera_active
+    with camera_lock:
+        is_camera_active = False
+        if cap is not None:
+            try:
+                cap.release()
+            except Exception as e:
+                print("Error releasing camera:", e)
+            cap = None
+    return True
 
 latest_payload = {
     "status": "Waiting...",
@@ -109,146 +133,183 @@ latest_payload = {
 face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True, max_num_faces=2)
 
 def generate_frames():
-    global focus_score, last_tick, last_alert_time, frame_counter_for_log, look_away_start, latest_payload
+    global focus_score, last_tick, last_alert_time, frame_counter_for_log, look_away_start, latest_payload, cap, is_camera_active
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
+    start_camera()
 
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = face_mesh.process(rgb)
+    try:
+        while is_camera_active:
+            frame = None
+            with camera_lock:
+                if not is_camera_active or cap is None or not cap.isOpened():
+                    break
+                ret, frame = cap.read()
+                if not ret:
+                    frame = None
 
-        faces_detected = 0
-        gaze_status = "away"
+            if frame is None:
+                time.sleep(0.05)
+                continue
 
-        if result.multi_face_landmarks:
-            faces_detected = len(result.multi_face_landmarks)
-            if faces_detected == 1:
-                landmarks = result.multi_face_landmarks[0].landmark
-                gaze_status = get_head_pose(landmarks, frame.shape[:2])
-                mp_drawing.draw_landmarks(
-                    frame,
-                    result.multi_face_landmarks[0],
-                    mp_face_mesh.FACEMESH_CONTOURS
-                )
+            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            result = face_mesh.process(rgb)
 
-        # Phone detection
-        phone_detected = False
-        results = yolo_model(frame, verbose=False)
-        for r in results:
-            for box in r.boxes:
-                cls = int(box.cls[0])
-                conf = float(box.conf[0])
-                if r.names[cls] == "cell phone" and conf > 0.5:
-                    phone_detected = True
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                    cv2.putText(frame, "Phone", (x1, y1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            faces_detected = 0
+            gaze_status = "away"
 
-        # away timer
-        if gaze_status == "away":
-            if look_away_start is None:
-                look_away_start = time.time()
-        else:
-            look_away_start = None
+            if result.multi_face_landmarks:
+                faces_detected = len(result.multi_face_landmarks)
+                if faces_detected == 1:
+                    landmarks = result.multi_face_landmarks[0].landmark
+                    gaze_status = get_head_pose(landmarks, frame.shape[:2])
+                    mp_drawing.draw_landmarks(
+                        frame,
+                        result.multi_face_landmarks[0],
+                        mp_face_mesh.FACEMESH_CONTOURS
+                    )
 
-        away_long_enough = False
-        if look_away_start is not None:
-            if time.time() - look_away_start >= AWAY_THRESHOLD:
-                away_long_enough = True
+            # Phone detection
+            phone_detected = False
+            results = yolo_model(frame, verbose=False)
+            for r in results:
+                for box in r.boxes:
+                    cls = int(box.cls[0])
+                    conf = float(box.conf[0])
+                    if r.names[cls] == "cell phone" and conf > 0.5:
+                        phone_detected = True
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                        cv2.putText(frame, "Phone", (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
-        # STATUS
-        if faces_detected != 1:
-            status = "Not Focused (Multiple/No Face)"
-            color = (0, 0, 255)
-        elif phone_detected:
-            status = "Not Focused (Phone Detected)"
-            color = (0, 0, 255)
-        elif gaze_status in ["screen", "notebook"]:
-            status = f"Focused ({gaze_status})"
-            color = (0, 255, 0)
-        elif away_long_enough:
-            status = "Not Focused (Looking Away >10s)"
-            color = (0, 0, 255)
-        else:
-            status = "Focused (temporary glance away)"
-            color = (0, 255, 255)
+            # away timer
+            if gaze_status == "away":
+                if look_away_start is None:
+                    look_away_start = time.time()
+            else:
+                look_away_start = None
 
-        # Focus score update
-        now = time.time()
-        dt = now - last_tick
-        if dt < 0: dt = 0
-        last_tick = now
+            away_long_enough = False
+            if look_away_start is not None:
+                if time.time() - look_away_start >= AWAY_THRESHOLD:
+                    away_long_enough = True
 
-        if status.startswith("Focused (screen)") or status.startswith("Focused (notebook)"):
-            focus_score += int(+20 * dt)
-        elif "temporary glance" in status:
-            focus_score += int(+5 * dt)
-        elif "Phone Detected" in status:
-            focus_score -= int(25 * dt)
-        else:
-            focus_score -= int(15 * dt)
+            # STATUS
+            if faces_detected != 1:
+                status = "Not Focused (Multiple/No Face)"
+                color = (0, 0, 255)
+            elif phone_detected:
+                status = "Not Focused (Phone Detected)"
+                color = (0, 0, 255)
+            elif gaze_status in ["screen", "notebook"]:
+                status = f"Focused ({gaze_status})"
+                color = (0, 255, 0)
+            elif away_long_enough:
+                status = "Not Focused (Looking Away >10s)"
+                color = (0, 0, 255)
+            else:
+                status = "Focused (temporary glance away)"
+                color = (0, 255, 255)
 
-        focus_score = max(FOCUS_MIN, min(FOCUS_MAX, focus_score))
+            # Focus score update
+            now = time.time()
+            dt = now - last_tick
+            if dt < 0: dt = 0
+            last_tick = now
 
-        # Sound alert
-        if (("Not Focused" in status) or phone_detected) and sound_enabled:
-            if (now - last_alert_time) >= ALERT_COOLDOWN_SEC:
-                play_alert()
-                last_alert_time = now
+            if status.startswith("Focused (screen)") or status.startswith("Focused (notebook)"):
+                focus_score += int(+20 * dt)
+            elif "temporary glance" in status:
+                focus_score += int(+5 * dt)
+            elif "Phone Detected" in status:
+                focus_score -= int(25 * dt)
+            else:
+                focus_score -= int(15 * dt)
 
-        # CSV logging ~1 sec
-        frame_counter_for_log += 1
-        if frame_counter_for_log >= 30:
-            frame_counter_for_log = 0
-            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            log_row(ts, status, gaze_status, faces_detected, phone_detected, focus_score)
+            focus_score = max(FOCUS_MIN, min(FOCUS_MAX, focus_score))
 
-        # update latest payload
-        latest_payload = {
-            "status": status,
-            "gaze_status": gaze_status,
-            "faces_detected": faces_detected,
-            "phone_detected": phone_detected,
-            "focus_score": focus_score
-        }
+            # Sound alert
+            if (("Not Focused" in status) or phone_detected) and sound_enabled:
+                if (now - last_alert_time) >= ALERT_COOLDOWN_SEC:
+                    play_alert()
+                    last_alert_time = now
 
-                # draw overlay
-        cv2.putText(frame, status, (30, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
+            # CSV logging ~1 sec
+            frame_counter_for_log += 1
+            if frame_counter_for_log >= 30:
+                frame_counter_for_log = 0
+                ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                log_row(ts, status, gaze_status, faces_detected, phone_detected, focus_score)
 
-        cv2.putText(frame, f"Focus Score: {focus_score}/100", (30, 90),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+            # update latest payload
+            latest_payload = {
+                "status": status,
+                "gaze_status": gaze_status,
+                "faces_detected": faces_detected,
+                "phone_detected": phone_detected,
+                "focus_score": focus_score,
+                "is_camera_active": is_camera_active
+            }
 
-        bar_x, bar_y, bar_w, bar_h = 30, 110, 300, 20
-        cv2.rectangle(frame, (bar_x, bar_y),
-                      (bar_x + bar_w, bar_y + bar_h),
-                      (200, 200, 200), 2)
+            # draw overlay
+            cv2.putText(frame, status, (30, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
 
-        fill_w = int(bar_w * (focus_score / 100.0))
-        cv2.rectangle(frame, (bar_x, bar_y),
-                      (bar_x + fill_w, bar_y + bar_h),
-                      (0, 255, 0), -1)
+            cv2.putText(frame, f"Focus Score: {focus_score}/100", (30, 90),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
 
-        # encode to jpg
-        ret, buffer = cv2.imencode(".jpg", frame)
-        frame_bytes = buffer.tobytes()
+            bar_x, bar_y, bar_w, bar_h = 30, 110, 300, 20
+            cv2.rectangle(frame, (bar_x, bar_y),
+                          (bar_x + bar_w, bar_y + bar_h),
+                          (200, 200, 200), 2)
 
-        yield (b"--frame\r\n"
-               b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+            fill_w = int(bar_w * (focus_score / 100.0))
+            cv2.rectangle(frame, (bar_x, bar_y),
+                          (bar_x + fill_w, bar_y + bar_h),
+                          (0, 255, 0), -1)
+
+            # encode to jpg
+            ret, buffer = cv2.imencode(".jpg", frame)
+            frame_bytes = buffer.tobytes()
+
+            yield (b"--frame\r\n"
+                   b"Content-Type: image/jpeg\r\n\r\n" + frame_bytes + b"\r\n")
+    except GeneratorExit:
+        pass
+    except Exception as e:
+        print("Stream generator error:", e)
+
+@app.after_request
+def after_request(response):
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+    return response
 
 @app.route("/video_feed")
 def video_feed():
     return Response(generate_frames(), mimetype="multipart/x-mixed-replace; boundary=frame")
 
+@app.route("/start", methods=["POST", "GET"])
+def start_feed():
+    start_camera()
+    return jsonify({"success": True, "status": "started", "active": True})
+
+@app.route("/stop", methods=["POST", "GET"])
+def stop_feed():
+    stop_camera()
+    return jsonify({"success": True, "status": "stopped", "active": False})
+
+@app.route("/status", methods=["GET"])
+def status_feed():
+    return jsonify({"active": is_camera_active})
+
 @app.route("/analysis")
 def analysis():
-    return jsonify(latest_payload)
-
-# if __name__ == "__main__":
-#     app.run(host="0.0.0.0", port=5001, debug=True)
+    return jsonify({
+        **latest_payload,
+        "is_camera_active": is_camera_active
+    })
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=False, use_reloader=False)

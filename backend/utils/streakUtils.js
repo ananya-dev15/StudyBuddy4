@@ -84,18 +84,26 @@ export const saveUserWithRetry = async (user, maxRetries = 3) => {
         const freshUser = await User.findById(user._id);
         if (!freshUser) throw err;
 
-        if (user.history) freshUser.history = user.history;
-        if (user.coins !== undefined) freshUser.coins = user.coins;
-        if (user.videosWatched !== undefined) freshUser.videosWatched = user.videosWatched;
-        if (user.videosSwitched !== undefined) freshUser.videosSwitched = user.videosSwitched;
-        if (user.streak !== undefined) freshUser.streak = user.streak;
-        if (user.lastDayWatched) freshUser.lastDayWatched = user.lastDayWatched;
-        if (user.notes) freshUser.notes = user.notes;
-        if (user.tags) freshUser.tags = user.tags;
+        const isMod = (path) => (typeof user.isModified === "function" ? user.isModified(path) : true);
 
-        freshUser.markModified("history");
-        freshUser.markModified("notes");
-        freshUser.markModified("tags");
+        if (isMod("history") && user.history) {
+          freshUser.history = user.history;
+          freshUser.markModified("history");
+        }
+        if (isMod("coins") && user.coins !== undefined) freshUser.coins = user.coins;
+        if (isMod("videosWatched") && user.videosWatched !== undefined) freshUser.videosWatched = user.videosWatched;
+        if (isMod("videosSwitched") && user.videosSwitched !== undefined) freshUser.videosSwitched = user.videosSwitched;
+        if (isMod("streak") && user.streak !== undefined) freshUser.streak = user.streak;
+        if (isMod("lastDayWatched") && user.lastDayWatched) freshUser.lastDayWatched = user.lastDayWatched;
+        if (isMod("notes") && user.notes) {
+          freshUser.notes = user.notes;
+          freshUser.markModified("notes");
+        }
+        if (isMod("tags") && user.tags) {
+          freshUser.tags = user.tags;
+          freshUser.markModified("tags");
+        }
+
         user = freshUser;
       } else {
         throw err;

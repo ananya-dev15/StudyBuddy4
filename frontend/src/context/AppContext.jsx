@@ -66,6 +66,7 @@ export const AppProvider = ({ children }) => {
   ]);
   const [chatLoading, setChatLoading] = useState(false);
   const [isVoiceListening, setIsVoiceListening] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const [activeVideoContext, setActiveVideoContext] = useState(null);
   const activeRecognitionRef = useRef(null);
 
@@ -95,65 +96,153 @@ export const AppProvider = ({ children }) => {
     return clean.replace(/\s+/g, " ").trim();
   };
 
+  // Pre-fetch browser TTS voices on load
+  useEffect(() => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.getVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.getVoices();
+      };
+    }
+  }, []);
+
+  // Sync isSpeaking state when speech naturally ends
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if ("speechSynthesis" in window) {
+        if (!window.speechSynthesis.speaking && isSpeaking) {
+          setIsSpeaking(false);
+        }
+      }
+    }, 500);
+    return () => clearInterval(interval);
+  }, [isSpeaking]);
+
+  const stopSpeakingText = () => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+  };
+
   const speakText = (text) => {
     try {
       if (!("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
+      setIsSpeaking(false);
 
       const textToSpeak = cleanTextForSpeech(text);
       if (!textToSpeak) return;
 
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      const getBestVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        if (!voices || voices.length === 0) return null;
+
+        const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
+
+        const femaleKeywords = [
+          "google हिन्दी", "google hindi", "kalpana", "komal", "swara", "madhur",
+          "lekha", "aditi", "veena", "sangeeta", "neerja", "heera", "zira", "samantha",
+          "karen", "victoria", "fiona", "moira", "tessa", "jenny", "aria", "eva",
+          "susan", "female", "woman", "google uk english female", "google us english female", "natural"
+        ];
+
+        let selected = null;
+
+        if (containsHindiScript) {
+          // 1. Prefer Hindi Female voice (Google हिन्दी, Kalpana, Swara, Komal, etc.)
+          selected = voices.find(
+            (v) =>
+              (v.lang.startsWith("hi") || v.name.toLowerCase().includes("hindi")) &&
+              femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
+          );
+          // 2. Any Hindi voice
+          if (!selected) {
+            selected = voices.find((v) => v.lang.startsWith("hi") || v.name.toLowerCase().includes("hindi"));
+          }
+          // 3. Indian English Female voice
+          if (!selected) {
+            selected = voices.find(
+              (v) =>
+                (v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")) &&
+                femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
+            );
+          }
+        } else {
+          // English / Hinglish Text
+          // 1. Indian English Female voice (Veena, Neerja, Sangeeta, Heera, etc.)
+          selected = voices.find(
+            (v) =>
+              (v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")) &&
+              femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
+          );
+          // 2. Hindi Female voice (Pronounces Hinglish words naturally!)
+          if (!selected) {
+            selected = voices.find(
+              (v) =>
+                (v.lang.startsWith("hi") || v.name.toLowerCase().includes("hindi")) &&
+                femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
+            );
+          }
+          // 3. Any English Female voice (Samantha, Zira, Jenny, Karen, Aria, etc.)
+          if (!selected) {
+            selected = voices.find(
+              (v) =>
+                v.lang.startsWith("en") &&
+                femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
+            );
+          }
+          // 4. Any en-IN voice
+          if (!selected) {
+            selected = voices.find((v) => v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india"));
+          }
+          // 5. Any English voice
+          if (!selected) {
+            selected = voices.find((v) => v.lang.startsWith("en"));
+          }
+        }
+
+        return selected;
+      };
+
+      const setVoiceAndSpeak = () => {
+        const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
+        const bestVoice = getBestVoice();
+        if (bestVoice) {
+          utterance.voice = bestVoice;
+          utterance.lang = bestVoice.lang || (containsHindiScript ? "hi-IN" : "en-IN");
+        } else {
+          utterance.lang = containsHindiScript ? "hi-IN" : "en-IN";
+        }
+        utterance.rate = 1.0;
+        utterance.pitch = 1.15; // Soft & clear female voice tone
+        setIsSpeaking(true);
+        window.speechSynthesis.speak(utterance);
+      };
+
       const voices = window.speechSynthesis.getVoices();
-
-      // Common female voice identifiers across macOS, Windows, Chrome, Safari & Android
-      const femaleVoiceNames = [
-        "veena", "sangeeta", "neerja", "heera", "zira", "samantha", "karen",
-        "victoria", "fiona", "moira", "tessa", "jenny", "aria", "eva", "susan",
-        "female", "woman", "google uk english female"
-      ];
-
-      // 1. Prefer female English (India) voice (e.g., Veena, Neerja, Sangeeta, Heera)
-      let selectedVoice = voices.find(
-        (v) =>
-          (v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")) &&
-          femaleVoiceNames.some((kw) => v.name.toLowerCase().includes(kw))
-      );
-
-      // 2. Fallback to any female English voice (e.g., Samantha, Zira, Jenny, Karen)
-      if (!selectedVoice) {
-        selectedVoice = voices.find(
-          (v) =>
-            v.lang.startsWith("en") &&
-            femaleVoiceNames.some((kw) => v.name.toLowerCase().includes(kw))
-        );
-      }
-
-      // 3. Fallback to any en-IN voice
-      if (!selectedVoice) {
-        selectedVoice = voices.find(
-          (v) => v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")
-        );
-      }
-
-      // 4. Fallback to any English voice
-      if (!selectedVoice) {
-        selectedVoice = voices.find((v) => v.lang.startsWith("en"));
-      }
-
-      if (selectedVoice) {
-        utterance.voice = selectedVoice;
-        utterance.lang = selectedVoice.lang || "en-IN";
+      if (voices.length > 0) {
+        setVoiceAndSpeak();
       } else {
-        utterance.lang = "en-IN";
+        window.speechSynthesis.onvoiceschanged = () => {
+          setVoiceAndSpeak();
+          window.speechSynthesis.onvoiceschanged = null;
+        };
+        setTimeout(() => {
+          if (!window.speechSynthesis.speaking) {
+            setVoiceAndSpeak();
+          }
+        }, 200);
       }
-
-      utterance.rate = 1.0;
-      utterance.pitch = 1.15; // Soft & clear female voice tone
-
-      window.speechSynthesis.speak(utterance);
     } catch (err) {
       console.warn("SpeechSynthesis error:", err);
+      setIsSpeaking(false);
     }
   };
 
@@ -581,6 +670,8 @@ export const AppProvider = ({ children }) => {
         chatLoading,
         isVoiceListening,
         setIsVoiceListening,
+        isSpeaking,
+        stopSpeakingText,
         activeVideoContext,
         setActiveVideoContext,
         sendMessageToChatbot,

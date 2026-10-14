@@ -208,6 +208,8 @@ export default function VideoTracker() {
     isChatOpen,
     toggleVoiceRecognition,
     isVoiceListening,
+    isSpeaking,
+    stopSpeakingText,
     setActiveVideoContext,
     processVoiceQuestion,
   } = useAppContext();
@@ -466,16 +468,24 @@ export default function VideoTracker() {
   const toggleDetector = async () => {
     try {
       if (!showCameraAnalysis) {
-        await fetch(`${API_BASE}/api/detector/start`, { method: "POST" });
+        await fetch(`${API_BASE}/api/detector/start`, { method: "POST" }).catch(() => {});
+        setShowCameraAnalysis(true);
       } else {
-        await fetch(`${API_BASE}/api/detector/stop`, { method: "POST" });
+        await fetch(`${API_BASE}/api/detector/stop`, { method: "POST" }).catch(() => {});
+        setShowCameraAnalysis(false);
       }
-
-      setShowCameraAnalysis((prev) => !prev);
     } catch (err) {
       console.log("Detector toggle error:", err);
+      setShowCameraAnalysis((prev) => !prev);
     }
   };
+
+  // Turn off camera if navigating away from video tracker
+  useEffect(() => {
+    return () => {
+      fetch(`${API_BASE}/api/detector/stop`, { method: "POST" }).catch(() => {});
+    };
+  }, []);
 
 
 
@@ -2827,7 +2837,7 @@ export default function VideoTracker() {
               </h4>
 
               <img
-                src="http://localhost:5001/video_feed"
+                src={`http://localhost:5001/video_feed?ts=${Date.now()}`}
                 alt="Live Detector Feed"
                 style={{
                   width: "100%",
@@ -3098,6 +3108,20 @@ export default function VideoTracker() {
                   >
                     {isVoiceListening ? "🎙️ Listening..." : "🎙️ Voice Doubt"}
                   </button>
+                  {isSpeaking && (
+                    <button
+                      onClick={stopSpeakingText}
+                      style={{
+                        ...styles.smallBtn,
+                        background: "#ef4444",
+                        color: "#ffffff",
+                        fontWeight: "bold",
+                      }}
+                      title="Stop AI Assistant Voice Speech"
+                    >
+                      ⏹️ Stop Voice
+                    </button>
+                  )}
                   <button
                     onClick={() => setIsChatOpen((s) => !s)}
                     style={{
