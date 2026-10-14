@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
-import API_BASE, { STREAMLIT_URL } from "../services/apiBase";
+import API_BASE, { STREAMLIT_URL, getStreamlitEmbedUrl } from "../services/apiBase";
 import AssignmentCard from "../components/AssignmentCard";
 import VideoTracker from "../components/VideoTracker";
 import AuthModal from "../components/AuthModal";
@@ -114,9 +114,30 @@ const HomePage = () => {
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false); // ✨ NEW: State for modal
   const [isDashboardModalOpen, setDashboardModalOpen] = useState(false); // ✨ NEW: Dashboard modal state
+  const [dashboardTab, setDashboardTab] = useState("embed"); // "embed" | "direct"
+  const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [iframeTimedOut, setIframeTimedOut] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const navigate = useNavigate();
+
+  // Reset and manage iframe timeout when modal opens
+  useEffect(() => {
+    let timer;
+    if (isDashboardModalOpen) {
+      setIframeLoaded(false);
+      setIframeTimedOut(false);
+      // If deployed Streamlit Cloud takes too long to load (due to cookie / redirect loop), show fallback
+      if (!STREAMLIT_URL.includes("localhost") && !STREAMLIT_URL.includes("127.0.0.1")) {
+        timer = setTimeout(() => {
+          setIframeTimedOut(true);
+        }, 5000);
+      }
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isDashboardModalOpen]);
 
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
@@ -540,40 +561,172 @@ const HomePage = () => {
 
       {/* Dashboard Modal */}
       {isDashboardModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-10 bg-black/60 backdrop-blur-sm">
-          <div className="relative w-full h-full max-w-7xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-8 bg-black/70 backdrop-blur-md">
+          <div className="relative w-full h-full max-w-7xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
-            <div className="bg-gradient-to-r from-indigo-700 to-purple-800 p-4 md:p-6 text-white flex justify-between items-center">
-              <div>
-                <h2 className="text-xl md:text-2xl font-bold flex items-center gap-3">
-                  📊 Focus & Study Dashboard
-                </h2>
-                <p className="text-sm opacity-80 hidden md:block">Real-time analytics and smart reminder insights</p>
+            <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 p-4 md:p-6 text-white flex justify-between items-center shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shrink-0">
+                  📊
+                </div>
+                <div>
+                  <h2 className="text-lg md:text-2xl font-bold flex items-center gap-2">
+                    Focus & Study Dashboard
+                  </h2>
+                  <p className="text-xs md:text-sm text-indigo-100 hidden sm:block">
+                    Real-time analytics, session trends, and smart reminder insights
+                  </p>
+                </div>
               </div>
-              <div className="flex items-center gap-4">
+
+              <div className="flex items-center gap-2 md:gap-3">
+                {/* View toggle (Embedded vs Direct Launch) */}
+                <div className="bg-black/20 p-1 rounded-xl flex items-center text-xs font-semibold">
+                  <button
+                    onClick={() => setDashboardTab("embed")}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      dashboardTab === "embed"
+                        ? "bg-white text-indigo-900 shadow-sm"
+                        : "text-white/80 hover:text-white"
+                    }`}
+                  >
+                    Embedded
+                  </button>
+                  <button
+                    onClick={() => setDashboardTab("direct")}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                      dashboardTab === "direct"
+                        ? "bg-white text-indigo-900 shadow-sm"
+                        : "text-white/80 hover:text-white"
+                    }`}
+                  >
+                    Direct View
+                  </button>
+                </div>
+
+                {/* Open in New Tab Button (Always available) */}
                 <a
                   href={STREAMLIT_URL}
                   target="_blank"
                   rel="noreferrer"
-                  className="hidden md:inline-flex items-center gap-1 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-xl transition-all text-sm font-semibold"
+                  className="inline-flex items-center gap-1.5 bg-white/20 hover:bg-white/30 active:scale-95 text-white px-3.5 py-2 rounded-xl transition-all text-xs md:text-sm font-semibold shadow-sm"
+                  title="Open Dashboard in a dedicated browser tab"
                 >
-                  Open in New Tab ↗
+                  <span>Open in New Tab</span>
+                  <span className="text-sm">↗</span>
                 </a>
+
+                {/* Close Button */}
                 <button
                   onClick={() => setDashboardModalOpen(false)}
-                  className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-2xl transition-all"
+                  className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/10 hover:bg-white/25 active:scale-95 flex items-center justify-center text-xl transition-all"
+                  aria-label="Close modal"
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            {/* Dashboard Iframe */}
-            <iframe
-              src={STREAMLIT_URL}
-              className="flex-1 w-full border-none"
-              title="Streamlit Dashboard"
-            />
+            {/* Cookie / Redirect helper banner for production */}
+            {dashboardTab === "embed" && !STREAMLIT_URL.includes("localhost") && (
+              <div className="bg-indigo-50/90 border-b border-indigo-100 px-4 py-2 flex items-center justify-between text-xs text-indigo-950">
+                <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap">
+                  <span className="text-indigo-600 font-bold shrink-0">💡 Tip:</span>
+                  <span className="truncate">
+                    If your browser blocks cross-site cookies or shows a redirect notice, launch the dashboard directly:
+                  </span>
+                </div>
+                <a
+                  href={STREAMLIT_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="ml-3 shrink-0 text-indigo-700 hover:text-indigo-900 font-semibold underline flex items-center gap-1"
+                >
+                  Launch directly ↗
+                </a>
+              </div>
+            )}
+
+            {/* Modal Body: Embedded Iframe or Direct Fallback View */}
+            {dashboardTab === "embed" ? (
+              <div className="relative flex-1 w-full h-full bg-slate-900 flex flex-col">
+                <iframe
+                  src={getStreamlitEmbedUrl(STREAMLIT_URL)}
+                  className="flex-1 w-full h-full border-none"
+                  title="Streamlit Dashboard"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  onLoad={() => setIframeLoaded(true)}
+                />
+
+                {/* Graceful Fallback Overlay if Iframe took too long on production */}
+                {iframeTimedOut && !iframeLoaded && !STREAMLIT_URL.includes("localhost") && (
+                  <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white z-10 animate-in fade-in duration-300">
+                    <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-3xl mb-4 shadow-inner border border-indigo-500/30">
+                      📊
+                    </div>
+                    <h3 className="text-xl md:text-2xl font-bold mb-2">
+                      Cross-Site Cookie Notice
+                    </h3>
+                    <p className="text-slate-300 max-w-lg mb-6 text-sm leading-relaxed">
+                      Streamlit Community Cloud requires third-party cookie access, which modern browsers restrict inside embedded iframes (causing redirect notices).
+                      You can view your full analytics and real-time scores directly:
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <a
+                        href={STREAMLIT_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/30 hover:scale-105 active:scale-95 transition-all flex items-center gap-2 text-sm"
+                      >
+                        <span>Open Dashboard in New Tab</span>
+                        <span>↗</span>
+                      </a>
+                      <button
+                        onClick={() => {
+                          setIframeTimedOut(false);
+                          setIframeLoaded(false);
+                        }}
+                        className="px-4 py-3 bg-white/10 hover:bg-white/20 text-slate-200 font-medium rounded-xl transition-all text-sm"
+                      >
+                        Retry Embedded View ↻
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Direct View Mode: Dedicated beautiful landing & launch screen */
+              <div className="flex-1 w-full bg-gradient-to-b from-slate-50 to-indigo-50/40 p-6 md:p-12 flex flex-col items-center justify-center text-center overflow-y-auto">
+                <div className="max-w-xl mx-auto flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center text-4xl mb-6 shadow-xl shadow-indigo-500/20">
+                    🎯
+                  </div>
+                  <h3 className="text-2xl md:text-3xl font-extrabold text-gray-900 mb-3">
+                    Study Focus & Productivity Analytics
+                  </h3>
+                  <p className="text-gray-600 text-sm md:text-base leading-relaxed mb-8">
+                    Access your deep session trends, gaze focus breakdowns, time focused percentages, and downloadable performance PDF reports in full resolution.
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                    <a
+                      href={STREAMLIT_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="px-8 py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold rounded-2xl shadow-xl shadow-indigo-500/25 hover:scale-105 active:scale-95 transition-all text-base flex items-center justify-center gap-2"
+                    >
+                      <span>Launch Full Dashboard</span>
+                      <span>↗</span>
+                    </a>
+                    <button
+                      onClick={() => setDashboardTab("embed")}
+                      className="px-6 py-3.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-semibold rounded-2xl shadow-sm transition-all text-sm"
+                    >
+                      Try Embedded Frame 🖥️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
