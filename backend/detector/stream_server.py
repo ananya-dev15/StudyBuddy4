@@ -16,6 +16,7 @@ except Exception:
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 import cv2
+cv2.setNumThreads(1)
 import mediapipe as mp
 from ultralytics import YOLO
 import numpy as np
@@ -99,10 +100,15 @@ try:
 except AttributeError:
     import mediapipe.python.solutions.face_mesh as mp_face_mesh
     import mediapipe.python.solutions.drawing_utils as mp_drawing
-model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yolov8n.pt")
-if not os.path.exists(model_path):
-    model_path = "yolov8n.pt"
-yolo_model = YOLO(model_path)
+yolo_model = None
+def get_yolo_model():
+    global yolo_model
+    if yolo_model is None:
+        model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yolov8n.pt")
+        if not os.path.exists(model_path):
+            model_path = "yolov8n.pt"
+        yolo_model = YOLO(model_path)
+    return yolo_model
 
 def get_head_pose(landmarks, img_shape):
     h, w = img_shape
@@ -171,7 +177,12 @@ latest_payload = {
     "focus_score": 100
 }
 
-face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True, max_num_faces=2)
+face_mesh = None
+def get_face_mesh():
+    global face_mesh
+    if face_mesh is None:
+        face_mesh = mp_face_mesh.FaceMesh(refine_landmarks=True, max_num_faces=2)
+    return face_mesh
 
 def verify_request_auth():
     """
@@ -218,8 +229,11 @@ def process_single_frame(frame, is_stream=False):
     global focus_score, last_tick, last_alert_time, look_away_start, latest_payload, frame_counter_for_log
 
     with inference_lock:
+        mesh = get_face_mesh()
+        yolo = get_yolo_model()
+
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        result = face_mesh.process(rgb)
+        result = mesh.process(rgb)
 
         faces_detected = 0
         gaze_status = "away"
@@ -239,9 +253,9 @@ def process_single_frame(frame, is_stream=False):
         phone_detected = False
         if torch is not None:
             with torch.inference_mode():
-                results = yolo_model(frame, verbose=False)
+                results = yolo(frame, verbose=False)
         else:
-            results = yolo_model(frame, verbose=False)
+            results = yolo(frame, verbose=False)
 
         for r in results:
             for box in r.boxes:

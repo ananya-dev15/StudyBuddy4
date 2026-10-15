@@ -491,11 +491,16 @@ export default function VideoTracker() {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+
       const res = await fetch(`${DETECTOR_URL}/process_frame`, {
         method: "POST",
         headers,
         body: JSON.stringify({ image: dataUrl }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => null);
@@ -538,7 +543,9 @@ export default function VideoTracker() {
       }
     } catch (err) {
       console.warn("Detector frame error:", err);
-      if (err.name === "TypeError" && err.message.includes("Failed to fetch")) {
+      if (err.name === "AbortError") {
+        console.warn("Detector frame request timed out");
+      } else if (err.name === "TypeError" && err.message.includes("Failed to fetch")) {
         setCameraError(`Cannot connect to detector at ${DETECTOR_URL}. The service may be waking up on Render.`);
       }
     } finally {
