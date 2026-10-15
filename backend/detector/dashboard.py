@@ -9,12 +9,13 @@ import matplotlib.pyplot as plt
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 import requests
-
+import io
 
 # =========================
 # Config & Constants
 # =========================
 LOG_DIR = "focus_logs"
+DETECTOR_API_URL = os.environ.get("DETECTOR_API_URL", "http://localhost:5001").rstrip("/")
 BACKEND_UPLOAD_URL = "http://localhost:6000/api/reports/upload"
 
 st.set_page_config(
@@ -137,17 +138,47 @@ def upload_pdf_to_backend(pdf_path, title="Study Focus Report"):
 
 
 def available_dates():
-    if not os.path.exists(LOG_DIR):
-        return []
-    files = sorted(glob.glob(os.path.join(LOG_DIR, "*.csv")))
-    dates = [os.path.splitext(os.path.basename(f))[0] for f in files]
-    return dates
+    # 1. Check local directory first (localhost development)
+    local_dates = []
+    if os.path.exists(LOG_DIR):
+        files = sorted(glob.glob(os.path.join(LOG_DIR, "*.csv")))
+        local_dates = [os.path.splitext(os.path.basename(f))[0] for f in files]
+    if local_dates:
+        return local_dates
+
+    # 2. Check remote detector API over HTTP (Streamlit Community Cloud deployment)
+    try:
+        res = requests.get(f"{DETECTOR_API_URL}/api/logs/dates", timeout=5)
+        if res.status_code == 200:
+            return sorted(res.json().get("dates", []))
+    except Exception:
+        pass
+    return []
+
+def load_csv_dataframe(date_str):
+    local_path = os.path.join(LOG_DIR, f"{date_str}.csv")
+    if os.path.exists(local_path):
+        return pd.read_csv(local_path)
+    try:
+        res = requests.get(f"{DETECTOR_API_URL}/api/logs/{date_str}.csv", timeout=8)
+        if res.status_code == 200:
+            return pd.read_csv(io.StringIO(res.text))
+    except Exception:
+        pass
+    return None
+
+def get_all_log_dataframes():
+    dates = available_dates()
+    results = []
+    for d in dates:
+        df_d = load_csv_dataframe(d)
+        if df_d is not None and not df_d.empty:
+            results.append((d, df_d))
+    return results
 
 def generate_weekly_report():
     history = []
-    for file in glob.glob(os.path.join(LOG_DIR, "*.csv")):
-        dfh = pd.read_csv(file)
-        date_str = os.path.basename(file).replace(".csv", "")
+    for date_str, dfh in get_all_log_dataframes():
         total = len(dfh)
         focused = dfh["status"].str.startswith("Focused").sum()
         focus_pct = (focused / total * 100) if total else 0
@@ -176,9 +207,7 @@ def generate_weekly_report():
 
 def generate_monthly_report():
     history = []
-    for file in glob.glob(os.path.join(LOG_DIR, "*.csv")):
-        dfh = pd.read_csv(file)
-        date_str = os.path.basename(file).replace(".csv", "")
+    for date_str, dfh in get_all_log_dataframes():
         try:
             file_date = datetime.strptime(date_str, "%Y-%m-%d")
         except:
@@ -218,12 +247,14 @@ def generate_monthly_report():
 st.sidebar.header("Filters")
 dates = available_dates()
 if not dates:
-    st.warning("No CSV file exists. First run `study_monitor.py`")
+    st.warning("No CSV file exists yet. Start camera monitoring in StudyBuddy to record focus data.")
     st.stop()
 
 selected_date = st.sidebar.selectbox("Select Date", dates, index=len(dates)-1)
-csv_path = os.path.join(LOG_DIR, selected_date + ".csv")
-df = pd.read_csv(csv_path)
+df = load_csv_dataframe(selected_date)
+if df is None:
+    st.error(f"Could not load data for date: {selected_date}")
+    st.stop()
 
 # Parse & sort
 df["timestamp"] = pd.to_datetime(df["timestamp"], errors='coerce')
@@ -445,14 +476,12 @@ with tabs[4]:
     st.subheader("📆 Weekly Comparison (This Week vs Last Week)")
 
     df_all = []
-    for file in glob.glob(os.path.join(LOG_DIR, "*.csv")):
-        date_str = os.path.basename(file).replace(".csv", "")
+    for date_str, dfh in get_all_log_dataframes():
         try:
             d = pd.to_datetime(date_str)
         except:
             continue
         
-        dfh = pd.read_csv(file)
         total = len(dfh)
         focused = dfh["status"].str.startswith("Focused").sum()
         pct = (focused / total * 100) if total else 0
@@ -492,12 +521,13 @@ with tabs[4]:
     st.subheader("🔄 Compare Two Days")
     d1 = st.selectbox("Select First Day", dates)
     d2 = st.selectbox("Select Second Day", dates)
-    df1=pd.read_csv(os.path.join(LOG_DIR,d1+".csv"))
-    df2=pd.read_csv(os.path.join(LOG_DIR,d2+".csv"))
-    f1=(df1["status"].str.startswith("Focused").sum()/len(df1)*100)
-    f2=(df2["status"].str.startswith("Focused").sum()/len(df2)*100)
-    c1,c2=st.columns(2)
-    c1.metric(d1,f"{f1:.1f}%"); c2.metric(d2,f"{f2:.1f}%")
+    df1 = load_csv_dataframe(d1)
+    df2 = load_csv_dataframe(d2)
+    if df1 is not None and df2 is not None and len(df1) > 0 and len(df2) > 0:
+        f1=(df1["status"].str.startswith("Focused").sum()/len(df1)*100)
+        f2=(df2["status"].str.startswith("Focused").sum()/len(df2)*100)
+        c1,c2=st.columns(2)
+        c1.metric(d1,f"{f1:.1f}%"); c2.metric(d2,f"{f2:.1f}%")
 
 # -------------------------
 # 7) History Trend (line)
@@ -505,9 +535,7 @@ with tabs[4]:
 with tabs[5]:
     st.subheader("📊 Focus Percentage Trend (History)")
     history = []
-    for file in glob.glob(os.path.join(LOG_DIR, "*.csv")):
-        dfh = pd.read_csv(file)
-        date_str = os.path.basename(file).replace(".csv", "")
+    for date_str, dfh in get_all_log_dataframes():
         total = len(dfh)
         focused = dfh["status"].str.startswith("Focused").sum()
         focus_pct_h = (focused / total * 100) if total else 0

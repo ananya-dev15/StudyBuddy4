@@ -27,5 +27,13 @@ export const getStreamlitEmbedUrl = (url = STREAMLIT_URL) => {
   return `${cleanUrl}${separator}embed=true&embed_options=show_colored_line,show_toolbar`;
 };
 
+// Python Detector Server URL:
+// Automatically uses localhost:5001 when running locally, and VITE_DETECTOR_URL in production
+export const DETECTOR_URL =
+  (typeof window !== "undefined" &&
+  (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"))
+    ? "http://localhost:5001"
+    : (import.meta.env.VITE_DETECTOR_URL || "");
+
 export default API_BASE;
 

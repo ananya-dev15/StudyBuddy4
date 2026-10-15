@@ -8,7 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
 import AuthModal from "./AuthModal";
 import UserProfileModal from "./UserProfileModal";
-import API_BASE, { STREAMLIT_URL } from "../services/apiBase";
+import API_BASE, { STREAMLIT_URL, DETECTOR_URL } from "../services/apiBase";
 
 
 
@@ -416,9 +416,13 @@ export default function VideoTracker() {
   const [isFocusTimerPending, setIsFocusTimerPending] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
 
-  // NEW STATES FOR CAMERA/OPENCV INTEGRATION
+  // --- CAMERA / DETECTOR INTEGRATION ---
   const [showCameraAnalysis, setShowCameraAnalysis] = useState(false);
   const [cameraAnalysisResult, setCameraAnalysisResult] = useState(""); // JSON string from backend
+  const [cameraError, setCameraError] = useState(null);
+  const [isCameraLoading, setIsCameraLoading] = useState(false);
+  const [annotatedFrame, setAnnotatedFrame] = useState(null);
+  const [detectorStats, setDetectorStats] = useState(null);
 
   // refs
   const youtubePlayerRef = useRef(null);
@@ -427,9 +431,12 @@ export default function VideoTracker() {
   const lastSampleRef = useRef(0);
   const playerRef = useRef(null);
 
-  // NEW REFS FOR CAMERA
+  // REFS FOR CAMERA MONITORING
   const cameraVideoRef = useRef(null);
   const cameraCanvasRef = useRef(null);
+  const cameraStreamRef = useRef(null);
+  const frameIntervalRef = useRef(null);
+  const isProcessingFrameRef = useRef(false);
   const socketRef = useRef(null);
   // refs for swipe/trackpad navigation
   const wheelLastRef = useRef(0);
@@ -439,53 +446,166 @@ export default function VideoTracker() {
   const lastProgressSaveRef = useRef(0);
   const hasResumedRef = useRef(false);
 
-  // const [showWarning, setShowWarning] = useState(false);
-  // const [warningText, setWarningText] = useState("");
+  // Camera monitoring cleanup
+  const stopCameraMonitoring = useCallback(() => {
+    if (frameIntervalRef.current) {
+      clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = null;
+    }
+    if (cameraStreamRef.current) {
+      cameraStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {}
+      });
+      cameraStreamRef.current = null;
+    }
+    if (cameraVideoRef.current) {
+      cameraVideoRef.current.srcObject = null;
+    }
+    setShowCameraAnalysis(false);
+    setIsCameraLoading(false);
+    setAnnotatedFrame(null);
+  }, []);
 
+  // Send single frame to Python detector service
+  const sendCurrentFrameToDetector = useCallback(async () => {
+    if (isProcessingFrameRef.current) return;
+    const video = cameraVideoRef.current;
+    const canvas = cameraCanvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return;
 
-  //    const saveDetectionToBackend = async (payloadObj) => {
-  //   try {
-  //     await fetch("/api/detections/save", {
-  //       method: "POST",
-  //       headers: { "Content-Type": "application/json" },
-  //       credentials: "include", // ⭐ cookie token ke liye must
-  //       body: JSON.stringify(payloadObj),
-  //     });
-  //   } catch (err) {
-  //     console.error("❌ Detection save failed:", err);
-  //   }
-  // };
-
-  // const showTopWarning = (msg) => {
-  //   setWarningText(msg);
-  //   setShowWarning(true);
-
-  //   setTimeout(() => {
-  //     setShowWarning(false);
-  //   }, 2500);
-  // };
-
-  const toggleDetector = async () => {
     try {
-      if (!showCameraAnalysis) {
-        await fetch(`${API_BASE}/api/detector/start`, { method: "POST" }).catch(() => {});
-        setShowCameraAnalysis(true);
-      } else {
-        await fetch(`${API_BASE}/api/detector/stop`, { method: "POST" }).catch(() => {});
-        setShowCameraAnalysis(false);
+      isProcessingFrameRef.current = true;
+      const ctx = canvas.getContext("2d");
+      const targetWidth = 480;
+      const targetHeight = Math.round((video.videoHeight / (video.videoWidth || 1)) * targetWidth) || 360;
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+      ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+      const token = localStorage.getItem("token");
+      const headers = { "Content-Type": "application/json" };
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const res = await fetch(`${DETECTOR_URL}/process_frame`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ image: dataUrl }),
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const result = await res.json();
+      if (result.success) {
+        setDetectorStats({
+          status: result.status,
+          gaze_status: result.gaze_status,
+          faces_detected: result.faces_detected,
+          phone_detected: result.phone_detected,
+          focus_score: result.focus_score,
+        });
+
+        if (result.annotated_image) {
+          setAnnotatedFrame(result.annotated_image);
+        }
+
+        // Voice Alert: Play exact alert phrase if server flagged alert
+        if (result.alert && "speechSynthesis" in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance("Stay Focused");
+          utterance.rate = 1.0;
+          utterance.pitch = 1.0;
+          window.speechSynthesis.speak(utterance);
+        }
       }
     } catch (err) {
-      console.log("Detector toggle error:", err);
-      setShowCameraAnalysis((prev) => !prev);
+      console.warn("Detector frame error:", err);
+    } finally {
+      isProcessingFrameRef.current = false;
+    }
+  }, []);
+
+  // Request browser camera and begin frame capture
+  const startCameraMonitoring = async () => {
+    setCameraError(null);
+    setIsCameraLoading(true);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError("Camera access is not supported in this browser.");
+      setIsCameraLoading(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 640 },
+          height: { ideal: 480 },
+          facingMode: "user",
+        },
+        audio: false,
+      });
+
+      cameraStreamRef.current = stream;
+      setShowCameraAnalysis(true);
+      setIsCameraLoading(false);
+
+      if (cameraVideoRef.current) {
+        cameraVideoRef.current.srcObject = stream;
+        await cameraVideoRef.current.play().catch(() => {});
+      }
+
+      // Send frame every 1000ms (1 FPS)
+      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
+      frameIntervalRef.current = setInterval(sendCurrentFrameToDetector, 1000);
+    } catch (err) {
+      console.error("Camera permission error:", err);
+      setIsCameraLoading(false);
+      setShowCameraAnalysis(false);
+
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setCameraError("Camera permission denied. Please allow camera access in your browser settings to use focus tracking.");
+      } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+        setCameraError("No camera found on this device.");
+      } else if (err.name === "NotReadableError") {
+        setCameraError("Camera is currently in use by another application.");
+      } else {
+        setCameraError(`Camera error: ${err.message || "Unable to access camera"}`);
+      }
     }
   };
 
-  // Turn off camera if navigating away from video tracker
+  const toggleDetector = () => {
+    if (showCameraAnalysis) {
+      stopCameraMonitoring();
+    } else {
+      startCameraMonitoring();
+    }
+  };
+
+  // Ensure video element receives stream once rendered
+  useEffect(() => {
+    if (showCameraAnalysis && cameraStreamRef.current && cameraVideoRef.current) {
+      if (cameraVideoRef.current.srcObject !== cameraStreamRef.current) {
+        cameraVideoRef.current.srcObject = cameraStreamRef.current;
+        cameraVideoRef.current.play().catch(() => {});
+      }
+    }
+  }, [showCameraAnalysis]);
+
+  // Turn off camera on unmount
   useEffect(() => {
     return () => {
-      fetch(`${API_BASE}/api/detector/stop`, { method: "POST" }).catch(() => {});
+      stopCameraMonitoring();
     };
-  }, []);
+  }, [stopCameraMonitoring]);
+
 
 
 
@@ -2817,7 +2937,7 @@ export default function VideoTracker() {
 
 
 
-        {/* NEW PANEL FOR CAMERA ANALYSIS */}
+        {/* PANEL FOR CAMERA ANALYSIS (Browser Camera -> Detector Pipeline) */}
         <div style={styles.panel}>
           <h3 style={styles.sectionTitle}>
             👁️ Live Focus & Face Detection (OpenCV)
@@ -2825,10 +2945,36 @@ export default function VideoTracker() {
 
           <button
             onClick={toggleDetector}
-            style={{ ...styles.button, marginBottom: "16px" }}
+            disabled={isCameraLoading}
+            style={{
+              ...styles.button,
+              marginBottom: "16px",
+              opacity: isCameraLoading ? 0.7 : 1,
+              cursor: isCameraLoading ? "not-allowed" : "pointer",
+            }}
           >
-            {showCameraAnalysis ? "Stop Camera Analysis" : "Start Camera Analysis"}
+            {isCameraLoading
+              ? "Starting Camera..."
+              : showCameraAnalysis
+              ? "Stop Camera Analysis"
+              : "Start Camera Analysis"}
           </button>
+
+          {cameraError && (
+            <div
+              style={{
+                padding: "12px 16px",
+                backgroundColor: "#fee2e2",
+                border: "1px solid #f87171",
+                borderRadius: "8px",
+                color: "#991b1b",
+                marginBottom: "16px",
+                fontSize: "0.9rem",
+              }}
+            >
+              ⚠️ {cameraError}
+            </div>
+          )}
 
           {showCameraAnalysis && (
             <div>
@@ -2836,35 +2982,115 @@ export default function VideoTracker() {
                 📷 Live Camera (Face + Phone Detection)
               </h4>
 
-              <img
-                src={`http://localhost:5001/video_feed?ts=${Date.now()}`}
-                alt="Live Detector Feed"
+              {/* Hidden canvas for taking snapshot frames */}
+              <canvas
+                ref={cameraCanvasRef}
+                style={{ display: "none" }}
+              />
+
+              <div
                 style={{
+                  position: "relative",
                   width: "100%",
                   maxWidth: "520px",
                   borderRadius: "12px",
+                  overflow: "hidden",
                   border: "1px solid #ddd",
-                  marginBottom: "20px",
+                  marginBottom: "16px",
+                  backgroundColor: "#111827",
+                  minHeight: "260px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
-              />
+              >
+                {/* Live video feed from browser getUserMedia */}
+                <video
+                  ref={cameraVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    width: "100%",
+                    display: annotatedFrame ? "none" : "block",
+                    borderRadius: "12px",
+                  }}
+                />
 
-              {/* <img
-     src={`http://localhost:5001/video_feed?ts=${Date.now()}`}
-     alt="Live Detector Feed"
-     style={{
-    width: "100%",
-    maxWidth: "520px",
-    borderRadius: "12px",
-    border: "1px solid #ddd",
-    marginBottom: "20px",
-    }}
-  /> */}
+                {/* Annotated overlay frame returned from OpenCV detector */}
+                {annotatedFrame && (
+                  <img
+                    src={annotatedFrame}
+                    alt="Live Detector Feed"
+                    style={{
+                      width: "100%",
+                      borderRadius: "12px",
+                      display: "block",
+                    }}
+                  />
+                )}
+              </div>
 
-
-              {/* Dashboard moved to Home Page per user request */}
+              {/* Live monitoring status summary */}
+              {detectorStats && (
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    flexWrap: "wrap",
+                    marginBottom: "16px",
+                  }}
+                >
+                  <span
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      background: detectorStats.status.includes("Focused")
+                        ? "#dcfce7"
+                        : "#fee2e2",
+                      color: detectorStats.status.includes("Focused")
+                        ? "#166534"
+                        : "#991b1b",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Status: {detectorStats.status}
+                  </span>
+                  <span
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      background: "#f3f4f6",
+                      color: "#374151",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Focus Score: {detectorStats.focus_score}/100
+                  </span>
+                  <span
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: "8px",
+                      background: detectorStats.phone_detected
+                        ? "#fee2e2"
+                        : "#f3f4f6",
+                      color: detectorStats.phone_detected
+                        ? "#991b1b"
+                        : "#374151",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                    }}
+                  >
+                    Phone: {detectorStats.phone_detected ? "Detected 📱" : "Not Detected"}
+                  </span>
+                </div>
+              )}
             </div>
           )}
         </div>
+
 
 
 

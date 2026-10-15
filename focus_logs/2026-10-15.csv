@@ -1,0 +1,124 @@
+timestamp,status,gaze_status,faces_detected,phone_detected,focus_score
+2026-10-15 01:01:22,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:01:22,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:01:23,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:01:24,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:01:25,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:26,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:26,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:27,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:28,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:29,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:30,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:30,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:31,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:32,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:33,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:34,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:34,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:35,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:36,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:37,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:38,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:38,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:39,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:40,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:41,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:42,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:42,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:43,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:44,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:45,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:46,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:46,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:47,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:48,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:49,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:50,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:50,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:51,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:52,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:53,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:54,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:54,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:55,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:56,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:57,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:58,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:58,Focused (notebook),notebook,1,0,100
+2026-10-15 01:01:59,Focused (notebook),notebook,1,0,100
+2026-10-15 01:02:00,Focused (notebook),notebook,1,0,100
+2026-10-15 01:02:01,Focused (notebook),notebook,1,0,100
+2026-10-15 01:02:02,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:01,Not Focused (Multiple/No Face),away,0,0,85
+2026-10-15 01:09:02,Focused (notebook),notebook,1,0,99
+2026-10-15 01:09:02,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:03,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:04,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:05,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:06,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:06,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:07,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:08,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:09,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:10,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:10,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:11,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:12,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:13,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:14,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:14,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:15,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:16,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:17,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:18,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:18,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:19,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:20,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:21,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:22,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:22,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:23,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:24,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:25,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:26,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:26,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:27,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:28,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:29,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:30,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:30,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:31,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:32,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:33,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:34,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:34,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:35,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:36,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:37,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:38,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:38,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:39,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:40,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:41,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:42,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:42,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:43,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:44,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:45,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:46,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:46,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:47,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:48,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:49,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:50,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:50,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:51,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:52,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:53,Focused (temporary glance away),away,1,0,100
+2026-10-15 01:09:54,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:54,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:55,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:56,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:57,Focused (notebook),notebook,1,0,100
+2026-10-15 01:09:58,Focused (notebook),notebook,1,0,100
