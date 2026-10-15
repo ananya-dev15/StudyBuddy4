@@ -122,3 +122,5 @@ timestamp,status,gaze_status,faces_detected,phone_detected,focus_score
 2026-10-15 01:09:56,Focused (notebook),notebook,1,0,100
 2026-10-15 01:09:57,Focused (notebook),notebook,1,0,100
 2026-10-15 01:09:58,Focused (notebook),notebook,1,0,100
+2026-10-15 22:39:05,Not Focused (Multiple/No Face),away,0,0,98
+2026-10-15 22:39:06,Not Focused (Multiple/No Face),away,0,0,98

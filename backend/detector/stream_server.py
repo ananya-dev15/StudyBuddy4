@@ -1,3 +1,18 @@
+import os
+
+# Limit thread pools across OpenMP, MKL, OpenBLAS, and PyTorch before importing C extensions
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+try:
+    import torch
+    torch.set_num_threads(1)
+except Exception:
+    torch = None
+
 from flask import Flask, Response, jsonify, request
 from flask_cors import CORS
 import cv2
@@ -5,19 +20,11 @@ import mediapipe as mp
 from ultralytics import YOLO
 import numpy as np
 import time
-import os
 import csv
 import glob
 import base64
 import jwt
 from datetime import datetime
-
-# Prevent PyTorch from spawning excess threads to protect Render free-tier RAM (512MB)
-try:
-    import torch
-    torch.set_num_threads(1)
-except Exception:
-    pass
 
 # ========= Settings =========
 ALERT_COOLDOWN_SEC = 3.0
@@ -126,6 +133,7 @@ import threading
 
 # ===== Global state =====
 camera_lock = threading.Lock()
+inference_lock = threading.Lock()
 is_camera_active = False
 cap = None
 focus_score = 100
@@ -209,36 +217,42 @@ def verify_request_auth():
 def process_single_frame(frame, is_stream=False):
     global focus_score, last_tick, last_alert_time, look_away_start, latest_payload, frame_counter_for_log
 
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    result = face_mesh.process(rgb)
+    with inference_lock:
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        result = face_mesh.process(rgb)
 
-    faces_detected = 0
-    gaze_status = "away"
+        faces_detected = 0
+        gaze_status = "away"
 
-    if result.multi_face_landmarks:
-        faces_detected = len(result.multi_face_landmarks)
-        if faces_detected == 1:
-            landmarks = result.multi_face_landmarks[0].landmark
-            gaze_status = get_head_pose(landmarks, frame.shape[:2])
-            mp_drawing.draw_landmarks(
-                frame,
-                result.multi_face_landmarks[0],
-                mp_face_mesh.FACEMESH_CONTOURS
-            )
+        if result.multi_face_landmarks:
+            faces_detected = len(result.multi_face_landmarks)
+            if faces_detected == 1:
+                landmarks = result.multi_face_landmarks[0].landmark
+                gaze_status = get_head_pose(landmarks, frame.shape[:2])
+                mp_drawing.draw_landmarks(
+                    frame,
+                    result.multi_face_landmarks[0],
+                    mp_face_mesh.FACEMESH_CONTOURS
+                )
 
-    # Phone detection
-    phone_detected = False
-    results = yolo_model(frame, verbose=False)
-    for r in results:
-        for box in r.boxes:
-            cls = int(box.cls[0])
-            conf = float(box.conf[0])
-            if r.names[cls] == "cell phone" and conf > 0.5:
-                phone_detected = True
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                cv2.putText(frame, "Phone", (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+        # Phone detection
+        phone_detected = False
+        if torch is not None:
+            with torch.inference_mode():
+                results = yolo_model(frame, verbose=False)
+        else:
+            results = yolo_model(frame, verbose=False)
+
+        for r in results:
+            for box in r.boxes:
+                cls = int(box.cls[0])
+                conf = float(box.conf[0])
+                if r.names[cls] == "cell phone" and conf > 0.5:
+                    phone_detected = True
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    cv2.putText(frame, "Phone", (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
     # away timer
     if gaze_status == "away":
@@ -376,6 +390,13 @@ def generate_frames():
         pass
     except Exception as e:
         print("Stream generator error:", e)
+
+@app.route("/", methods=["GET"])
+def health_check():
+    return jsonify({
+        "status": "ok",
+        "service": "StudyBuddy Detector"
+    }), 200
 
 @app.route("/process_frame", methods=["POST", "OPTIONS"])
 def process_frame():
