@@ -86,8 +86,12 @@ def read_log_csv_content(date_str):
         return f.read()
 
 # ===== Mediapipe + YOLO init =====
-mp_face_mesh = mp.solutions.face_mesh
-mp_drawing = mp.solutions.drawing_utils
+try:
+    mp_face_mesh = mp.solutions.face_mesh
+    mp_drawing = mp.solutions.drawing_utils
+except AttributeError:
+    import mediapipe.python.solutions.face_mesh as mp_face_mesh
+    import mediapipe.python.solutions.drawing_utils as mp_drawing
 yolo_model = YOLO("yolov8n.pt")
 
 def get_head_pose(landmarks, img_shape):
