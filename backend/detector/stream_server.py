@@ -415,7 +415,11 @@ def health_check():
 @app.route("/process_frame", methods=["POST", "OPTIONS"])
 def process_frame():
     if request.method == "OPTIONS":
-        return jsonify({"success": True}), 200
+        res = jsonify({"success": True})
+        res.headers["Access-Control-Allow-Origin"] = "*"
+        res.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+        res.headers["Access-Control-Allow-Methods"] = "POST,OPTIONS"
+        return res, 200
 
     is_authed, err = verify_request_auth()
     if not is_authed:
