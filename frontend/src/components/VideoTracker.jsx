@@ -437,6 +437,7 @@ export default function VideoTracker() {
   const cameraStreamRef = useRef(null);
   const frameIntervalRef = useRef(null);
   const isProcessingFrameRef = useRef(false);
+  const isCameraActiveRef = useRef(false);
   const socketRef = useRef(null);
   // refs for swipe/trackpad navigation
   const wheelLastRef = useRef(0);
@@ -448,8 +449,9 @@ export default function VideoTracker() {
 
   // Camera monitoring cleanup
   const stopCameraMonitoring = useCallback(() => {
+    isCameraActiveRef.current = false;
     if (frameIntervalRef.current) {
-      clearInterval(frameIntervalRef.current);
+      clearTimeout(frameIntervalRef.current);
       frameIntervalRef.current = null;
     }
     if (cameraStreamRef.current) {
@@ -550,6 +552,11 @@ export default function VideoTracker() {
       }
     } finally {
       isProcessingFrameRef.current = false;
+      // Schedule next frame with 2-second interval, only if still active
+      if (isCameraActiveRef.current) {
+        if (frameIntervalRef.current) clearTimeout(frameIntervalRef.current);
+        frameIntervalRef.current = setTimeout(sendCurrentFrameToDetector, 2000);
+      }
     }
   }, []);
 
@@ -575,6 +582,7 @@ export default function VideoTracker() {
       });
 
       cameraStreamRef.current = stream;
+      isCameraActiveRef.current = true;
       setShowCameraAnalysis(true);
       setIsCameraLoading(false);
 
@@ -583,9 +591,9 @@ export default function VideoTracker() {
         await cameraVideoRef.current.play().catch(() => {});
       }
 
-      // Send frame every 1000ms (1 FPS)
-      if (frameIntervalRef.current) clearInterval(frameIntervalRef.current);
-      frameIntervalRef.current = setInterval(sendCurrentFrameToDetector, 1000);
+      // Schedule first frame after short camera stabilization delay (500ms)
+      if (frameIntervalRef.current) clearTimeout(frameIntervalRef.current);
+      frameIntervalRef.current = setTimeout(sendCurrentFrameToDetector, 500);
     } catch (err) {
       console.error("Camera permission error:", err);
       setIsCameraLoading(false);

@@ -251,11 +251,12 @@ def process_single_frame(frame, is_stream=False):
 
         # Phone detection
         phone_detected = False
+        yolo_sz = int(os.environ.get("YOLO_IMGSZ", "320"))
         if torch is not None:
             with torch.inference_mode():
-                results = yolo(frame, verbose=False)
+                results = yolo(frame, imgsz=yolo_sz, verbose=False)
         else:
-            results = yolo(frame, verbose=False)
+            results = yolo(frame, imgsz=yolo_sz, verbose=False)
 
         for r in results:
             for box in r.boxes:
