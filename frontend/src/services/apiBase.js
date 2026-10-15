@@ -28,12 +28,15 @@ export const getStreamlitEmbedUrl = (url = STREAMLIT_URL) => {
 };
 
 // Python Detector Server URL:
-// Automatically uses localhost:5001 when running locally, and VITE_DETECTOR_URL in production
-export const DETECTOR_URL =
+// Automatically uses localhost:5001 when running locally, and VITE_DETECTOR_URL (without trailing slash) in production
+const rawDetectorUrl =
   (typeof window !== "undefined" &&
   (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"))
     ? "http://localhost:5001"
-    : (import.meta.env.VITE_DETECTOR_URL || "");
+    : (import.meta.env.VITE_DETECTOR_URL || "https://studybuddy-detector.onrender.com");
+
+export const DETECTOR_URL = rawDetectorUrl ? rawDetectorUrl.replace(/\/+$/, "") : "http://localhost:5001";
+
 
 export default API_BASE;
 

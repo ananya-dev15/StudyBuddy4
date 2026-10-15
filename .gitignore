@@ -38,6 +38,7 @@ __pycache__/
 
 # Ignore model weights
 *.pt
+!backend/detector/yolov8n.pt
 
 
 backend/detector/venv/

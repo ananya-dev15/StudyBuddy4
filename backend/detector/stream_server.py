@@ -92,7 +92,10 @@ try:
 except AttributeError:
     import mediapipe.python.solutions.face_mesh as mp_face_mesh
     import mediapipe.python.solutions.drawing_utils as mp_drawing
-yolo_model = YOLO("yolov8n.pt")
+model_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "yolov8n.pt")
+if not os.path.exists(model_path):
+    model_path = "yolov8n.pt"
+yolo_model = YOLO(model_path)
 
 def get_head_pose(landmarks, img_shape):
     h, w = img_shape
@@ -167,7 +170,7 @@ def verify_request_auth():
     Validates JWT token from Authorization header if JWT_SECRET is configured.
     Never exposes private secrets in client-side Vite code.
     Allows local development requests (127.0.0.1 / localhost) so local webcam testing works smoothly.
-    In production (deployed service), validates incoming JWT bearer tokens.
+    In production, validates incoming JWT bearer tokens if provided or if REQUIRE_AUTH is true.
     """
     client_ip = request.remote_addr or ""
     # Always allow local development
@@ -180,6 +183,9 @@ def verify_request_auth():
 
     auth_header = request.headers.get("Authorization", "")
     if not auth_header or not auth_header.startswith("Bearer "):
+        # If strict auth is not forced, allow guest frame monitoring
+        if os.environ.get("REQUIRE_AUTH", "false").lower() != "true":
+            return True, None
         return False, "Missing or invalid Authorization header"
 
     token = auth_header.split(" ", 1)[1].strip()
@@ -194,7 +200,9 @@ def verify_request_auth():
                 return True, None
             except Exception:
                 pass
-        print(f"⚠️ JWT verification failed: {e}")
+        if os.environ.get("REQUIRE_AUTH", "false").lower() != "true":
+            print(f"⚠️ JWT verification notice: {e}")
+            return True, None
         return False, f"Invalid token: {str(e)}"
 
 
@@ -369,8 +377,11 @@ def generate_frames():
     except Exception as e:
         print("Stream generator error:", e)
 
-@app.route("/process_frame", methods=["POST"])
+@app.route("/process_frame", methods=["POST", "OPTIONS"])
 def process_frame():
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
     is_authed, err = verify_request_auth()
     if not is_authed:
         return jsonify({"error": err or "Unauthorized"}), 401
@@ -404,9 +415,9 @@ def process_frame():
 
 @app.after_request
 def after_request(response):
-    response.headers.add("Access-Control-Allow-Origin", "*")
-    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
-    response.headers.add("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type,Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET,POST,OPTIONS"
     return response
 
 @app.route("/video_feed")

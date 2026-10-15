@@ -498,11 +498,23 @@ export default function VideoTracker() {
       });
 
       if (!res.ok) {
+        const errorData = await res.json().catch(() => null);
+        const errMsg = errorData?.error || `Server responded with ${res.status}`;
+        console.warn(`Detector error (${res.status}):`, errMsg);
+
+        if (res.status === 401) {
+          setCameraError("Detector authentication failed. Please make sure you are logged in.");
+        } else if (res.status === 502 || res.status === 503) {
+          setCameraError("Detector service on Render is waking up. Please wait a moment...");
+        } else if (res.status === 404) {
+          setCameraError(`Detector endpoint not found at ${DETECTOR_URL}. Please check VITE_DETECTOR_URL.`);
+        }
         return;
       }
 
       const result = await res.json();
       if (result.success) {
+        setCameraError(null);
         setDetectorStats({
           status: result.status,
           gaze_status: result.gaze_status,
@@ -526,6 +538,9 @@ export default function VideoTracker() {
       }
     } catch (err) {
       console.warn("Detector frame error:", err);
+      if (err.name === "TypeError" && err.message.includes("Failed to fetch")) {
+        setCameraError(`Cannot connect to detector at ${DETECTOR_URL}. The service may be waking up on Render.`);
+      }
     } finally {
       isProcessingFrameRef.current = false;
     }
@@ -3004,7 +3019,7 @@ export default function VideoTracker() {
                   justifyContent: "center",
                 }}
               >
-                {/* Live video feed from browser getUserMedia */}
+                {/* Live video feed from browser getUserMedia (always kept playing to supply fresh frames) */}
                 <video
                   ref={cameraVideoRef}
                   autoPlay
@@ -3012,7 +3027,7 @@ export default function VideoTracker() {
                   muted
                   style={{
                     width: "100%",
-                    display: annotatedFrame ? "none" : "block",
+                    display: "block",
                     borderRadius: "12px",
                   }}
                 />
@@ -3023,9 +3038,15 @@ export default function VideoTracker() {
                     src={annotatedFrame}
                     alt="Live Detector Feed"
                     style={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
                       width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
                       borderRadius: "12px",
                       display: "block",
+                      pointerEvents: "none",
                     }}
                   />
                 )}
