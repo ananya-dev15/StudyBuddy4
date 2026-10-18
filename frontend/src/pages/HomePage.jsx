@@ -7,6 +7,7 @@ import VideoTracker from "../components/VideoTracker";
 import AuthModal from "../components/AuthModal";
 import UserProfileModal from "../components/UserProfileModal";
 import Leaderboard from "../components/Leaderboard";
+import ThemeToggle from "../components/ThemeToggle";
 import Lottie from "lottie-react";
 import chatAnimation from "../assets/chatAnimation.json";
 import { useAppContext } from "../context/AppContext";
@@ -15,6 +16,8 @@ import anshika from "../assets/anshika1.jpeg"
 import ananya from "../assets/ananya1.jpeg"
 import setu from "../assets/Setu1.jpeg"
 import yash from "../assets/yash.jpeg"
+import heroBgVideo from "../assets/fourth.mp4";
+
 
 
 // ------------------- Chatbot Component -------------------
@@ -109,7 +112,7 @@ const Chatbot = () => {
 
 // ------------------- HomePage Component -------------------
 const HomePage = () => {
-  const { isChatOpen, setIsChatOpen } = useAppContext();
+  const { isChatOpen, setIsChatOpen, theme, toggleTheme } = useAppContext();
   const [user, setUser] = useState(null);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false); // ✨ NEW: State for modal
@@ -177,21 +180,21 @@ const HomePage = () => {
 
   // Click handler for all protected links
   const handleProtectedLinkClick = (e, path) => {
-    if (path === "/dashboard") {
-      // Focus Score Dashboard opens the full-screen dashboard modal (8501)
-      e.preventDefault();
-      setDashboardModalOpen(true);
-      return;
-    }
     if (!user) {
       // If user is not logged in
       e.preventDefault(); // Stop the <Link> from navigating
       setAuthModalOpen(true); // Open the login/signup modal
-    } else if (path === "/chatbot") {
+      return;
+    }
+
+    if (path === "/chatbot") {
       // AI Chatbot opens the Chatbot modal
       e.preventDefault(); // Stop navigation
       setIsChatOpen(true); // Open the chat window
+      return;
     }
+
+    // Normal navigation proceeds for /dashboard (Student Dashboard) and all other pages!
   };
 
   // ✨ NEW: Click handler for the floating chat button
@@ -204,141 +207,319 @@ const HomePage = () => {
   };
 
 
-  return (
-    <div className="flex flex-col min-h-screen bg-gradient-to-br from-indigo-100 via-purple-200 to-pink-100 relative overflow-hidden text-gray-800">
+  const displayName = user
+    ? (user.name || user.username || "BUDDY").trim().split(" ")[0].toUpperCase()
+    : "BUDDY";
+  const greetingText = `HI! ${displayName}`;
 
-      {/* Glittery Particle Background */}
-      <div className="absolute inset-0 z-0 pointer-events-none">
-        {Array.from({ length: 80 }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute bg-white rounded-full opacity-20 animate-pulse"
-            style={{
-              width: `${Math.random() * 3 + 2}px`,
-              height: `${Math.random() * 3 + 2}px`,
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-              animationDuration: `${Math.random() * 4 + 2}s`,
-            }}
-          ></div>
-        ))}
-      </div>
+  // Continuous letter animation helper matching first.mp4
+  const renderContinuousLetters = (text, baseDelay = 0, delayStep = 0.08) => {
+    return text.split("").map((char, i) => {
+      if (char === " ") {
+        return <span key={i} className="inline-block">&nbsp;</span>;
+      }
+      return (
+        <span
+          key={i}
+          className="inline-block hero-letter-anim"
+          style={{ animationDelay: `${(baseDelay + i * delayStep).toFixed(2)}s` }}
+        >
+          {char}
+        </span>
+      );
+    });
+  };
+
+  return (
+    <div className="flex flex-col min-h-screen relative overflow-x-hidden transition-colors duration-500 text-white">
+
+
 
       {/* Navbar */}
-      <nav className="bg-white/30 backdrop-blur-lg shadow-lg py-4 px-8 flex justify-between items-center sticky top-0 z-50 rounded-b-2xl">
+      <nav
+        className={`backdrop-blur-xl shadow-lg py-4 px-6 md:px-8 flex justify-between items-center sticky top-0 z-50 rounded-b-2xl transition-all duration-300 ${
+          theme === "dark"
+            ? "bg-slate-950/80 border-b border-white/10 shadow-purple-950/20 text-slate-100"
+            : "bg-white/90 border-b border-indigo-100/80 shadow-[0_4px_24px_rgba(0,0,0,0.08)] text-gray-800"
+        }`}
+      >
         <Link
           to="/"
-          className="text-2xl font-extrabold bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 bg-clip-text text-transparent tracking-tight"
+          className={`text-2xl font-extrabold tracking-tight bg-clip-text text-transparent transition-colors duration-300 ${
+            theme === "dark"
+              ? "bg-gradient-to-r from-indigo-300 via-purple-300 to-pink-300 drop-shadow-[0_0_12px_rgba(255,255,255,0.4)]"
+              : "bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600"
+          }`}
         >
           StudyBuddy
         </Link>
 
-        <div className="hidden md:flex gap-8 font-medium">
-          {/* ✨ MODIFIED: Added onClick handler */}
+        <div className="hidden md:flex gap-8 font-semibold">
           <Link
             to="/dashboard"
             onClick={(e) => handleProtectedLinkClick(e, '/dashboard')}
-            className="hover:text-pink-500 transition-colors duration-300"
+            className={`transition-colors duration-300 ${
+              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
+            }`}
           >
             Dashboard
           </Link>
           <button
             onClick={() => document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })}
-            className="hover:text-pink-500 transition-colors duration-300"
+            className={`transition-colors duration-300 cursor-pointer ${
+              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
+            }`}
           >
             About Us
           </button>
-          <Link to="/blogs" className="hover:text-pink-500 transition-colors duration-300">Blogs</Link>
-          <Link to="/contact" className="hover:text-pink-500 transition-colors duration-300">Contact Us</Link>
+          <Link
+            to="/blogs"
+            className={`transition-colors duration-300 ${
+              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
+            }`}
+          >
+            Blogs
+          </Link>
+          <Link
+            to="/contact"
+            className={`transition-colors duration-300 ${
+              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
+            }`}
+          >
+            Contact Us
+          </Link>
         </div>
 
-        {/* Conditional Navbar with Logout Dropdown */}
-        {user ? (
-          <div className="relative">
-            {/* Clickable profile icon to toggle dropdown */}
-            <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-              <img
-                src={user.profileImage || profileIcon}
-                alt="Profile"
-                className="w-10 h-10 rounded-full border-2 border-indigo-700"
-              />
-              <span className="font-semibold text-gray-900">{user.name}</span>
-            </button>
+        {/* Right side: Theme Toggle & Auth / Profile */}
+        <div className="flex items-center gap-3">
+          {/* Permanent Theme Toggle Switch */}
+          <ThemeToggle />
 
-            {/* Dropdown Menu */}
-            {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-52 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    setIsProfileModalOpen(true);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 font-semibold flex items-center gap-2 transition-colors"
+          {/* Conditional Profile / Auth */}
+          {user ? (
+            <div className="relative">
+              <button
+                onClick={() => setDropdownOpen(!isDropdownOpen)}
+                className="flex items-center gap-3 cursor-pointer"
+              >
+                <img
+                  src={user.profileImage || profileIcon}
+                  alt="Profile"
+                  className={`w-10 h-10 rounded-full border-2 ${
+                    theme === "dark" ? "border-purple-400" : "border-indigo-600 shadow-sm"
+                  }`}
+                />
+                <span className={`font-semibold hidden sm:inline ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
+                  {user.name}
+                </span>
+              </button>
+
+              {/* Dropdown Menu */}
+              {isDropdownOpen && (
+                <div
+                  className={`absolute right-0 mt-2 py-2 w-52 rounded-xl shadow-2xl z-50 border animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl ${
+                    theme === "dark"
+                      ? "bg-slate-900/95 border-white/20 text-white"
+                      : "bg-white/95 border-gray-100 text-gray-800 shadow-xl"
+                  }`}
                 >
-                  👤 View Profile
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 font-bold hover:bg-red-50 flex items-center gap-2 transition-colors"
-                >
-                  🚪 Logout
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 border border-indigo-700 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all duration-300"
-            >
-              Login
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2 bg-gradient-to-r from-indigo-700 to-pink-600 text-white rounded-lg shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-            >
-              Sign Up
-            </Link>
-          </div>
-        )}
+                  <button
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      setIsProfileModalOpen(true);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm font-semibold flex items-center gap-2 transition-colors ${
+                      theme === "dark" ? "hover:bg-slate-800 text-white" : "hover:bg-indigo-50 text-gray-700"
+                    }`}
+                  >
+                    👤 View Profile
+                  </button>
+                  <div className={`border-t my-1 ${theme === "dark" ? "border-white/10" : "border-gray-100"}`} />
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2.5 text-sm text-red-500 font-bold hover:bg-red-500/10 flex items-center gap-2 transition-colors"
+                  >
+                    🚪 Logout
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex gap-2 sm:gap-3">
+              <Link
+                to="/login"
+                className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-all duration-300 border ${
+                  theme === "dark"
+                    ? "border-white/60 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm"
+                    : "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 shadow-sm"
+                }`}
+              >
+                Login
+              </Link>
+              <Link
+                to="/register"
+                className="px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-pink-600 text-white rounded-lg text-sm sm:text-base font-semibold shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
+              >
+                Sign Up
+              </Link>
+            </div>
+          )}
+        </div>
       </nav>
 
-      {/* Hero Section */}
-      <header className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20 relative z-10">
-        <h1 className="text-5xl md:text-6xl font-extrabold leading-tight max-w-3xl">
-          <span className="bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 bg-clip-text text-transparent">
-            Focus Better. Learn Smarter.
-          </span>
-          <br />
-          <span className="text-gray-900">Achieve More with StudyBuddy</span>
-        </h1>
-        <p className="mt-6 text-lg text-gray-800 max-w-2xl">
-          Your all-in-one study companion: track sessions, set reminders, chat with AI, and stay motivated with analytics and streaks.
-        </p>
-        <div className="mt-8 flex gap-4">
-          <Link
-            to="/register"
-            className="px-6 py-3 bg-gradient-to-r from-indigo-700 to-pink-600 text-white font-semibold rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-          >
-            Get Started
-          </Link>
-          <Link
-            to="/login"
-            className="px-6 py-3 border border-indigo-700 text-indigo-700 font-semibold rounded-xl hover:bg-indigo-50 transition-all duration-300"
-          >
-            Login
-          </Link>
+      {/* Hero Section (Slides over the static animated wallpaper) */}
+      <header className="flex-1 flex flex-col items-center justify-center text-center px-6 py-28 md:py-36 min-h-[85vh] relative z-10">
+        {/* Hero Content */}
+        <div className="relative z-10 flex flex-col items-center justify-center max-w-4xl">
+          {/* Website Brand Presentation (Prominent, spacious, static & presentable) */}
+          <div className="mb-6 md:mb-8 flex flex-col items-center pointer-events-none select-none">
+            <div className="w-48 sm:w-72 md:w-96 h-[2px] mb-3 md:mb-4 bg-gradient-to-r from-transparent via-white/85 to-transparent shadow-[0_2px_8px_rgba(0,0,0,0.5)]"></div>
+            <div className="flex items-center gap-3 md:gap-4 px-4 py-1">
+              <span className="text-white/85 text-xs sm:text-sm md:text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">✦</span>
+              <span className="text-lg sm:text-2xl md:text-3xl font-black tracking-[0.38em] md:tracking-[0.45em] uppercase text-white drop-shadow-[0_3px_12px_rgba(0,0,0,0.85)] drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)]">
+                STUDY BUDDY
+              </span>
+              <span className="text-white/85 text-xs sm:text-sm md:text-base drop-shadow-[0_2px_6px_rgba(0,0,0,0.8)]">✦</span>
+            </div>
+            <div className="w-48 sm:w-72 md:w-96 h-[2px] mt-3 md:mt-4 bg-gradient-to-r from-transparent via-white/85 to-transparent shadow-[0_2px_8px_rgba(0,0,0,0.5)]"></div>
+          </div>
+
+          {/* Heading Flanked by Stars (Continuous animation ONLY on HI! {displayName}) */}
+          <div className="relative flex items-center justify-center w-full my-4 md:my-6">
+            <span className="hero-star hidden sm:inline-block absolute -left-8 md:-left-14 lg:-left-20 text-3xl md:text-5xl select-none pointer-events-none text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)] drop-shadow-[0_0_12px_rgba(255,255,255,0.7)]">
+              ✦
+            </span>
+
+            <h1 className="text-5xl md:text-7xl lg:text-8xl font-black tracking-wider leading-tight max-w-4xl uppercase text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.9)] drop-shadow-[0_2px_8px_rgba(0,0,0,0.95)]">
+              {renderContinuousLetters(greetingText, 0.2, 0.06)}
+            </h1>
+
+            <span className="hero-star hidden sm:inline-block absolute -right-8 md:-right-14 lg:-right-20 text-3xl md:text-5xl select-none pointer-events-none text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)] drop-shadow-[0_0_12px_rgba(255,255,255,0.7)]">
+              ✦
+            </span>
+          </div>
+
+          {/* Subtitle Lines (Static, clean & readable) */}
+          <div className="mt-6 md:mt-8 text-sm sm:text-base md:text-xl font-bold tracking-[0.22em] md:tracking-[0.28em] uppercase space-y-2.5 md:space-y-3 text-white drop-shadow-[0_3px_14px_rgba(0,0,0,0.85)] drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)]">
+            <div>FOCUS BETTER. LEARN SMARTER.</div>
+            <div>ACHIEVE MORE WITH STUDY BUDDY.</div>
+          </div>
+
+          {/* Action Buttons (Visible only when user is not logged in) */}
+          {!user && (
+            <div className="mt-10 md:mt-12 flex flex-wrap justify-center gap-4 sm:gap-6 hero-anim-buttons">
+              <Link
+                to="/register"
+                className="px-8 py-3.5 sm:px-9 sm:py-4 bg-gradient-to-r from-indigo-700 to-pink-600 text-white font-semibold rounded-2xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 text-base sm:text-lg"
+              >
+                Get Started
+              </Link>
+              <Link
+                to="/login"
+                className="px-8 py-3.5 sm:px-9 sm:py-4 font-semibold rounded-2xl backdrop-blur-md transition-all duration-300 shadow-md border border-white/60 bg-white/15 text-white hover:bg-white/25 text-base sm:text-lg hover:scale-105 transform"
+              >
+                Login
+              </Link>
+            </div>
+          )}
         </div>
+
+        {/* Reference Animation Keyframes from first.mp4 */}
+        <style>{`
+          .hero-anim-badge {
+            animation: heroBadgePulse 6s ease-in-out infinite;
+          }
+          .hero-star {
+            animation: heroStarPulse 5s ease-in-out infinite;
+          }
+          .hero-letter-anim {
+            display: inline-block;
+            animation: heroLetterLoop 9s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+            will-change: transform, filter, opacity;
+          }
+          .hero-anim-buttons {
+            animation: heroButtonReveal 0.9s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both;
+          }
+
+          @keyframes heroBadgePulse {
+            0%, 100% {
+              opacity: 0.85;
+              transform: scale(1);
+            }
+            50% {
+              opacity: 1;
+              transform: scale(1.02);
+              filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.4));
+            }
+          }
+
+          @keyframes heroStarPulse {
+            0%, 100% {
+              opacity: 0.8;
+              transform: scale(1) rotate(0deg);
+              filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+            }
+            50% {
+              opacity: 1;
+              transform: scale(1.2) rotate(90deg);
+              filter: drop-shadow(0 0 18px rgba(255, 255, 255, 1)) drop-shadow(0 0 30px rgba(168, 85, 247, 0.8));
+            }
+          }
+
+          @keyframes heroLetterLoop {
+            0% {
+              opacity: 0.45;
+              filter: blur(5px);
+              transform: translateY(3px) scale(0.97);
+            }
+            12%, 86% {
+              opacity: 1;
+              filter: blur(0px);
+              transform: translateY(0px) scale(1);
+            }
+            94% {
+              opacity: 0.65;
+              filter: blur(3px);
+              transform: translateY(-2px) scale(1.02);
+            }
+            100% {
+              opacity: 0.45;
+              filter: blur(5px);
+              transform: translateY(3px) scale(0.97);
+            }
+          }
+
+          @keyframes heroButtonReveal {
+            0% {
+              opacity: 0;
+              transform: translateY(14px);
+            }
+            100% {
+              opacity: 1;
+              transform: translateY(0);
+            }
+          }
+
+          @media (prefers-reduced-motion: reduce) {
+            .hero-anim-badge,
+            .hero-star,
+            .hero-letter-anim,
+            .hero-anim-buttons {
+              animation: none !important;
+              opacity: 1 !important;
+              filter: none !important;
+              transform: none !important;
+            }
+          }
+        `}</style>
       </header>
 
       {/* Features Section */}
-      <section className="py-20 bg-white/50 backdrop-blur-lg relative z-10">
+      <section className="py-24 relative z-10">
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-10 text-center">
           {[
             { icon: "🎥", title: "Video Tracker", desc: "Log study videos and monitor progress effortlessly.", link: "/videos" },
-            { icon: "🎯", title: "Focus Score Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/dashboard" },
+            { icon: "🎯", title: "Focus Score Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/analytics" },
             { icon: "🤖", title: "AI Chatbot", desc: "Instant help, Q&A, and motivation while studying.", link: "/chatbot" },
             { icon: "📊", title: "Analytics", desc: "Visualize your learning trends and stay consistent.", link: "/analytics" },
             { icon: "📝", title: "Assignments", desc: "Organize, track, and submit assignments on time.", link: "/assignments" },
@@ -347,14 +528,39 @@ const HomePage = () => {
             <Link
               to={f.link}
               key={idx}
-              onClick={(e) => handleProtectedLinkClick(e, f.link)}
-              className="p-8 rounded-3xl bg-white/20 backdrop-blur-lg border border-white/20 shadow-xl hover:shadow-2xl transform hover:-translate-y-3 transition-all duration-300 flex flex-col items-center"
+              onClick={(e) => {
+                handleProtectedLinkClick(e, f.link);
+              }}
+              className={`group relative overflow-hidden p-8 rounded-3xl backdrop-blur-2xl border transform hover:-translate-y-2 transition-all duration-300 flex flex-col items-center cursor-pointer ${
+                theme === "dark"
+                  ? "bg-gradient-to-b from-slate-900/80 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border-purple-500/20 hover:border-purple-400/60 shadow-[0_8px_32px_0_rgba(0,0,0,0.5)] hover:shadow-[0_12px_36px_0_rgba(168,85,247,0.25)] text-white"
+                  : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_10px_35px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_18px_45px_rgba(31,38,135,0.18),inset_0_1px_2px_rgba(255,255,255,1)] text-slate-800"
+              }`}
             >
-              <div className="text-5xl mb-4">{f.icon}</div>
-              <h3 className="text-xl font-semibold text-gray-900">{f.title}</h3>
-              <p className="text-gray-800 mt-2">{f.desc}</p>
+              {theme !== "dark" && (
+                <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              )}
+              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-5 transition-transform duration-300 group-hover:scale-110 ${
+                theme === "dark"
+                  ? "bg-purple-900/40 border border-purple-500/30 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.25)] group-hover:shadow-[0_0_25px_rgba(168,85,247,0.45)]"
+                  : "bg-white/80 border border-white/90 text-indigo-600 shadow-sm group-hover:bg-white group-hover:shadow-md"
+              }`}>
+                {f.icon}
+              </div>
+              <h3 className={`text-xl font-bold tracking-tight ${theme === "dark" ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" : "text-slate-900"}`}>
+                {f.title}
+              </h3>
+              <p className={`mt-2.5 text-sm md:text-base leading-relaxed ${theme === "dark" ? "text-white/90" : "text-slate-700/90 font-medium"}`}>
+                {f.desc}
+              </p>
               {f.link === "/dashboard" && (
-                <span className="mt-4 text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">Open Dashboard Dash →</span>
+                <span className={`mt-5 text-xs font-bold px-4 py-1.5 rounded-full transition-all duration-300 ${
+                  theme === "dark"
+                    ? "text-purple-200 bg-purple-950/70 border border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.3)] group-hover:bg-purple-900/80"
+                    : "text-indigo-700 bg-white/90 hover:bg-white border border-indigo-200/80 shadow-sm group-hover:shadow"
+                }`}>
+                  Open Dashboard Dash →
+                </span>
               )}
             </Link>
           ))}
@@ -362,9 +568,11 @@ const HomePage = () => {
       </section>
 
       {/* Reviews Section */}
-      <section className="py-20 bg-gradient-to-r from-purple-700 to-indigo-700 text-white text-center relative z-10">
-        <h2 className="text-4xl font-bold mb-6">What Students Say</h2>
-        <p className="max-w-3xl mx-auto mb-12 text-lg opacity-90">
+      <section className="py-24 text-center relative z-10">
+        <h2 className="text-4xl font-extrabold mb-4 text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          What Students Say
+        </h2>
+        <p className="max-w-3xl mx-auto mb-12 text-lg text-white/90 drop-shadow-sm font-medium">
           Join thousands of students who boosted their productivity with StudyBuddy.
         </p>
         <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto px-6">
@@ -375,30 +583,53 @@ const HomePage = () => {
           ].map((r, idx) => (
             <div
               key={idx}
-              className="bg-white/10 backdrop-blur-lg rounded-3xl p-6 shadow-xl hover:shadow-2xl transition-all duration-300"
+              className={`relative overflow-hidden rounded-3xl p-7 backdrop-blur-2xl transition-all duration-300 transform hover:-translate-y-2 border ${
+                theme === "dark"
+                  ? "bg-gradient-to-b from-slate-900/80 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border border-purple-500/25 hover:border-purple-400/50 shadow-2xl hover:shadow-[0_12px_36px_rgba(147,51,234,0.2)] text-white"
+                  : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_10px_35px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_18px_45px_rgba(31,38,135,0.18)] text-slate-800"
+              }`}
             >
-              <p className="text-lg mb-3">“{r.review}”</p>
-              <div className="flex justify-center text-yellow-400/90 mb-2">{"★★★★★"}</div>
-              <p className="font-semibold">{r.name}</p>
-              <p className="text-sm opacity-80">{r.role}</p>
+              <div className="flex justify-center text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)] mb-3.5 text-lg">
+                {"★★★★★"}
+              </div>
+              <p className={`text-base md:text-lg mb-4 font-medium leading-relaxed italic ${
+                theme === "dark" ? "text-white" : "text-slate-800"
+              }`}>
+                “{r.review}”
+              </p>
+              <p className={`font-bold text-base ${theme === "dark" ? "text-white" : "text-slate-950"}`}>{r.name}</p>
+              <p className={`text-xs md:text-sm mt-0.5 ${theme === "dark" ? "text-white/80" : "text-indigo-600 font-semibold"}`}>{r.role}</p>
             </div>
           ))}
         </div>
       </section>
 
       {/* FAQ Section */}
-      <section className="py-20 bg-white/50 backdrop-blur-lg relative z-10">
+      <section className="py-24 relative z-10">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <h2 className="text-3xl font-bold text-gray-900 mb-8">Frequently Asked Questions</h2>
+          <h2 className="text-3xl md:text-4xl font-extrabold mb-8 text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+            Frequently Asked Questions
+          </h2>
           <div className="space-y-6 text-left">
             {[
               { q: "Is StudyBuddy free to use?", a: "Yes! StudyBuddy offers a free plan with core features. You can upgrade for advanced analytics and AI tools." },
               { q: "Can I use it on mobile?", a: "Absolutely. StudyBuddy is fully responsive and works on all devices." },
               { q: "How does streak tracking work?", a: "Each day you log study sessions, your streak grows. Miss a day, and it resets — motivating you to stay consistent." },
             ].map((f, idx) => (
-              <div key={idx} className="border-b pb-4 bg-white/20 backdrop-blur-lg rounded-xl p-4">
-                <h3 className="font-semibold text-lg text-gray-900">{f.q}</h3>
-                <p className="text-gray-800 mt-2">{f.a}</p>
+              <div
+                key={idx}
+                className={`rounded-2xl p-6 backdrop-blur-2xl transition-all duration-300 border ${
+                  theme === "dark"
+                    ? "bg-gradient-to-b from-slate-900/75 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border-white/15 hover:border-purple-500/40 shadow-xl hover:shadow-[0_8px_25px_rgba(168,85,247,0.15)] text-white"
+                    : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_8px_25px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_14px_35px_rgba(31,38,135,0.15)] text-slate-800"
+                }`}
+              >
+                <h3 className={`font-bold text-lg md:text-xl ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                  {f.q}
+                </h3>
+                <p className={`mt-2 text-sm md:text-base leading-relaxed ${theme === "dark" ? "text-white/90" : "text-slate-700/90 font-medium"}`}>
+                  {f.a}
+                </p>
               </div>
             ))}
           </div>
@@ -406,30 +637,52 @@ const HomePage = () => {
       </section>
 
       {/* Pricing Section */}
-      <section className="py-20 bg-gradient-to-r from-indigo-100 to-purple-200 text-center relative z-10">
-        <h2 className="text-3xl font-bold text-gray-900 mb-6">Choose Your Plan</h2>
+      <section className="py-24 text-center relative z-10">
+        <h2 className="text-3xl md:text-4xl font-extrabold mb-6 text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          Choose Your Plan
+        </h2>
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto px-6">
-          <div className="p-8 bg-white/30 backdrop-blur-lg rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300">
-            <h3 className="text-2xl font-semibold text-gray-900">Free Plan</h3>
-            <p className="mt-3 text-gray-800">Perfect for beginners</p>
-            <p className="mt-4 text-3xl font-bold text-indigo-700">₹0</p>
-            <ul className="mt-4 text-gray-800 space-y-2 text-sm">
+          <div className={`p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 backdrop-blur-2xl border ${
+            theme === "dark"
+              ? "bg-gradient-to-b from-slate-900/80 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border-white/20 hover:border-purple-500/50 shadow-2xl hover:shadow-[0_12px_36px_rgba(168,85,247,0.2)] text-white"
+              : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_10px_35px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_18px_45px_rgba(31,38,135,0.18)] text-slate-800"
+          }`}>
+            <h3 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+              Free Plan
+            </h3>
+            <p className={`mt-3 ${theme === "dark" ? "text-white/90" : "text-slate-600 font-medium"}`}>
+              Perfect for beginners
+            </p>
+            <p className={`mt-4 text-4xl font-extrabold ${theme === "dark" ? "text-white" : "text-slate-950"}`}>
+              ₹0
+            </p>
+            <ul className={`mt-5 space-y-2 text-sm ${theme === "dark" ? "text-white/90" : "text-slate-700 font-medium"}`}>
               <li>✔ Reminders & Assignments</li>
               <li>✔ Basic Analytics</li>
               <li>✔ AI Chatbot (limited)</li>
             </ul>
             <Link
               to="/register"
-              className="mt-6 inline-block px-6 py-3 bg-gradient-to-r from-indigo-7A00 to-pink-600 text-white rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
+              className="mt-6 inline-block px-6 py-3 bg-gradient-to-r from-indigo-700 to-pink-600 text-white font-semibold rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
             >
               Get Started
             </Link>
           </div>
-          <div className="p-8 bg-white/30 backdrop-blur-lg rounded-3xl shadow-xl border-2 border-indigo-700 hover:shadow-2xl hover:scale-105 transform transition-all duration-300">
-            <h3 className="text-2xl font-semibold text-gray-900">Pro Plan</h3>
-            <p className="mt-3 text-gray-800">For serious learners</p>
-            <p className="mt-4 text-3xl font-bold text-indigo-700">₹299/month</p>
-            <ul className="mt-4 text-gray-800 space-y-2 text-sm">
+          <div className={`p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 backdrop-blur-2xl ${
+            theme === "dark"
+              ? "bg-gradient-to-b from-slate-900/90 via-purple-950/50 to-slate-950/90 hover:from-slate-800/90 hover:to-slate-900/95 border-2 border-purple-500/70 hover:border-pink-500 shadow-[0_12px_40px_rgba(168,85,247,0.3)] hover:shadow-[0_16px_50px_rgba(236,72,153,0.35)] text-white"
+              : "bg-gradient-to-b from-white/80 via-indigo-50/75 to-white/75 hover:from-white/90 hover:via-indigo-50/85 hover:to-white/85 border-2 border-indigo-400/80 shadow-[0_16px_45px_rgba(79,70,229,0.18),inset_0_1px_2px_rgba(255,255,255,1)] hover:shadow-[0_22px_55px_rgba(79,70,229,0.26)] text-slate-800"
+          }`}>
+            <h3 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-indigo-950"}`}>
+              Pro Plan
+            </h3>
+            <p className={`mt-3 ${theme === "dark" ? "text-white/90" : "text-indigo-600 font-semibold"}`}>
+              For serious learners
+            </p>
+            <p className={`mt-4 text-4xl font-extrabold ${theme === "dark" ? "text-white" : "text-indigo-950"}`}>
+              ₹299/month
+            </p>
+            <ul className={`mt-5 space-y-2 text-sm ${theme === "dark" ? "text-white/90" : "text-slate-700 font-medium"}`}>
               <li>✔ All Free Plan Features</li>
               <li>✔ Advanced Analytics & Graphs</li>
               <li>✔ Unlimited AI Chatbot Access</li>
@@ -437,7 +690,7 @@ const HomePage = () => {
             </ul>
             <Link
               to="/register"
-              className="mt-6 inline-block px-6 py-3 bg-gradient-to-r from-indigo-700 to-pink-600 text-white rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
+              className="mt-6 inline-block px-6 py-3 bg-gradient-to-r from-indigo-700 to-pink-600 text-white font-semibold rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
             >
               Upgrade Now
             </Link>
@@ -446,100 +699,85 @@ const HomePage = () => {
       </section>
 
       {/* About Us Section */}
-      <section id="about" className="py-16 text-center bg-white/50 backdrop-blur-lg relative z-10">
-        <h2 className="text-3xl font-bold text-gray-900">ABOUT US</h2>
-        <p className="mt-3 text-gray-800 max-w-2xl mx-auto">
+      <section id="about" className="py-24 text-center relative z-10">
+        <h2 className="text-3xl md:text-4xl font-extrabold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          ABOUT US
+        </h2>
+        <p className="mt-3 max-w-2xl mx-auto text-white/90 drop-shadow-sm font-medium">
           We are a passionate team dedicated to making self-learning more effective and engaging.
           Our mission is to provide students with the right tools, structure, and motivation
           to achieve their goals without distractions.
         </p>
 
-        <div className="mt-10 grid gap-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 max-w-7xl mx-auto px-6">
-
-          <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition">
-            <img
-              src={ananya}
-              alt="Team Member"
-              className="w-48 h-48 mx-auto rounded-full border-4 border-indigo-600 shadow-md object-cover"
-            />
-
-            <h3 className="mt-4 text-xl font-semibold text-gray-900">Ananya Srivastava</h3>
-            <p className="text-gray-600 text-sm">Backend Developer</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition">
-            <img src={anshika} alt="Team Member"
-              className="w-48 h-48 mx-auto rounded-full border-4 border-indigo-600 shadow-md object-cover" />
-            <h3 className="mt-4 text-xl font-semibold text-gray-900">Anshika Jain</h3>
-            <p className="text-gray-600 text-sm">Frontend Designer</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition">
-            <img
-              src={ankit}
-              alt="Team Member"
-              className="w-48 h-48 mx-auto rounded-full border-4 border-indigo-600 shadow-md object-cover object-top"
-
-            />
-            <h3 className="mt-4 text-xl font-semibold text-gray-900">Ankit Kumar</h3>
-            <p className="text-gray-600 text-sm">Ideation and Open CV</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition">
-            <img src={setu} alt="Team Member"
-              className="w-48 h-48 mx-auto rounded-full border-4 border-indigo-600 shadow-md object-cover" />
-
-            <h3 className="mt-4 text-xl font-semibold text-gray-900">Setu Arya</h3>
-            <p className="text-gray-600 text-sm">Frontend Designer</p>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-lg p-6 hover:shadow-2xl transition">
-            <img
-              src={yash} alt="Team Member"
-              className="w-48 h-48 mx-auto rounded-full border-4 border-indigo-600 shadow-md object-cover"
-            />
-            <h3 className="mt-4 text-xl font-semibold text-gray-900">Yash Jain</h3>
-            <p className="text-gray-600 text-sm">AI/ML</p>
-          </div>
-
+        <div className="mt-12 grid gap-8 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 max-w-7xl mx-auto px-6">
+          {[
+            { img: ananya, name: "Ananya Srivastava", role: "Backend Developer", objectClass: "object-cover" },
+            { img: anshika, name: "Anshika Jain", role: "Frontend Designer", objectClass: "object-cover" },
+            { img: ankit, name: "Ankit Kumar", role: "Ideation and Open CV", objectClass: "object-cover object-top" },
+            { img: setu, name: "Setu Arya", role: "Frontend Designer", objectClass: "object-cover" },
+            { img: yash, name: "Yash Jain", role: "AI/ML", objectClass: "object-cover" },
+          ].map((m, idx) => (
+            <div
+              key={idx}
+              className={`group rounded-2xl p-6 backdrop-blur-2xl transition-all duration-300 transform hover:-translate-y-2 border ${
+                theme === "dark"
+                  ? "bg-gradient-to-b from-slate-900/80 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border border-purple-500/20 hover:border-purple-400/50 shadow-2xl hover:shadow-[0_12px_36px_rgba(168,85,247,0.25)] text-white"
+                  : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_10px_35px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_18px_45px_rgba(31,38,135,0.18)] text-slate-800"
+              }`}
+            >
+              <img
+                src={m.img}
+                alt={m.name}
+                className={`w-40 h-40 mx-auto rounded-full object-cover transition-transform duration-300 group-hover:scale-105 ${
+                  theme === "dark"
+                    ? "border-4 border-purple-400/40 shadow-[0_0_20px_rgba(168,85,247,0.3)]"
+                    : "border-4 border-white shadow-md"
+                }`}
+              />
+              <h3 className={`mt-4 text-lg font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                {m.name}
+              </h3>
+              <p className={`text-sm ${theme === "dark" ? "text-white/80" : "text-indigo-600 font-semibold"}`}>
+                {m.role}
+              </p>
+            </div>
+          ))}
         </div>
       </section>
 
-
       {/* Footer */}
-      <footer className="bg-gray-900 text-gray-200 py-10 mt-auto border-t-4 border-gradient-to-r from-purple-700 to-indigo-700 relative z-10">
+      <footer className="py-12 mt-auto relative z-10 bg-slate-950/70 backdrop-blur-xl border-t border-white/15 text-white/80">
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-4 gap-8">
           <div>
             <h3 className="text-xl font-bold text-white">StudyBuddy</h3>
-            <p className="mt-3 text-sm">Your AI-powered study partner for smarter learning.</p>
+            <p className="mt-3 text-sm text-white/80">Your AI-powered study partner for smarter learning.</p>
           </div>
           <div>
             <h4 className="font-semibold mb-3 text-white">Product</h4>
-            <ul className="space-y-2 text-sm">
-              {/* ✨ MODIFIED: Added onClick handlers */}
-              <li><Link to="/reminders" onClick={(e) => handleProtectedLinkClick(e, '/reminders')} className="hover:text-white">Reminders</Link></li>
-              <li><Link to="/assignments" onClick={(e) => handleProtectedLinkClick(e, '/assignments')} className="hover:text-white">Assignments</Link></li>
-              <li><Link to="/analytics" onClick={(e) => handleProtectedLinkClick(e, '/analytics')} className="hover:text-white">Analytics</Link></li>
+            <ul className="space-y-2 text-sm text-white/80">
+              <li><Link to="/reminders" onClick={(e) => handleProtectedLinkClick(e, '/reminders')} className="hover:text-white transition-colors">Reminders</Link></li>
+              <li><Link to="/assignments" onClick={(e) => handleProtectedLinkClick(e, '/assignments')} className="hover:text-white transition-colors">Assignments</Link></li>
+              <li><Link to="/analytics" onClick={(e) => handleProtectedLinkClick(e, '/analytics')} className="hover:text-white transition-colors">Analytics</Link></li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold mb-3 text-white">Company</h4>
-            <ul className="space-y-2 text-sm">
-              <li><Link to="/about" className="hover:text-white">About Us</Link></li>
-              <li><Link to="/contact" className="hover:text-white">Contact</Link></li>
-              <li><Link to="/careers" className="hover:text-white">Careers</Link></li>
+            <ul className="space-y-2 text-sm text-white/80">
+              <li><Link to="/about" className="hover:text-white transition-colors">About Us</Link></li>
+              <li><Link to="/contact" className="hover:text-white transition-colors">Contact</Link></li>
+              <li><Link to="/careers" className="hover:text-white transition-colors">Careers</Link></li>
             </ul>
           </div>
           <div>
             <h4 className="font-semibold mb-3 text-white">Follow Us</h4>
-            <ul className="space-y-2 text-sm">
-              <li><a href="#" className="hover:text-white">Twitter</a></li>
-              <li><a href="#" className="hover:text-white">LinkedIn</a></li>
-              <li><a href="#" className="hover:text-white">Instagram</a></li>
+            <ul className="space-y-2 text-sm text-white/80">
+              <li><a href="#" className="hover:text-white transition-colors">Twitter</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">LinkedIn</a></li>
+              <li><a href="#" className="hover:text-white transition-colors">Instagram</a></li>
             </ul>
           </div>
         </div>
-        <p className="text-center text-gray-400 text-sm mt-10">
+        <p className="text-center text-white/60 text-sm mt-10">
           © {new Date().getFullYear()} StudyBuddy. All rights reserved.
         </p>
       </footer>
@@ -566,14 +804,14 @@ const HomePage = () => {
             <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 p-4 md:p-6 text-white flex justify-between items-center shadow-md">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shrink-0">
-                  📊
+                  🎯
                 </div>
                 <div>
                   <h2 className="text-lg md:text-2xl font-bold flex items-center gap-2">
-                    Focus & Study Dashboard
+                    Focus Score Dashboard
                   </h2>
                   <p className="text-xs md:text-sm text-indigo-100 hidden sm:block">
-                    Real-time analytics, session trends, and smart reminder insights
+                    Real-time focus analytics, session trends, and attention monitoring
                   </p>
                 </div>
               </div>

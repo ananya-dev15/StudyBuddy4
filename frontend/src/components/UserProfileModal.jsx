@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import profileIcon from "../assets/profile_icon.png";
 import API_BASE from "../services/apiBase";
+import { useAppContext } from "../context/AppContext";
 
 export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }) {
   const fileInputRef = useRef(null);
+  const { theme } = useAppContext();
+  const isDark = theme === "dark";
   const [uploading, setUploading] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -223,10 +226,14 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
   ];
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 rounded-3xl shadow-2xl border border-white/40 overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-6 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className={`relative w-full max-w-4xl rounded-3xl shadow-2xl border overflow-hidden flex flex-col backdrop-blur-2xl transition-all ${
+        isDark
+          ? "bg-slate-900/95 border-purple-500/30 text-white shadow-purple-950/40"
+          : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
+      }`}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 p-6 text-white flex justify-between items-center shadow-md">
+        <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 p-6 text-white flex justify-between items-center shadow-md">
           <div>
             <h2 className="text-2xl font-extrabold flex items-center gap-2 tracking-tight">
               👤 User Profile
@@ -244,29 +251,31 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
         {/* Content Body */}
         <div className="p-6 md:p-8 overflow-y-auto max-h-[80vh]">
           {message && (
-            <div className="mb-6 p-3 bg-emerald-100 border border-emerald-300 text-emerald-800 rounded-xl text-center text-sm font-semibold">
+            <div className="mb-6 p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-xl text-center text-sm font-semibold">
               {message}
             </div>
           )}
 
           {loadingProfile && (
-            <div className="mb-4 text-center text-xs text-indigo-600 font-semibold animate-pulse">
+            <div className="mb-4 text-center text-xs text-purple-400 font-semibold animate-pulse">
               🔄 Syncing profile details from database...
             </div>
           )}
 
           <div className="grid md:grid-cols-3 gap-8 items-start">
             {/* Left Side: Circular Profile Picture & Upload Option */}
-            <div className="md:col-span-1 flex flex-col items-center bg-white/60 backdrop-blur-lg p-6 rounded-2xl border border-white/60 shadow-lg text-center">
+            <div className={`md:col-span-1 flex flex-col items-center p-6 rounded-2xl border backdrop-blur-xl shadow-lg text-center ${
+              isDark ? "bg-slate-800/80 border-purple-500/20 text-white" : "bg-white/80 border-white/80 text-slate-800"
+            }`}>
               <div className="relative group">
                 <img
                   src={displayUser.profileImage || profileIcon}
                   alt="Profile"
-                  className="w-36 h-36 rounded-full border-4 border-indigo-600 shadow-xl object-cover bg-white"
+                  className="w-36 h-36 rounded-full border-4 border-purple-600 shadow-xl object-cover bg-white"
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-1 right-1 bg-indigo-600 hover:bg-indigo-700 text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-110"
+                  className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-110"
                   title="Upload / Change Photo"
                 >
                   📷
@@ -281,40 +290,46 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                 onChange={handleImageChange}
               />
 
-              <h3 className="mt-4 text-xl font-bold text-gray-900">{displayUser.name}</h3>
-              <p className="text-xs text-gray-500 font-medium break-all">{displayUser.email}</p>
+              <h3 className={`mt-4 text-xl font-bold ${isDark ? "text-purple-200" : "text-slate-900"}`}>{displayUser.name}</h3>
+              <p className={`text-xs font-medium break-all ${isDark ? "text-slate-400" : "text-slate-500"}`}>{displayUser.email}</p>
 
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="mt-5 px-4 py-2.5 w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all duration-300 hover:shadow-lg disabled:opacity-50"
+                className="mt-5 px-4 py-2.5 w-full bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs rounded-xl shadow-md transition-all duration-300 hover:shadow-lg disabled:opacity-50"
               >
                 {uploading ? "Uploading..." : "📷 Change Profile Photo"}
               </button>
 
               {/* Stats badges */}
-              <div className="mt-6 w-full grid grid-cols-2 gap-2 text-center pt-4 border-t border-gray-200/80">
-                <div className="bg-indigo-50 p-2 rounded-xl">
-                  <span className="text-xs text-indigo-600 font-semibold block">🪙 Coins</span>
-                  <span className="text-lg font-bold text-indigo-900">{displayUser.coins ?? 500}</span>
+              <div className={`mt-6 w-full grid grid-cols-2 gap-2 text-center pt-4 border-t ${isDark ? "border-slate-700" : "border-slate-200"}`}>
+                <div className={`p-2 rounded-xl ${isDark ? "bg-slate-700/60" : "bg-purple-50"}`}>
+                  <span className="text-xs text-purple-400 font-semibold block">🪙 Coins</span>
+                  <span className="text-lg font-bold text-amber-500">{displayUser.coins ?? 500}</span>
                 </div>
-                <div className="bg-pink-50 p-2 rounded-xl">
-                  <span className="text-xs text-pink-600 font-semibold block">🔥 Streak</span>
-                  <span className="text-lg font-bold text-pink-900">{displayUser.streak ?? 0}d</span>
+                <div className={`p-2 rounded-xl ${isDark ? "bg-slate-700/60" : "bg-pink-50"}`}>
+                  <span className="text-xs text-pink-400 font-semibold block">🔥 Streak</span>
+                  <span className="text-lg font-bold text-pink-500">{displayUser.streak ?? 0}d</span>
                 </div>
               </div>
             </div>
 
             {/* Right Side: Complete User Information & Edit Mode */}
-            <div className="md:col-span-2 bg-white/60 backdrop-blur-lg p-6 rounded-2xl border border-white/60 shadow-lg">
-              <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-200/80">
-                <h4 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <div className={`md:col-span-2 p-6 rounded-2xl border backdrop-blur-xl shadow-lg ${
+              isDark ? "bg-slate-800/80 border-purple-500/20 text-white" : "bg-white/80 border-white/80 text-slate-800"
+            }`}>
+              <div className={`flex justify-between items-center mb-4 pb-2 border-b ${isDark ? "border-slate-700" : "border-slate-200"}`}>
+                <h4 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-200" : "text-slate-900"}`}>
                   📋 Account Information
                 </h4>
                 <button
                   type="button"
                   onClick={() => setIsEditing(!isEditing)}
-                  className="px-3.5 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 font-bold text-xs rounded-lg transition-all"
+                  className={`px-3.5 py-1.5 font-bold text-xs rounded-lg transition-all ${
+                    isDark
+                      ? "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
+                      : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                  }`}
                 >
                   {isEditing ? "❌ Cancel Edit" : "✏️ Edit Profile"}
                 </button>
@@ -325,11 +340,11 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                   <div className="grid sm:grid-cols-2 gap-3">
                     {fieldConfigs.map((field) => (
                       <div key={field.name} className="flex flex-col">
-                        <label className="text-xs font-semibold text-gray-600 mb-1 flex items-center gap-1">
+                        <label className={`text-xs font-semibold mb-1 flex items-center gap-1 ${isDark ? "text-purple-300" : "text-slate-600"}`}>
                           <span>{field.icon}</span>
                           <span>{field.label}</span>
                           {field.locked && (
-                            <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1.5 py-0.5 rounded">
+                            <span className="text-[10px] text-amber-500 font-bold bg-amber-500/10 px-1.5 py-0.5 rounded">
                               🔒 Non-editable
                             </span>
                           )}
@@ -339,7 +354,9 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                             type="text"
                             value={field.value || ""}
                             disabled
-                            className="p-2.5 text-xs font-semibold border border-gray-200 rounded-xl bg-gray-100 text-gray-500 cursor-not-allowed"
+                            className={`p-2.5 text-xs font-semibold border rounded-xl cursor-not-allowed ${
+                              isDark ? "bg-slate-900/60 border-slate-700 text-slate-400" : "bg-slate-100 border-slate-200 text-slate-500"
+                            }`}
                           />
                         ) : (
                           <input
@@ -349,7 +366,11 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                               setFormData({ ...formData, [field.name]: e.target.value })
                             }
                             placeholder={`Enter ${field.label}`}
-                            className="p-2.5 text-xs font-semibold border border-indigo-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white text-gray-900"
+                            className={`p-2.5 text-xs font-semibold border rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none ${
+                              isDark
+                                ? "bg-slate-900 border-purple-500/30 text-white placeholder-slate-400"
+                                : "bg-white border-slate-300 text-slate-900 placeholder-slate-400"
+                            }`}
                           />
                         )}
                       </div>
@@ -360,14 +381,16 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                     <button
                       type="button"
                       onClick={() => setIsEditing(false)}
-                      className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-semibold rounded-xl transition"
+                      className={`px-4 py-2 text-xs font-semibold rounded-xl transition ${
+                        isDark ? "bg-slate-700 text-slate-300 hover:bg-slate-600" : "bg-slate-200 text-slate-800 hover:bg-slate-300"
+                      }`}
                     >
                       Cancel
                     </button>
                     <button
                       type="submit"
                       disabled={savingProfile}
-                      className="px-6 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-50"
+                      className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-50"
                     >
                       {savingProfile ? "Saving..." : "💾 Save Changes"}
                     </button>
@@ -379,13 +402,21 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                     const rawVal = item.locked ? item.value : displayUser[item.name];
                     const val = rawVal || "Not specified";
                     return (
-                      <div key={item.name} className="bg-white/80 p-3.5 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 mb-1">
+                      <div key={item.name} className={`p-3.5 rounded-xl border transition ${
+                        isDark
+                          ? "bg-slate-800/60 border-purple-500/15 text-white"
+                          : "bg-white/90 border-slate-100 text-slate-800 shadow-sm"
+                      }`}>
+                        <div className={`flex items-center gap-2 text-xs font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                           <span>{item.icon}</span>
                           <span>{item.label}</span>
-                          {item.locked && <span className="text-[10px] text-amber-600 font-bold">🔒</span>}
+                          {item.locked && <span className="text-[10px] text-amber-500 font-bold">🔒</span>}
                         </div>
-                        <div className={`text-sm font-bold truncate ${val === "Not specified" ? "text-gray-400 font-normal italic" : "text-gray-900"}`}>
+                        <div className={`text-sm font-bold truncate ${
+                          val === "Not specified"
+                            ? isDark ? "text-slate-500 font-normal italic" : "text-slate-400 font-normal italic"
+                            : isDark ? "text-slate-100" : "text-slate-900"
+                        }`}>
                           {val}
                         </div>
                       </div>

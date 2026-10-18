@@ -9,24 +9,26 @@ import {
   Tooltip,
   Legend,
 } from "chart.js";
-import Dashboard from "../pages/Dashboard";
-import Blog from "./blogs";
+import { useAppContext } from "../context/AppContext";
+import Navbar from "./Navbar";
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const Leaderboard = () => {
   const [students, setStudents] = useState([]);
+  const { theme } = useAppContext();
+  const isDark = theme === "dark";
 
   useEffect(() => {
-    // Generate 100 sample students
+    // Generate sample students
     const names = [
       "Ananya", "Rohan", "Priya", "Karan", "Ishika", "Aarav", "Tanya", "Dev",
       "Sanya", "Arjun", "Riya", "Manav", "Simran", "Kritika", "Aditya"
     ];
 
     const studentsData = [];
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 50; i++) {
       const name =
         names[Math.floor(Math.random() * names.length)] +
         " " +
@@ -55,9 +57,9 @@ const Leaderboard = () => {
     labels: top10.map((s) => s.name),
     datasets: [
       {
-        label: "Average Focus Score (out of 100)",
+        label: "Focus Score (%)",
         data: top10.map((s) => s.focusScore),
-        backgroundColor: "rgba(155, 81, 224, 0.7)",
+        backgroundColor: isDark ? "rgba(168, 85, 247, 0.75)" : "rgba(139, 92, 246, 0.8)",
         borderRadius: 8,
       },
     ],
@@ -65,267 +67,178 @@ const Leaderboard = () => {
 
   const chartOptions = {
     responsive: true,
+    maintainAspectRatio: false,
     plugins: {
       legend: { display: false },
       title: {
         display: true,
         text: "Top 10 Focused Students",
-        color: "#333",
+        color: isDark ? "#e2e8f0" : "#1e293b",
         font: { size: 16, weight: "bold" },
+      },
+      tooltip: {
+        backgroundColor: isDark ? "rgba(15, 23, 42, 0.9)" : "rgba(255, 255, 255, 0.9)",
+        titleColor: isDark ? "#fff" : "#0f172a",
+        bodyColor: isDark ? "#cbd5e1" : "#334155",
+        borderColor: isDark ? "rgba(168,85,247,0.3)" : "rgba(0,0,0,0.1)",
+        borderWidth: 1,
       },
     },
     scales: {
-      y: { beginAtZero: true, max: 100, ticks: { color: "#333" } },
-      x: { ticks: { color: "#333" } },
+      y: {
+        beginAtZero: true,
+        max: 100,
+        ticks: { color: isDark ? "#94a3b8" : "#64748b" },
+        grid: { color: isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.06)" },
+      },
+      x: {
+        ticks: { color: isDark ? "#94a3b8" : "#64748b" },
+        grid: { display: false },
+      },
     },
   };
 
   return (
-    <div style={styles.page}>
-      {/* HEADER */}
-      <header style={styles.header}>
-        <div style={styles.logo}>StudyBuddy</div>
-        <nav>
-          <a href="/dashboard" style={styles.navLink}>Dashboard</a>
-          <a href="#" style={styles.navLink}>About</a>
-          <a href="/blogs" style={styles.navLink}>Blogs</a>
-          <a href="#" style={styles.navLink}>Contact</a>
-        </nav>
-      </header>
+    <div className={`min-h-screen relative z-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
+      {/* Unified Navbar with ThemeToggle */}
+      <Navbar />
 
-      <h1 style={styles.title}>🎥 Video Tracker Leaderboard</h1>
+      <main className="max-w-7xl mx-auto px-4 md:px-8 py-10">
+        <h1 className="text-4xl md:text-5xl font-black text-center mb-3 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent tracking-tight">
+          🏆 Focus & Study Leaderboard
+        </h1>
+        <p className={`text-center text-sm md:text-base font-medium mb-10 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+          Real-time top learners ranked by study consistency, focus score, and earned coins.
+        </p>
 
-      {/* ⭐ TOP 3 STUDENT CARDS */}
-      <div style={styles.topThreeContainer}>
-        {students.slice(0, 3).map((s, i) => (
-          <div key={i} style={{
-            ...styles.card,
-            background:
+        {/* TOP 3 PODIUM CARDS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+          {students.slice(0, 3).map((s, i) => {
+            const medal = i === 0 ? "🥇" : i === 1 ? "🥈" : "🥉";
+            const borderGlow =
               i === 0
-                ? "linear-gradient(135deg, #ffdd55cc, #ffbb33cc)"
+                ? "border-amber-400/60 shadow-amber-500/20"
                 : i === 1
-                ? "linear-gradient(135deg, #d0d0d0dd, #bfbfbfdd)"
-                : "linear-gradient(135deg, #cfa47cdd, #bf8f68dd)",
-            border: "2px solid rgba(255,255,255,0.25)",
-          }}>
-            <h2 style={styles.cardName}>{s.name}</h2>
+                ? "border-slate-300/60 shadow-slate-400/20"
+                : "border-amber-700/60 shadow-amber-800/20";
 
-            <div style={styles.trophyIcon}>
-              {i === 0 ? "🏆" : i === 1 ? "🥈" : "🥉"}
-            </div>
-
-            <div style={styles.statsRow}>
-              <div style={styles.statBlock}>
-                <div style={styles.statLabel}>Rank</div>
-                <div style={styles.statValue}>{i + 1}</div>
-              </div>
-
-              <div style={styles.statBlock}>
-                <div style={styles.statLabel}>Total</div>
-                <div style={styles.statValue}>{s.coins}</div>
-              </div>
-
-              <div style={styles.statBlock}>
-                <div style={styles.statLabel}>Focus</div>
-                <div style={styles.statValue}>{s.focusScore}%</div>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-{/* CHART — moved above table */}
-<div style={styles.chartContainer}>
-  <Bar data={chartData} options={chartOptions} />
-</div>
-
-{/* TABLE — now after chart */}
-<div style={styles.leaderboard}>
-  <table style={styles.table}>
-    <thead>
-      <tr>
-        <th>Rank</th>
-        <th>Student Name</th>
-        <th>Coins</th>
-        <th>Videos Watched</th>
-        <th>Tab Switches</th>
-        <th>Average Focus Score (100)</th>
-      </tr>
-    </thead>
-
-    <tbody>
-      {students.map((s, i) => (
-        <tr key={i} style={styles.row}>
-          <td
-            style={{
-              ...styles.rank,
-              ...(i === 0
-                ? styles.gold
-                : i === 1
-                ? styles.silver
-                : i === 2
-                ? styles.bronze
-                : {}),
-            }}
-          >
-            {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
-          </td>
-
-          <td>{s.name}</td>
-          <td>{s.coins}</td>
-          <td>{s.videos}</td>
-          <td>{s.tabs}</td>
-
-          <td>
-            <div>{s.focusScore}%</div>
-            <div style={styles.focusBar}>
+            return (
               <div
-                style={{
-                  ...styles.focusFill,
-                  width: `${s.focusScore}%`,
-                }}
-              ></div>
-            </div>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
+                key={i}
+                className={`p-6 rounded-3xl backdrop-blur-2xl border transition-all duration-300 hover:scale-[1.03] relative overflow-hidden shadow-xl ${borderGlow} ${
+                  isDark
+                    ? "bg-slate-900/80 text-white"
+                    : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-[0_10px_35px_rgba(0,0,0,0.04)]"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-3xl">{medal}</span>
+                  <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full ${
+                    i === 0
+                      ? "bg-amber-500/20 text-amber-500 border border-amber-500/30"
+                      : i === 1
+                      ? "bg-slate-400/20 text-slate-400 border border-slate-400/30"
+                      : "bg-amber-700/20 text-amber-700 border border-amber-700/30"
+                  }`}>
+                    Rank #{i + 1}
+                  </span>
+                </div>
 
+                <h2 className={`text-xl font-extrabold mb-4 truncate ${isDark ? "text-purple-200" : "text-slate-900"}`}>{s.name}</h2>
 
-      <footer style={styles.footer}>©️ 2025 StudyBuddy | Built for better learning 🔥</footer>
+                <div className={`grid grid-cols-3 gap-2 p-3 rounded-2xl ${
+                  isDark ? "bg-slate-800/60 border border-white/5" : "bg-white/60 border border-slate-200/60 shadow-inner"
+                }`}>
+                  <div className="text-center">
+                    <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Coins</div>
+                    <div className="text-base font-black text-amber-500">🪙 {s.coins}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Videos</div>
+                    <div className="text-base font-black">🎬 {s.videos}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Focus</div>
+                    <div className="text-base font-black text-purple-500">{s.focusScore}%</div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* CHART */}
+        <div className={`p-6 rounded-3xl backdrop-blur-2xl shadow-xl mb-12 border transition-all duration-300 ${
+          isDark
+            ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          <div className="h-72">
+            <Bar data={chartData} options={chartOptions} />
+          </div>
+        </div>
+
+        {/* FULL LEADERBOARD TABLE */}
+        <div className={`rounded-3xl backdrop-blur-2xl shadow-xl border overflow-hidden transition-all duration-300 ${
+          isDark
+            ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className={`border-b text-xs uppercase tracking-wider font-bold ${
+                  isDark
+                    ? "bg-slate-800/60 border-purple-500/20 text-purple-300"
+                    : "bg-slate-100/70 border-slate-200 text-slate-700"
+                }`}>
+                  <th className="py-4 px-6">Rank</th>
+                  <th className="py-4 px-6">Student Name</th>
+                  <th className="py-4 px-6">Coins</th>
+                  <th className="py-4 px-6">Videos</th>
+                  <th className="py-4 px-6">Tab Switches</th>
+                  <th className="py-4 px-6">Focus Score</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-sm font-medium">
+                {students.map((s, i) => (
+                  <tr
+                    key={i}
+                    className={`transition-colors ${
+                      isDark ? "hover:bg-slate-800/40" : "hover:bg-purple-50/50"
+                    }`}
+                  >
+                    <td className="py-4 px-6 font-bold">
+                      {i === 0 ? "🥇 1" : i === 1 ? "🥈 2" : i === 2 ? "🥉 3" : `#${i + 1}`}
+                    </td>
+                    <td className={`py-4 px-6 font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{s.name}</td>
+                    <td className="py-4 px-6 text-amber-500 font-bold">🪙 {s.coins}</td>
+                    <td className="py-4 px-6">{s.videos}</td>
+                    <td className="py-4 px-6 text-rose-500">{s.tabs}</td>
+                    <td className="py-4 px-6">
+                      <div className="flex items-center gap-3">
+                        <span className="font-bold text-purple-500 w-12">{s.focusScore}%</span>
+                        <div className={`h-2 flex-1 max-w-[120px] rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-200"}`}>
+                          <div
+                            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full"
+                            style={{ width: `${s.focusScore}%` }}
+                          />
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+
+      <footer className={`py-8 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+        © {new Date().getFullYear()} StudyBuddy • Built for better learning 🔥
+      </footer>
     </div>
   );
-};
-
-// --------------------------------
-// STYLES
-// --------------------------------
-const styles = {
-  page: {
-    background: "linear-gradient(135deg, #e0c3fc, #8ec5fc)",
-    minHeight: "100vh",
-    fontFamily: "Poppins, sans-serif",
-    color: "#333",
-    paddingBottom: "50px",
-  },
-
-  header: {
-    width: "100%",
-    background: "rgba(255,255,255,0.25)",
-    backdropFilter: "blur(12px)",
-    padding: "1rem 3rem",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  logo: { fontWeight: 700, fontSize: "1.5em", color: "#9b51e0" },
-
-  navLink: {
-    marginLeft: "1.5rem",
-    textDecoration: "none",
-    color: "#333",
-    fontWeight: 500,
-  },
-
-  title: {
-    marginTop: "30px",
-    fontSize: "2.2rem",
-    textAlign: "center",
-  },
-
-  // ⭐ TOP THREE CARDS
-  topThreeContainer: {
-    display: "flex",
-    justifyContent: "center",
-    gap: "25px",
-    marginTop: "30px",
-    flexWrap: "wrap",
-  },
-
-  card: {
-    width: "290px",
-    padding: "22px",
-    borderRadius: "18px",
-    boxShadow: "0 8px 25px rgba(0,0,0,0.15)",
-    position: "relative",
-    color: "white",
-  },
-
-  cardName: {
-    margin: 0,
-    fontSize: "1.4rem",
-  },
-
-  trophyIcon: {
-    position: "absolute",
-    top: "15px",
-    right: "20px",
-    fontSize: "2.2rem",
-  },
-
-  statsRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    marginTop: "25px",
-    background: "rgba(0,0,0,0.25)",
-    padding: "12px",
-    borderRadius: "12px",
-  },
-
-  statBlock: { textAlign: "center" },
-
-  statLabel: { opacity: 0.8, fontSize: "0.9rem" },
-
-  statValue: { fontSize: "1.3rem", fontWeight: 700 },
-
-  leaderboard: {
-    width: "90%",
-    margin: "40px auto",
-    backdropFilter: "blur(12px)",
-    background: "rgba(255,255,255,0.25)",
-    borderRadius: "20px",
-    overflow: "hidden",
-  },
-
-  table: { width: "100%", borderCollapse: "collapse" },
-
-  row: { height: "50px" },
-
-  rank: { fontWeight: 700, fontSize: "1.2rem" },
-
-  gold: { color: "#FFD700" },
-  silver: { color: "#C0C0C0" },
-  bronze: { color: "#CD7F32" },
-
-  focusBar: {
-    height: "10px",
-    background: "#ddd",
-    borderRadius: "5px",
-    marginTop: "3px",
-    overflow: "hidden",
-  },
-
-  focusFill: {
-    height: "100%",
-    background: "linear-gradient(90deg, #9b51e0, #8ec5fc)",
-  },
-
-  chartContainer: {
-    width: "90%",
-    margin: "40px auto",
-    background: "rgba(255,255,255,0.25)",
-    backdropFilter: "blur(12px)",
-    padding: "20px",
-    borderRadius: "20px",
-  },
-
-  footer: {
-    marginTop: "20px",
-    textAlign: "center",
-    color: "#555",
-  },
 };
 
 export default Leaderboard;

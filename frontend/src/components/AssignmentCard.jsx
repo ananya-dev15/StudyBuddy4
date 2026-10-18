@@ -333,6 +333,7 @@ import {
   Legend,
 } from "recharts";
 import { useAppContext } from "../context/AppContext";
+import Navbar from "./Navbar";
 import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
 
@@ -343,8 +344,11 @@ const AssignmentCard = () => {
     reminders, setReminders,
     addAssignment, addHackathon, addReminder,
     removeReminder: contextRemoveReminder,
-    highlightedReminders
+    highlightedReminders,
+    theme
   } = useAppContext();
+
+  const isDark = theme === "dark";
 
   const navigate = useNavigate();
 
@@ -615,72 +619,15 @@ const AssignmentCard = () => {
   const filteredHackathons = hackathons.filter(h => filter === "All" || h.status === filter);
 
   return (
-    <div className={`min-h-screen ${darkMode ? 'dark-mode' : ''}`} style={{ background: 'linear-gradient(135deg, #e6e0f0, #f0f3f8)' }}>
-      {/* Navbar - Matching HomePage */}
-      <nav className="bg-white/30 backdrop-blur-lg shadow-lg py-4 px-8 flex justify-between items-center sticky top-0 z-50 rounded-b-2xl">
-        <Link
-          to="/"
-          className="text-2xl font-extrabold bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 bg-clip-text text-transparent tracking-tight"
-        >
-          StudyBuddy
-        </Link>
-
-        <div className="hidden md:flex gap-8 font-medium">
-          <Link to="/dashboard" className="hover:text-pink-500 transition-colors duration-300">Dashboard</Link>
-          <Link to="/videos" className="hover:text-pink-500 transition-colors duration-300">Video Tracker</Link>
-          <Link to="/analytics" className="hover:text-pink-500 transition-colors duration-300">Analytics</Link>
-          <Link to="/assignments" className="hover:text-pink-500 transition-colors duration-300">Assignments</Link>
-        </div>
-
-        {/* Conditional Navbar with Logout Dropdown */}
-        {user ? (
-          <div className="relative">
-            <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-              <img
-                src={user.profileImage || profileIcon}
-                alt="Profile"
-                className="w-10 h-10 rounded-full border-2 border-indigo-700"
-              />
-              <span className="font-semibold text-gray-900">{user.name}</span>
-            </button>
-
-            {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-48 bg-white rounded-lg shadow-xl z-50">
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100"
-                >
-                  Logout
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 border border-indigo-700 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all duration-300"
-            >
-              Login
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2 bg-gradient-to-r from-indigo-700 to-pink-600 text-white rounded-lg shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-            >
-              Sign Up
-            </Link>
-          </div>
-        )}
-      </nav>
+    <div className={`min-h-screen relative z-10 transition-colors duration-500 ${isDark ? 'dark-mode text-white' : 'text-slate-800'}`}>
+      {/* Unified Navbar with ThemeToggle */}
+      <Navbar />
 
       {/* Main Content Wrapper */}
       <div className="px-6 md:px-10 py-10">
 
         <div className="header">
-          <h1>📚 Assignment & Hackathon Tracker</h1>
-          <button id="darkModeToggle" className="dark-mode-toggle" onClick={() => setDarkMode(!darkMode)}>
-            {darkMode ? "Light Mode" : "Dark Mode"}
-          </button>
+          <h1 className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">📚 Assignment & Hackathon Tracker</h1>
         </div>
 
         {/* <div className="status-section">
@@ -824,29 +771,27 @@ const AssignmentCard = () => {
         }
         body { padding: 0; margin: 0; }
         .app-container { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, var(--bg-start-color), var(--bg-end-color)); color: var(--text-color); min-height: 100vh; }
-        .dark-mode { background: #1f2937; color: #e5e7eb; }
+        .dark-mode { background: transparent; color: #e5e7eb; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-        .header h1 { font-size: 1.875rem; font-weight: 700; color: var(--heading-color); }
-        .dark-mode .header h1 { color: #db2777; }
-        .header .dark-mode-toggle { padding: 0.5rem 1rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.5rem; box-shadow: var(--box-shadow); cursor: pointer; transition: all 0.2s ease; }
+        .header h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.025em; }
         .status-section { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
-        .status-section span { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
+        .status-section span { padding: 0.5rem 1rem; border-radius: 0.75rem; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
         .status-section .coins { background-color: var(--yellow-200); }
         .status-section .switches { background-color: var(--green-200); }
         .filter-section { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-        .filter-section button { padding: 0.5rem 1rem; border: none; border-radius: 0.5rem; font-weight: 600; box-shadow: var(--box-shadow); cursor: pointer; }
+        .filter-section button { padding: 0.6rem 1.25rem; border: none; border-radius: 0.75rem; font-weight: 600; box-shadow: var(--box-shadow); cursor: pointer; transition: all 0.2s ease; }
         .filter-section .active-filter { background: var(--btn-gradient); color: white; }
-        .filter-section .inactive-filter { background-color: rgba(255, 255, 255, 0.3); color: #1f2937; }
-        .dark-mode .filter-section .inactive-filter { background: #374151; color: #e5e7eb; }
+        .filter-section .inactive-filter { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
+        .dark-mode .filter-section .inactive-filter { background: rgba(30, 41, 59, 0.8); color: #e2e8f0; border: 1px solid rgba(168,85,247,0.3); }
         .cards-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 1.5rem; }
         @media (min-width: 768px) { .cards-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (min-width: 1024px) { .cards-grid { grid-template-columns: repeat(3, 1fr); } }
-        .add-card { margin-bottom: 2rem; padding: 1.5rem; background-color: rgba(255, 255, 255, 0.3); backdrop-filter: blur(8px); border-radius: 1rem; box-shadow: var(--box-shadow); }
-        .dark-mode .add-card { background-color: rgba(31, 41, 55, 0.5); border: 1px solid rgba(255,255,255,0.1); }
-        .add-card h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
-        .add-card input { box-sizing: border-box; width: 100%; margin-bottom: 0.5rem; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #ccc; }
-        .dark-mode .add-card input { background-color: #374151; color: #fff; border-color: #4b5563; }
-        .add-card button { padding: 0.75rem 1rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.5rem; box-shadow: var(--box-shadow); cursor: pointer; }
+        .add-card { margin-bottom: 2rem; padding: 1.75rem; background: linear-gradient(to bottom, rgba(255,255,255,0.75), rgba(255,255,255,0.60), rgba(255,255,255,0.70)); backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.85); box-shadow: 0 10px 35px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.95); color: #1e293b; }
+        .dark-mode .add-card { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid rgba(168, 85, 247, 0.25); box-shadow: 0 20px 40px rgba(0,0,0,0.4); color: #fff; }
+        .add-card h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
+        .add-card input { box-sizing: border-box; width: 100%; margin-bottom: 0.75rem; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 1px solid #cbd5e1; background: rgba(255,255,255,0.9); color: #0f172a; font-family: inherit; font-size: 0.95rem; }
+        .dark-mode .add-card input { background-color: rgba(30, 41, 59, 0.8); color: #fff; border: 1px solid rgba(168, 85, 247, 0.35); }
+        .add-card button { padding: 0.75rem 1.25rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.75rem; box-shadow: var(--box-shadow); cursor: pointer; font-weight: 600; }
         .item-grid { display: flex; flex-wrap: wrap; gap: 2rem; justify-content: flex-start; margin-left: 20%; }
         .cloud-item { width: 250px; height: 150px; position: relative; padding: 1.5rem; border-radius: 50%; box-shadow: var(--box-shadow); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; transition: all 0.3s ease; animation: float-animation 6s ease-in-out infinite; }
         .cloud-item:hover { transform: translateY(-10px) scale(1.05); }

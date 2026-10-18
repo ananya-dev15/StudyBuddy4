@@ -1,11 +1,17 @@
+import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
+import ThemeToggle from "./ThemeToggle";
 
 const RemindersPanel = () => {
   const {
     reminders, addReminder, removeReminder,
-    highlightedReminders, clearToast
+    highlightedReminders, clearToast,
+    theme
   } = useAppContext();
+
+  const isDark = theme === "dark";
 
   const [newReminderTitle, setNewReminderTitle] = useState("");
   const [reminderTime, setReminderTime] = useState("");
@@ -53,62 +59,121 @@ const RemindersPanel = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center bg-gradient-to-r from-green-100 via-blue-100 to-purple-100 p-6">
-      <h1 className="text-4xl font-bold text-gray-800 mb-8">⏰ My Reminders</h1>
-
-      {/* Input Section */}
-      <div className="bg-white shadow-lg rounded-xl p-6 w-full max-w-lg mb-6">
-        <input
-          type="text"
-          placeholder="Enter your reminder..."
-          value={newReminderTitle}
-          onChange={(e) => setNewReminderTitle(e.target.value)}
-          className="border border-gray-300 rounded-lg p-2 w-full mb-3 focus:ring-2 focus:ring-blue-400 outline-none"
-        />
-        <input
-          type="time"
-          value={reminderTime}
-          onChange={(e) => setReminderTime(e.target.value)}
-          className="border border-gray-300 rounded-lg p-2 w-full mb-3 focus:ring-2 focus:ring-blue-400 outline-none"
-        />
-        <button
-          onClick={handleAdd}
-          className="bg-blue-600 text-white px-5 py-2 rounded-lg w-full hover:bg-blue-700 transition"
+    <div className={`min-h-screen relative z-10 p-6 md:p-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
+      {/* Top Bar with Navigation & Permanent Theme Toggle */}
+      <div className="max-w-xl mx-auto flex items-center justify-between mb-8">
+        <Link
+          to="/dashboard"
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
+            isDark
+              ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
+              : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
+          }`}
         >
-          ➕ Add Reminder
-        </button>
+          <span>← Back to Dashboard</span>
+        </Link>
+        <ThemeToggle />
       </div>
 
-      {/* Reminders List */}
-      <div className="w-full max-w-lg space-y-4">
-        {reminders.length === 0 ? (
-          <p className="text-gray-600 text-center">No reminders yet!</p>
-        ) : (
-          reminders.map((reminder) => {
-            const isHighlighted = highlightedReminders.has(reminder._id);
-            return (
-              <div
-                key={reminder._id}
-                className="flex justify-between items-center bg-white shadow-md rounded-xl p-4 hover:shadow-xl transition"
-              >
-                <div>
-                  <p className="text-lg font-medium text-gray-800">
-                    {reminder.title}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {reminder.time}
-                  </p>
-                </div>
-                <button
-                  onClick={() => handleDelete(reminder._id)}
-                  className="bg-gray-100 text-gray-600 px-3 py-1 rounded-lg hover:bg-gray-200 hover:text-red-600 transition"
+      <div className="max-w-xl mx-auto">
+        <h1 className="text-4xl font-black text-center mb-2 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent">
+          ⏰ Study Reminders
+        </h1>
+        <p className={`text-center text-sm font-medium mb-8 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+          Set timely study alerts so you never miss a revision session.
+        </p>
+
+        {/* Input Section */}
+        <div className={`p-6 rounded-3xl backdrop-blur-2xl border shadow-xl mb-8 transition-all duration-300 ${
+          isDark
+            ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? "text-purple-300" : "text-slate-600"}`}>
+            Reminder Title
+          </label>
+          <input
+            type="text"
+            placeholder="e.g. Revise Computer Networks..."
+            value={newReminderTitle}
+            onChange={(e) => setNewReminderTitle(e.target.value)}
+            className={`w-full p-3.5 rounded-xl border text-sm font-medium mb-4 focus:ring-2 focus:ring-purple-500 outline-none transition-all ${
+              isDark
+                ? "bg-slate-800/80 border-purple-500/30 text-white placeholder-slate-400"
+                : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
+            }`}
+          />
+
+          <label className={`block text-xs font-bold uppercase tracking-wider mb-2 ${isDark ? "text-purple-300" : "text-slate-600"}`}>
+            Time
+          </label>
+          <input
+            type="time"
+            value={reminderTime}
+            onChange={(e) => setReminderTime(e.target.value)}
+            className={`w-full p-3.5 rounded-xl border text-sm font-medium mb-6 focus:ring-2 focus:ring-purple-500 outline-none transition-all ${
+              isDark
+                ? "bg-slate-800/80 border-purple-500/30 text-white"
+                : "bg-white/90 border-slate-300 text-slate-800"
+            }`}
+          />
+
+          <button
+            onClick={handleAdd}
+            className="w-full py-3.5 px-6 rounded-xl font-bold text-white bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 shadow-md hover:shadow-purple-500/25 transition-all duration-300 hover:scale-[1.01]"
+          >
+            ➕ Add Reminder
+          </button>
+        </div>
+
+        {/* Reminders List */}
+        <div className="space-y-4">
+          {reminders.length === 0 ? (
+            <div className={`p-8 text-center rounded-2xl backdrop-blur-xl border ${
+              isDark ? "bg-slate-900/60 border-purple-500/10 text-slate-400" : "bg-white/60 border-white/60 text-slate-500"
+            }`}>
+              <span className="text-4xl mb-2 block">🔔</span>
+              <p className="font-medium text-sm">No reminders active right now.</p>
+            </div>
+          ) : (
+            reminders.map((reminder) => {
+              const isHighlighted = highlightedReminders?.has(reminder._id);
+              return (
+                <div
+                  key={reminder._id}
+                  className={`flex justify-between items-center p-4 rounded-2xl backdrop-blur-2xl border transition-all duration-300 hover:scale-[1.01] ${
+                    isHighlighted
+                      ? "ring-2 ring-pink-500 shadow-lg shadow-pink-500/20"
+                      : ""
+                  } ${
+                    isDark
+                      ? "bg-slate-900/80 border-purple-500/20 text-white shadow-lg"
+                      : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_8px_25px_rgba(0,0,0,0.04)] text-slate-800"
+                  }`}
                 >
-                  Dismiss
-                </button>
-              </div>
-            );
-          })
-        )}
+                  <div>
+                    <p className={`text-base font-bold ${isDark ? "text-purple-200" : "text-slate-900"}`}>
+                      {reminder.title}
+                    </p>
+                    <p className={`text-xs font-semibold mt-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      🕒 {reminder.time}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleDelete(reminder._id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      isDark
+                        ? "bg-rose-500/20 text-rose-300 hover:bg-rose-500 hover:text-white"
+                        : "bg-rose-100 text-rose-700 hover:bg-rose-500 hover:text-white"
+                    }`}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
     </div>
   );

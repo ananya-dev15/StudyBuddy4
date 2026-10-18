@@ -15,12 +15,15 @@ import Analytics from "./components/Analytics";
 import Contact from "./components/contact";
 import VerifyEmail from "./pages/VerifyEmail";
 
+import ThemeBackground from "./components/ThemeBackground";
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <BrowserRouter>
+        <ThemeBackground />
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<Login />} />
@@ -29,12 +32,12 @@ function App() {
           <Route path="/videos" element={<VideoTracker />} />
           <Route path="/chatbot" element={<ChatBot standalone={true} />} />
           <Route path="/reminders" element={<RemindersPanel />} /> {/* ✅ route */}
-          <Route path="/assignments" element={<AssignmentCard/>} />
+          <Route path="/assignments" element={<AssignmentCard />} />
           <Route path="/blogs" element={<Blog />} />
           <Route path="/authmodal" element={<AuthModal />} />
-          <Route path="/leaderboard" element={<Leaderboard/>} />
-          <Route path="/analytics" element={<Analytics/>} />
-          <Route path="/contact" element={<Contact/>} />
+          <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/contact" element={<Contact />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
         <ChatBot />
@@ -44,3 +47,4 @@ function App() {
 }
 
 export default App;
+//main kaam kr rha hu ky tmhe dikh rha h ??

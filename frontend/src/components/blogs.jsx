@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from "../context/AppContext";
+import Navbar from "./Navbar";
 import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
 
@@ -85,7 +86,7 @@ const Blog = () => {
     const [isPremiumModalVisible, setPremiumModalVisible] = useState(false);
     const [selectedPost, setSelectedPost] = useState(null);
     const [isDropdownOpen, setDropdownOpen] = useState(false);
-    const { appState } = useAppContext();
+    const { appState, theme } = useAppContext();
     const { user } = appState;
     const navigate = useNavigate();
 
@@ -118,70 +119,9 @@ const Blog = () => {
     };
 
     return (
-        <div className="blog-page-container">
-            {/* Navbar */}
-            <nav className="bg-white/30 backdrop-blur-lg shadow-lg py-4 px-8 flex justify-between items-center sticky top-0 z-50 rounded-b-2xl">
-                <Link
-                    to="/"
-                    className="text-2xl font-extrabold bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 bg-clip-text text-transparent tracking-tight"
-                >
-                    StudyBuddy
-                </Link>
-
-                <div className="hidden md:flex gap-8 font-medium">
-                    <Link
-                        to="/dashboard"
-                        className="hover:text-pink-500 transition-colors duration-300"
-                    >
-                        Dashboard
-                    </Link>
-                    <Link to="/videos" className="hover:text-pink-500 transition-colors duration-300">Video Tracker</Link>
-                    <Link to="/analytics" className="hover:text-pink-500 transition-colors duration-300">Analytics</Link>
-                    <Link to="/assignments" className="hover:text-pink-500 transition-colors duration-300">Assignments</Link>
-                </div>
-
-                {/* Conditional Navbar with Logout Dropdown */}
-                {user ? (
-                    <div className="relative">
-                        {/* Clickable profile icon to toggle dropdown */}
-                        <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-                            <img
-                                src={user.profileImage || profileIcon}
-                                alt="Profile"
-                                className="w-10 h-10 rounded-full border-2 border-indigo-700"
-                            />
-                            <span className="font-semibold text-gray-900">{user.name}</span>
-                        </button>
-
-                        {/* Dropdown Menu */}
-                        {isDropdownOpen && (
-                            <div className="absolute right-0 mt-2 py-2 w-48 bg-white rounded-lg shadow-xl z-50">
-                                <button
-                                    onClick={handleLogout}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100"
-                                >
-                                    Logout
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <div className="flex gap-3">
-                        <Link
-                            to="/login"
-                            className="px-4 py-2 border border-indigo-700 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all duration-300"
-                        >
-                            Login
-                        </Link>
-                        <Link
-                            to="/register"
-                            className="px-4 py-2 bg-gradient-to-r from-indigo-700 to-pink-600 text-white rounded-lg shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-                        >
-                            Sign Up
-                        </Link>
-                    </div>
-                )}
-            </nav>
+        <div className={`blog-page-container min-h-screen relative z-10 transition-colors duration-500 ${theme === 'dark' ? 'dark-theme text-white' : 'light-theme text-slate-800'}`}>
+            {/* Unified Navbar with ThemeToggle */}
+            <Navbar />
 
             <main className="container">
                 <div className="add-blog-section">
@@ -234,8 +174,8 @@ const Blog = () => {
                 /* The entire CSS block from your file */
                 .blog-page-container {
                     font-family: 'Poppins', sans-serif;
-                    background: linear-gradient(135deg, #e6e0f0, #f0f3f8);
-                    color: #333;
+                    background: transparent;
+                    color: inherit;
                     line-height: 1.6;
                     overflow-x: hidden;
                     min-height: 100vh;
@@ -243,8 +183,64 @@ const Blog = () => {
                 :root {
                     --btn-gradient: linear-gradient(to right, #4338ca, #db2777);
                     --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-                    --heading-color: #6B57E0;
-                    --card-bg: #fff;
+                    --heading-color: #8b5cf6;
+                    --card-bg: #fdfbf7;
+                }
+                .light-theme .blog-card {
+                    background: #fdfbf7 !important;
+                    backdrop-filter: blur(24px) !important;
+                    -webkit-backdrop-filter: blur(24px) !important;
+                    border: 1px solid #eee8de !important;
+                    box-shadow: 0 10px 35px rgba(0,0,0,0.04) !important;
+                    border-radius: 20px !important;
+                    color: #1e293b !important;
+                }
+                .light-theme .blog-full-content {
+                    background: #fdfbf7 !important;
+                    border: 1px solid #eee8de !important;
+                    color: #1e293b !important;
+                }
+                .light-theme .premium-modal {
+                    background: #fdfbf7 !important;
+                    border: 1px solid #eee8de !important;
+                    color: #1e293b !important;
+                }
+                .light-theme .blog-header .user-name {
+                    color: #0f172a !important;
+                }
+                .light-theme .blog-content p {
+                    color: #475569 !important;
+                }
+                .dark-theme .blog-card {
+                    background: rgba(15, 23, 42, 0.82) !important;
+                    backdrop-filter: blur(24px) !important;
+                    -webkit-backdrop-filter: blur(24px) !important;
+                    border: 1px solid rgba(168, 85, 247, 0.25) !important;
+                    box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
+                    border-radius: 20px !important;
+                    color: #f8fafc !important;
+                }
+                .dark-theme .blog-header .user-name {
+                    color: #f1f5f9 !important;
+                }
+                .dark-theme .blog-content h3 {
+                    color: #d8b4fe !important;
+                }
+                .dark-theme .blog-content p {
+                    color: #cbd5e1 !important;
+                }
+                .dark-theme .blog-full-view {
+                    background: rgba(0, 0, 0, 0.75) !important;
+                }
+                .dark-theme .blog-full-content {
+                    background: rgba(15, 23, 42, 0.95) !important;
+                    border: 1px solid rgba(168, 85, 247, 0.3) !important;
+                    color: #fff !important;
+                }
+                .dark-theme .premium-modal {
+                    background: rgba(15, 23, 42, 0.95) !important;
+                    border: 1px solid rgba(168, 85, 247, 0.3) !important;
+                    color: #fff !important;
                 }
                 .container {
                     max-width: 1200px;

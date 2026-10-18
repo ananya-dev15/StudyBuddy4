@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
-import UserProfileModal from "../components/UserProfileModal";
+import Navbar from "../components/Navbar";
 import {
   LineChart,
   Line,
@@ -32,7 +32,7 @@ const MONTHS = [
 ];
 
 const Dashboard = () => {
-  const { appState } = useAppContext();
+  const { appState, theme } = useAppContext();
   const storedUser = JSON.parse(localStorage.getItem("user")) || null;
   const [user, setUser] = useState(appState?.user || storedUser);
   const { coins = 0, streak = 0, history = [], videosWatched = 0, videosSwitched = 0 } =
@@ -170,85 +170,9 @@ const Dashboard = () => {
   const days = allDays;
 
   return (
-    <div
-      className="min-h-screen font-sans"
-      style={{
-        background: "linear-gradient(180deg, #E9E3FF 0%, #F7E9FF 100%)",
-      }}
-    >
-      {/* Navbar */}
-      <nav className="bg-white/30 backdrop-blur-lg shadow-lg py-4 px-8 flex justify-between items-center sticky top-0 z-50 rounded-b-2xl">
-        <Link
-          to="/"
-          className="text-2xl font-extrabold bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 bg-clip-text text-transparent tracking-tight"
-        >
-          StudyBuddy
-        </Link>
-
-        <div className="hidden md:flex gap-8 font-medium">
-          <Link
-            to="/dashboard"
-            className="hover:text-pink-500 transition-colors duration-300"
-          >
-            Dashboard
-          </Link>
-          <Link to="/videos" className="hover:text-pink-500 transition-colors duration-300">Video Tracker</Link>
-          <Link to="/analytics" className="hover:text-pink-500 transition-colors duration-300">Analytics</Link>
-          <Link to="/assignments" className="hover:text-pink-500 transition-colors duration-300">Assignments</Link>
-        </div>
-
-        {/* Conditional Navbar with Logout Dropdown */}
-        {user ? (
-          <div className="relative">
-            {/* Clickable profile icon to toggle dropdown */}
-            <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-              <img
-                src={user.profileImage || profileIcon}
-                alt="Profile"
-                className="w-10 h-10 rounded-full border-2 border-indigo-700"
-              />
-              <span className="font-semibold text-gray-900">{user.name}</span>
-            </button>
-
-            {/* Dropdown Menu */}
-            {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-52 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    setIsProfileModalOpen(true);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 font-semibold flex items-center gap-2 transition-colors"
-                >
-                  👤 View Profile
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 font-bold hover:bg-red-50 flex items-center gap-2 transition-colors"
-                >
-                  🚪 Logout
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 border border-indigo-700 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all duration-300"
-            >
-              Login
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2 bg-gradient-to-r from-indigo-700 to-pink-600 text-white rounded-lg shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-            >
-              Sign Up
-            </Link>
-          </div>
-        )}
-      </nav>
+    <div className={`min-h-screen font-sans relative z-10 transition-colors duration-500 ${theme === "dark" ? "text-white" : "text-slate-800"}`}>
+      {/* Unified Navbar with Permanent ThemeToggle */}
+      <Navbar />
 
       {/* Main Content */}
       <div className="px-6 md:px-10 py-10">
@@ -260,15 +184,19 @@ const Dashboard = () => {
 
         {/* Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-10">
-          <StatCard title="Coins" value={coins} icon="🪙" />
-          <StatCard title="Videos Watched" value={videosWatched} icon="🎬" />
-          <StatCard title="Tab Switches" value={videosSwitched} icon="🔁" />
-          <StatCard title="Streak" value={`${streak} days`} icon="🔥" />
+          <StatCard title="Coins" value={coins} icon="🪙" theme={theme} />
+          <StatCard title="Videos Watched" value={videosWatched} icon="🎬" theme={theme} />
+          <StatCard title="Tab Switches" value={videosSwitched} icon="🔁" theme={theme} />
+          <StatCard title="Streak" value={`${streak} days`} icon="🔥" theme={theme} />
         </div>
 
         {/* Graph */}
-        <div className="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-lg mb-8">
-          <h2 className="text-lg font-semibold mb-3 text-gray-700">
+        <div className={`p-6 rounded-3xl backdrop-blur-2xl shadow-xl mb-8 border transition-all duration-300 ${
+          theme === "dark"
+            ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          <h2 className={`text-lg font-bold mb-3 ${theme === "dark" ? "text-purple-300" : "text-slate-900"}`}>
             Study Progress (Last 30 Days)
           </h2>
 
@@ -346,9 +274,13 @@ const Dashboard = () => {
         </div>
 
         {/* Calendar */}
-        <div className="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-lg mb-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-            <h2 className="text-lg font-semibold text-gray-700">
+        <div className={`p-6 rounded-3xl backdrop-blur-2xl shadow-xl mb-8 border transition-all duration-300 ${
+          theme === "dark"
+            ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+            <h2 className={`text-lg font-bold ${theme === "dark" ? "text-purple-300" : "text-slate-900"}`}>
               Study Activity — {MONTHS[selectedMonth]} {selectedYear}
             </h2>
 
@@ -357,10 +289,14 @@ const Dashboard = () => {
               <select
                 value={selectedMonth}
                 onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                className="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer"
+                className={`px-3 py-1.5 rounded-xl text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer border transition-colors ${
+                  theme === "dark"
+                    ? "bg-slate-800/90 text-purple-200 border-purple-500/40"
+                    : "bg-white/90 text-slate-800 border-slate-300"
+                }`}
               >
                 {MONTHS.map((m, i) => (
-                  <option key={m} value={i}>
+                  <option key={m} value={i} className={theme === "dark" ? "bg-slate-900 text-white" : "bg-white text-slate-800"}>
                     {m}
                   </option>
                 ))}
@@ -370,7 +306,11 @@ const Dashboard = () => {
                 type="number"
                 value={selectedYear}
                 onChange={(e) => setSelectedYear(Number(e.target.value))}
-                className="w-20 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-700 font-medium shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                className={`w-20 px-3 py-1.5 rounded-xl text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 border transition-colors ${
+                  theme === "dark"
+                    ? "bg-slate-800/90 text-purple-200 border-purple-500/40"
+                    : "bg-white/90 text-slate-800 border-slate-300"
+                }`}
               />
             </div>
           </div>
@@ -385,11 +325,11 @@ const Dashboard = () => {
               const totalMins = totalSeconds / 60;
               const totalHours = totalMins / 60;
 
-              let bgClass = "bg-gray-200 text-gray-600";
-              if (totalHours >= 9) bgClass = "bg-green-500 text-white";
-              else if (totalHours >= 5) bgClass = "bg-yellow-400 text-gray-800";
-              else if (totalHours >= 2) bgClass = "bg-orange-400 text-white";
-              else if (totalMins >= 1) bgClass = "bg-red-500 text-white";
+              let bgClass = theme === "dark" ? "bg-slate-800/60 text-slate-400 border border-white/5" : "bg-slate-100 text-slate-500 border border-slate-200/50";
+              if (totalHours >= 9) bgClass = "bg-green-500 text-white font-bold shadow-md shadow-green-500/30";
+              else if (totalHours >= 5) bgClass = "bg-yellow-400 text-slate-900 font-bold shadow-md shadow-yellow-400/30";
+              else if (totalHours >= 2) bgClass = "bg-orange-500 text-white font-bold shadow-md shadow-orange-500/30";
+              else if (totalMins >= 1) bgClass = "bg-rose-500 text-white font-bold shadow-md shadow-rose-500/30";
 
               const hrs = Math.floor(totalHours);
               const mins = Math.floor(totalMins % 60);
@@ -399,94 +339,109 @@ const Dashboard = () => {
               return (
                 <div
                   key={i}
-                  className={`p-2 rounded-lg text-sm font-medium cursor-pointer transition-transform hover:scale-105 ${bgClass}`}
+                  className={`p-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-transform hover:scale-105 ${bgClass}`}
                   title={`${timeLabel || "No activity"} on ${format(day, "MMM d")}`}
                 >
                   <div>{format(day, "d")}</div>
                   {timeLabel && (
-                    <div className="text-[10px] opacity-80">{timeLabel}</div>
+                    <div className="text-[10px] opacity-90 mt-0.5">{timeLabel}</div>
                   )}
                 </div>
               );
             })}
           </div>
 
-          <div className="flex justify-around mt-6 text-sm text-gray-600 flex-wrap gap-2">
-            <Legend color="bg-red-500" text="0–2 hrs" />
-            <Legend color="bg-orange-400" text="2–5 hrs" />
+          <div className={`flex justify-around mt-6 text-sm font-medium flex-wrap gap-2 ${theme === "dark" ? "text-slate-300" : "text-slate-600"}`}>
+            <Legend color="bg-rose-500" text="0–2 hrs" />
+            <Legend color="bg-orange-500" text="2–5 hrs" />
             <Legend color="bg-yellow-400" text="5–9 hrs" />
             <Legend color="bg-green-500" text="9+ hrs" />
           </div>
         </div>
 
         {/* Last Sessions */}
-        <div className="bg-white/80 backdrop-blur-md p-6 rounded-2xl shadow-lg">
-          <h2 className="text-lg font-semibold mb-4 text-gray-700">
+        <div className={`p-6 rounded-3xl backdrop-blur-2xl shadow-xl border transition-all duration-300 ${
+          theme === "dark"
+            ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          <h2 className={`text-lg font-bold mb-4 ${theme === "dark" ? "text-purple-300" : "text-slate-900"}`}>
             🎬 Last 5 Study Sessions
           </h2>
           {(history || []).length === 0 ? (
-            <p className="text-gray-500">No recent study sessions found.</p>
+            <p className={theme === "dark" ? "text-slate-400" : "text-slate-500"}>No recent study sessions found.</p>
           ) : (
             (history || []).map((h, i) => (
               <div
                 key={i}
-                className="bg-gradient-to-r from-purple-100 to-pink-100 p-4 mb-3 rounded-xl border border-purple-200 shadow-sm"
+                className={`p-4 mb-3 rounded-2xl border transition-all ${
+                  theme === "dark"
+                    ? "bg-slate-800/60 border-purple-500/20 text-slate-200 hover:border-purple-500/40"
+                    : "bg-white/70 border-purple-200/70 text-slate-700 shadow-sm hover:bg-white/90"
+                }`}
               >
                 <p>
-                  <b>Video:</b>{" "}
-                  <a
-                    href={h.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-purple-600 underline"
-                  >
-                    {h.videoId}
-                  </a>
+                  <b className={theme === "dark" ? "text-purple-300" : "text-purple-700"}>Video:</b>{" "}
+                  {h.url && h.url.startsWith("http") ? (
+                    <a
+                      href={h.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-purple-500 hover:text-purple-400 underline font-medium"
+                    >
+                      {h.videoTitle || h.videoId}
+                    </a>
+                  ) : (
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      📁 {h.videoTitle || h.videoId || "Local Video"} <span className="text-xs opacity-75 font-normal">(System Video)</span>
+                    </span>
+                  )}
                 </p>
                 <p>
-                  <b>Watched:</b>{" "}
-                  {h.secondsWatched >= 60
-                    ? `${Math.floor(h.secondsWatched / 60)}m ${h.secondsWatched % 60
-                    }s`
-                    : `${h.secondsWatched}s`}
+                  <b className={theme === "dark" ? "text-purple-300" : "text-purple-700"}>Watched:</b>{" "}
+                  {(h.secondsWatched ?? h.seconds ?? 0) >= 60
+                    ? `${Math.floor((h.secondsWatched ?? h.seconds ?? 0) / 60)}m ${(h.secondsWatched ?? h.seconds ?? 0) % 60}s`
+                    : `${h.secondsWatched ?? h.seconds ?? 0}s`}
                 </p>
                 <p>
-                  <b>Tab Switches:</b> {h.tabSwitches}
+                  <b className={theme === "dark" ? "text-purple-300" : "text-purple-700"}>Tab Switches:</b> {h.tabSwitches || 0}
                 </p>
                 <p>
-                  <b>Date:</b>{" "}
-                  {new Date(h.watchedAt).toLocaleDateString("en-IN")}
+                  <b className={theme === "dark" ? "text-purple-300" : "text-purple-700"}>Date:</b>{" "}
+                  {h.watchedAt
+                    ? typeof h.watchedAt === "string" && h.watchedAt.includes("T")
+                      ? new Date(h.watchedAt).toLocaleDateString("en-IN")
+                      : typeof h.watchedAt === "string"
+                      ? h.watchedAt
+                      : new Date(h.watchedAt).toLocaleDateString("en-IN")
+                    : "Today"}
                 </p>
               </div>
             ))
           )}
         </div>
       </div>
-
-      {/* User Profile Modal */}
-      <UserProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        user={user}
-        onUpdateUser={(updated) => setUser(updated)}
-      />
     </div>
   );
 };
 
 // Stat card
-const StatCard = ({ title, value, icon }) => (
-  <div className="bg-white/90 backdrop-blur-md rounded-2xl p-5 text-center shadow-lg hover:scale-[1.03] transition-transform duration-200">
+const StatCard = ({ title, value, icon, theme }) => (
+  <div className={`rounded-3xl p-5 text-center transition-all duration-300 hover:scale-[1.03] backdrop-blur-2xl border ${
+    theme === "dark"
+      ? "bg-slate-900/80 border-purple-500/20 text-white shadow-xl hover:border-purple-500/40"
+      : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_30px_rgba(0,0,0,0.04)] hover:border-[#dfd7ca] text-slate-800"
+  }`}>
     <div className="text-3xl mb-2">{icon}</div>
-    <h3 className="text-gray-500 text-sm font-medium">{title}</h3>
-    <p className="text-2xl font-bold text-gray-800">{value}</p>
+    <h3 className={`text-xs md:text-sm font-semibold tracking-wide uppercase ${theme === "dark" ? "text-purple-300/80" : "text-slate-500"}`}>{title}</h3>
+    <p className={`text-2xl font-black mt-1 ${theme === "dark" ? "text-white" : "text-slate-900"}`}>{value}</p>
   </div>
 );
 
 // Legend item
 const Legend = ({ color, text }) => (
-  <div className="flex items-center gap-1">
-    <div className={`w-4 h-4 rounded ${color}`}></div> <span>{text}</span>
+  <div className="flex items-center gap-1.5">
+    <div className={`w-3.5 h-3.5 rounded-full ${color} shadow-sm`}></div> <span>{text}</span>
   </div>
 );
 

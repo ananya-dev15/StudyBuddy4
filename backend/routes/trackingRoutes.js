@@ -55,7 +55,7 @@ router.post("/videos-watched", protect, async (req, res) => {
 // Reduce coins when user switches tab
 router.post("/coins-loss", protect, async (req, res) => {
   try {
-    const { loss = 1 } = req.body;
+    const { loss = 5 } = req.body;
     const user = await User.findById(req.user._id);
 
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -150,7 +150,7 @@ router.get("/coins/:id", async (req, res) => {
 
 router.post("/add-history", protect, async (req, res) => {
   try {
-    const { videoId, url, secondsWatched, tabSwitches, note, tag } = req.body;
+    const { videoId, url, secondsWatched, tabSwitches, note, tag, videoTitle, isStudyVideo, duration, studyScore } = req.body;
     const user = await User.findById(req.user._id);
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -168,6 +168,15 @@ router.post("/add-history", protect, async (req, res) => {
 
     const targetId = cleanId(videoId || url);
     const todayStr = getLocalDateString();
+
+    const isYt = /^[0-9A-Za-z_-]{11}$/.test(targetId) && !targetId.includes(".");
+    const resolvedUrl = (url && url.startsWith("http"))
+      ? url
+      : isYt
+        ? `https://youtu.be/${targetId}`
+        : (url || targetId || "Local Video");
+
+    const resolvedTitle = videoTitle || (isYt ? targetId : (targetId || "Local Video"));
 
     // Fetch persistent note/tag if available
     const persistentNote = (user.notes && user.notes[targetId]) || (user.notes && user.notes[videoId]) || note || "";
@@ -195,8 +204,14 @@ router.post("/add-history", protect, async (req, res) => {
       existing.secondsWatched = (existing.secondsWatched || 0) + Math.round(secondsWatched);
       existing.tabSwitches = (existing.tabSwitches || 0) + (tabSwitches || 0);
       existing.watchedAt = todayStr;
+      if (resolvedTitle) existing.videoTitle = resolvedTitle;
+      if (resolvedUrl && (!existing.url || existing.url === "Local Video" || existing.url === "Local File")) {
+        existing.url = resolvedUrl;
+      }
       if (persistentNote) existing.note = persistentNote;
       if (persistentTag) existing.tag = persistentTag;
+      if (duration && !existing.duration) existing.duration = duration;
+      if (studyScore && !existing.studyScore) existing.studyScore = studyScore;
 
       // Move updated entry to top
       user.history.splice(existingIndex, 1);
@@ -204,12 +219,16 @@ router.post("/add-history", protect, async (req, res) => {
     } else {
       const newEntry = {
         videoId: targetId,
-        url: url || `https://youtu.be/${targetId}`,
+        videoTitle: resolvedTitle,
+        url: resolvedUrl,
         secondsWatched: Math.round(secondsWatched),
         tabSwitches: tabSwitches || 0,
         watchedAt: todayStr,
         note: persistentNote,
         tag: persistentTag,
+        duration: duration || 0,
+        studyScore: studyScore || 0,
+        isStudyVideo: isStudyVideo !== undefined ? isStudyVideo : true,
       };
       user.history.unshift(newEntry);
     }

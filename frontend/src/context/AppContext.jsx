@@ -5,15 +5,21 @@ import API_BASE from "../services/apiBase";
 export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
-  const [appState, setAppState] = useState({
-    user: JSON.parse(localStorage.getItem("user")) || null,
-    coins: 0,
-    streak: 0,
-    history: [],
-    notes: JSON.parse(localStorage.getItem("userNotes")) || {},
-    tags: JSON.parse(localStorage.getItem("userTags")) || {},
-    videosWatched: 0,   // ✅ new
-    videosSwitched: 0,  // ✅ new
+  const [appState, setAppState] = useState(() => {
+    const user = JSON.parse(localStorage.getItem("user")) || null;
+    const cachedCoins = user?.coins !== undefined && user?.coins !== null
+      ? Number(user.coins)
+      : (localStorage.getItem("coins") !== null ? Number(localStorage.getItem("coins")) : 150);
+    return {
+      user,
+      coins: cachedCoins,
+      streak: Number(user?.streak ?? localStorage.getItem("streak") ?? 0),
+      history: [],
+      notes: JSON.parse(localStorage.getItem("userNotes")) || {},
+      tags: JSON.parse(localStorage.getItem("userTags")) || {},
+      videosWatched: 0,
+      videosSwitched: 0,
+    };
   });
   const userId = appState.user?.id || appState.user?._id;
 
@@ -56,6 +62,24 @@ export const AppProvider = ({ children }) => {
     return highlighted;
   });
   const [activeToast, setActiveToast] = useState(null);
+
+  // --- Theme State (Light / Dark) ---
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem("studybuddy_theme") || "dark";
+  });
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
+
+  useEffect(() => {
+    localStorage.setItem("studybuddy_theme", theme);
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+  }, [theme]);
 
   // --- Global Chatbot State ---
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -680,6 +704,9 @@ export const AppProvider = ({ children }) => {
         stopVoiceRecognition,
         toggleVoiceRecognition,
         speakText,
+        theme,
+        setTheme,
+        toggleTheme,
       }}
     >
       {activeToast && (

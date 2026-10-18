@@ -1,20 +1,25 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useAppContext } from "../context/AppContext";
-// import { FaceMesh } from "@mediapipe/face_mesh";
-// import { Camera } from "@mediapipe/camera_utils";
+import Navbar from "./Navbar";
 import { io } from "socket.io-client";
 import { jsPDF } from "jspdf";
 import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
+import studyBannerBg from '../assets/study_banner_bg.jpg';
+import streakCardBg from '../assets/streak_card_bg.jpg';
 import AuthModal from "./AuthModal";
 import UserProfileModal from "./UserProfileModal";
 import API_BASE, { STREAMLIT_URL, DETECTOR_URL } from "../services/apiBase";
+import { BrowserDetector } from "../services/browserDetector";
 
 
 
 
 
 import {
+  AreaChart,
+  Area,
+  Line,
   BarChart,
   Bar,
   XAxis,
@@ -212,7 +217,11 @@ export default function VideoTracker() {
     stopSpeakingText,
     setActiveVideoContext,
     processVoiceQuestion,
+    theme,
   } = useAppContext();
+
+  const styles = getThemeStyles(theme);
+  const isDark = theme === "dark";
 
   // --- UTILITY FUNCTIONS ---
   const updateBackendCoins = async (loss) => {
@@ -345,10 +354,40 @@ export default function VideoTracker() {
   const [selectedNote, setSelectedNote] = useState("");
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [showWatchHistoryModal, setShowWatchHistoryModal] = useState(false);
+  const [openMenuCardId, setOpenMenuCardId] = useState(null);
+  const videoSliderRef = useRef(null);
   const [selectedVideoForLogs, setSelectedVideoForLogs] = useState(null);
   const [showTimerPopup, setShowTimerPopup] = useState(false);
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [focusRemaining, setFocusRemaining] = useState(null);
+
+  const focusRemainingRef = useRef(focusRemaining);
+  useEffect(() => {
+    focusRemainingRef.current = focusRemaining;
+  }, [focusRemaining]);
+
+  const sessionPlayedSecondsRef = useRef(sessionPlayedSeconds);
+  useEffect(() => {
+    sessionPlayedSecondsRef.current = sessionPlayedSeconds;
+  }, [sessionPlayedSeconds]);
+
+  const noteTextRef = useRef(noteText);
+  useEffect(() => {
+    noteTextRef.current = noteText;
+  }, [noteText]);
+
+  const tagTextRef = useRef(tagText);
+  useEffect(() => {
+    tagTextRef.current = tagText;
+  }, [tagText]);
+
+  const tabSwitchesRef = useRef(tabSwitches);
+  useEffect(() => {
+    tabSwitchesRef.current = tabSwitches;
+  }, [tabSwitches]);
+
+  const handleStopSaveRef = useRef(null);
+
   const [isPlayerMaximized, setIsPlayerMaximized] = useState(false);
   const [isFocusTimerPopupMaximized, setIsFocusTimerPopupMaximized] = useState(false);
   const [youtubePlayerInstance, setYoutubePlayerInstance] = useState(null);
@@ -395,6 +434,17 @@ export default function VideoTracker() {
   const [coinsLoaded, setCoinsLoaded] = useState(false);
   const [resumePosition, setResumePosition] = useState(0);
 
+  const greetingText = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good Morning";
+    if (hour < 17) return "Good Afternoon";
+    return "Good Evening";
+  }, []);
+
+  const userName = useMemo(() => {
+    return appState.user?.name ? appState.user.name.split(" ")[0] : "Ananya";
+  }, [appState.user?.name]);
+
 
   // --- AI QUIZ STATES ---
   const [showQuizConfigModal, setShowQuizConfigModal] = useState(false);
@@ -416,12 +466,10 @@ export default function VideoTracker() {
   const [isFocusTimerPending, setIsFocusTimerPending] = useState(false);
   const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
 
-  // --- CAMERA / DETECTOR INTEGRATION ---
+  // --- ON-DEVICE BROWSER CAMERA / DETECTOR INTEGRATION ---
   const [showCameraAnalysis, setShowCameraAnalysis] = useState(false);
-  const [cameraAnalysisResult, setCameraAnalysisResult] = useState(""); // JSON string from backend
   const [cameraError, setCameraError] = useState(null);
   const [isCameraLoading, setIsCameraLoading] = useState(false);
-  const [annotatedFrame, setAnnotatedFrame] = useState(null);
   const [detectorStats, setDetectorStats] = useState(null);
 
   // refs
@@ -430,13 +478,13 @@ export default function VideoTracker() {
   const pollRef = useRef(null);
   const lastSampleRef = useRef(0);
   const playerRef = useRef(null);
+  const noteTextareaRef = useRef(null);
 
   // REFS FOR CAMERA MONITORING
   const cameraVideoRef = useRef(null);
   const cameraCanvasRef = useRef(null);
   const cameraStreamRef = useRef(null);
-  const frameIntervalRef = useRef(null);
-  const isProcessingFrameRef = useRef(false);
+  const browserDetectorRef = useRef(null);
   const isCameraActiveRef = useRef(false);
   const socketRef = useRef(null);
   // refs for swipe/trackpad navigation
@@ -446,19 +494,57 @@ export default function VideoTracker() {
   const resumeIntervalRef = useRef(null);
   const lastProgressSaveRef = useRef(0);
   const hasResumedRef = useRef(false);
+  const isVideoEndingRef = useRef(false);
+
+  // Initialize BrowserDetector instance on mount and pre-warm models
+  useEffect(() => {
+    const detector = new BrowserDetector({
+      onStatsUpdate: (stats) => {
+        setDetectorStats(stats);
+      },
+      onError: (err) => {
+        setCameraError(err);
+      },
+      onStatusChange: (statusMsg) => {
+        console.log("Browser AI Status:", statusMsg);
+      },
+    });
+    browserDetectorRef.current = detector;
+
+    // Silently pre-warm AI models in background for near 0s startup latency
+    detector.loadModels().catch((e) => console.log("Background pre-warm note:", e));
+
+    const handleKeyDown = (e) => {
+      if (e.key === "s" || e.key === "S") {
+        if (browserDetectorRef.current) {
+          const enabled = browserDetectorRef.current.toggleSound();
+          console.log(`Alert sound: ${enabled ? "ON" : "OFF"}`);
+        }
+      } else if (e.key === "r" || e.key === "R") {
+        if (browserDetectorRef.current) {
+          browserDetectorRef.current.resetScore();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      detector.stop();
+    };
+  }, []);
 
   // Camera monitoring cleanup
   const stopCameraMonitoring = useCallback(() => {
     isCameraActiveRef.current = false;
-    if (frameIntervalRef.current) {
-      clearTimeout(frameIntervalRef.current);
-      frameIntervalRef.current = null;
+    if (browserDetectorRef.current) {
+      browserDetectorRef.current.stop();
     }
     if (cameraStreamRef.current) {
       cameraStreamRef.current.getTracks().forEach((track) => {
         try {
           track.stop();
-        } catch (e) {}
+        } catch (e) { }
       });
       cameraStreamRef.current = null;
     }
@@ -467,100 +553,9 @@ export default function VideoTracker() {
     }
     setShowCameraAnalysis(false);
     setIsCameraLoading(false);
-    setAnnotatedFrame(null);
   }, []);
 
-  // Send single frame to Python detector service
-  const sendCurrentFrameToDetector = useCallback(async () => {
-    if (isProcessingFrameRef.current) return;
-    const video = cameraVideoRef.current;
-    const canvas = cameraCanvasRef.current;
-    if (!video || !canvas || video.readyState < 2) return;
-
-    try {
-      isProcessingFrameRef.current = true;
-      const ctx = canvas.getContext("2d");
-      const targetWidth = 480;
-      const targetHeight = Math.round((video.videoHeight / (video.videoWidth || 1)) * targetWidth) || 360;
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-      const token = localStorage.getItem("token");
-      const headers = { "Content-Type": "application/json" };
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-      const res = await fetch(`${DETECTOR_URL}/process_frame`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ image: dataUrl }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => null);
-        const errMsg = errorData?.error || `Server responded with ${res.status}`;
-        console.warn(`Detector error (${res.status}):`, errMsg);
-
-        if (res.status === 401) {
-          setCameraError("Detector authentication failed. Please make sure you are logged in.");
-        } else if (res.status === 502 || res.status === 503) {
-          setCameraError("Detector service on Render is waking up. Please wait a moment...");
-        } else if (res.status === 404) {
-          setCameraError(`Detector endpoint not found at ${DETECTOR_URL}. Please check VITE_DETECTOR_URL.`);
-        }
-        return;
-      }
-
-      const result = await res.json();
-      if (result.success) {
-        setCameraError(null);
-        setDetectorStats({
-          status: result.status,
-          gaze_status: result.gaze_status,
-          faces_detected: result.faces_detected,
-          phone_detected: result.phone_detected,
-          focus_score: result.focus_score,
-        });
-
-        if (result.annotated_image) {
-          setAnnotatedFrame(result.annotated_image);
-        }
-
-        // Voice Alert: Play exact alert phrase if server flagged alert
-        if (result.alert && "speechSynthesis" in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance("Stay Focused");
-          utterance.rate = 1.0;
-          utterance.pitch = 1.0;
-          window.speechSynthesis.speak(utterance);
-        }
-      }
-    } catch (err) {
-      console.warn("Detector frame error:", err);
-      if (err.name === "AbortError") {
-        console.warn("Detector frame request timed out");
-      } else if (err.name === "TypeError" && err.message.includes("Failed to fetch")) {
-        setCameraError(`Cannot connect to detector at ${DETECTOR_URL}. The service may be waking up on Render.`);
-      }
-    } finally {
-      isProcessingFrameRef.current = false;
-      // Schedule next frame with 2-second interval, only if still active
-      if (isCameraActiveRef.current) {
-        if (frameIntervalRef.current) clearTimeout(frameIntervalRef.current);
-        frameIntervalRef.current = setTimeout(sendCurrentFrameToDetector, 2000);
-      }
-    }
-  }, []);
-
-  // Request browser camera and begin frame capture
+  // Request browser camera and begin on-device AI inference
   const startCameraMonitoring = async () => {
     setCameraError(null);
     setIsCameraLoading(true);
@@ -588,12 +583,13 @@ export default function VideoTracker() {
 
       if (cameraVideoRef.current) {
         cameraVideoRef.current.srcObject = stream;
-        await cameraVideoRef.current.play().catch(() => {});
+        await cameraVideoRef.current.play().catch(() => { });
       }
 
-      // Schedule first frame after short camera stabilization delay (500ms)
-      if (frameIntervalRef.current) clearTimeout(frameIntervalRef.current);
-      frameIntervalRef.current = setTimeout(sendCurrentFrameToDetector, 500);
+      // Start on-device browser AI inference engine
+      if (browserDetectorRef.current && cameraVideoRef.current && cameraCanvasRef.current) {
+        browserDetectorRef.current.start(cameraVideoRef.current, cameraCanvasRef.current);
+      }
     } catch (err) {
       console.error("Camera permission error:", err);
       setIsCameraLoading(false);
@@ -619,12 +615,15 @@ export default function VideoTracker() {
     }
   };
 
-  // Ensure video element receives stream once rendered
+  // Ensure video element receives stream once rendered & detector starts
   useEffect(() => {
     if (showCameraAnalysis && cameraStreamRef.current && cameraVideoRef.current) {
       if (cameraVideoRef.current.srcObject !== cameraStreamRef.current) {
         cameraVideoRef.current.srcObject = cameraStreamRef.current;
-        cameraVideoRef.current.play().catch(() => {});
+        cameraVideoRef.current.play().catch(() => { });
+      }
+      if (browserDetectorRef.current && !browserDetectorRef.current.isRunning && cameraCanvasRef.current) {
+        browserDetectorRef.current.start(cameraVideoRef.current, cameraCanvasRef.current);
       }
     }
   }, [showCameraAnalysis]);
@@ -683,7 +682,24 @@ export default function VideoTracker() {
     let alertCooldown = 5000; // 5 sec cooldown to avoid rapid spam
 
     const detectSplitScreen = async () => {
-      if (!isPlaying) return;
+      // Split screen check ONLY applies when focus timer is actively running with video playing
+      const isLocalActive = Boolean(
+        localVideoRef.current &&
+        !localVideoRef.current.paused &&
+        !localVideoRef.current.ended &&
+        localVideoRef.current.readyState >= 2
+      );
+      const isYtActive = Boolean(
+        youtubePlayerRef.current?.getPlayerState &&
+        youtubePlayerRef.current.getPlayerState() === 1
+      );
+      const isVideoPlaying = isLocalActive || isYtActive || isPlaying;
+      const isFocusTimerRunning = Boolean(
+        focusRemainingRef.current !== null &&
+        focusRemainingRef.current > 0 &&
+        isVideoPlaying
+      );
+      if (!isFocusTimerRunning) return;
 
       const screenWidth = window.screen.width;
       const windowWidth = window.innerWidth;
@@ -699,17 +715,15 @@ export default function VideoTracker() {
 
           // 💰 Deduct 5 coins penalty
           const deducted = 5;
+          setAppState((prev) => {
+            const newCoins = Math.max((prev.coins || 0) - deducted, 0);
+            if (newCoins <= 0) setShowZeroCoinsPopup(true);
+            return { ...prev, coins: newCoins };
+          });
+          setTabSwitches((prev) => prev + 1);
+
           try {
             await updateBackendCoins(deducted);
-
-            setAppState((prev) => {
-              const newCoins = Math.max((prev.coins || 0) - deducted, 0);
-              if (newCoins <= 0) setShowZeroCoinsPopup(true);
-              return { ...prev, coins: newCoins };
-            });
-
-            await updateVideosSwitched(userId);
-            setTabSwitches((prev) => prev + 1);
             console.log("📊 Split screen detected: -5 coins deducted!");
           } catch (e) {
             console.error("❌ Split screen coin deduction failed:", e);
@@ -730,11 +744,9 @@ export default function VideoTracker() {
     };
 
     window.addEventListener("resize", detectSplitScreen);
-    document.addEventListener("visibilitychange", detectSplitScreen);
 
     return () => {
       window.removeEventListener("resize", detectSplitScreen);
-      document.removeEventListener("visibilitychange", detectSplitScreen);
     };
   }, [isPlaying, userId]);
 
@@ -859,6 +871,8 @@ export default function VideoTracker() {
         URL.revokeObjectURL(url);
         setLocalVideoObjectUrl(null);
       };
+    } else {
+      setLocalVideoObjectUrl(null);
     }
   }, [localVideoFile]);
 
@@ -867,31 +881,49 @@ export default function VideoTracker() {
     saveState(appState);
   }, [appState]);
 
-  // Focus timer countdown & session watched timer - PAUSES when video is not playing
+  // Focus timer countdown & session watched timer - checks native video playback
   useEffect(() => {
-    if (!isPlaying) return;
+    const timerInterval = setInterval(() => {
+      // Check native HTML5 video element state
+      const isLocalActive = Boolean(
+        localVideoRef.current &&
+        !localVideoRef.current.paused &&
+        !localVideoRef.current.ended &&
+        localVideoRef.current.readyState >= 2
+      );
 
-    const t = setTimeout(() => {
-      if (focusRemaining !== null) {
-        if (focusRemaining <= 1) {
-          setFocusRemaining(null);
-          setSessionPlayedSeconds((s) => s + 1);
-          alert("🎉 Focus session complete! You've earned +1 coin.");
-          setAppState((prev) => ({
-            ...prev,
-            coins: prev.coins + 1,
-          }));
-          setTimeout(() => handleStopSave(), 100);
-          return;
+      // Check YouTube player state
+      const isYtActive = Boolean(
+        youtubePlayerRef.current?.getPlayerState &&
+        youtubePlayerRef.current.getPlayerState() === 1
+      );
+
+      const active = isLocalActive || isYtActive || isPlaying;
+
+      if (!active) return;
+
+      // 1. Live Watched Time increment every second
+      setSessionPlayedSeconds((prev) => prev + 1);
+
+      // 2. Live Focus Countdown decrement every second
+      if (focusRemainingRef.current !== null && focusRemainingRef.current > 0) {
+        const nextSec = focusRemainingRef.current - 1;
+        focusRemainingRef.current = nextSec <= 0 ? null : nextSec;
+        setFocusRemaining(nextSec <= 0 ? null : nextSec);
+
+        if (nextSec <= 0) {
+          // 🎉 Focus session complete! Auto-save session, notes & tags automatically
+          setTimeout(() => {
+            if (handleStopSaveRef.current) {
+              handleStopSaveRef.current(true);
+            }
+          }, 100);
         }
-
-        setFocusRemaining((s) => s - 1);
       }
-      setSessionPlayedSeconds((s) => s + 1);
     }, 1000);
 
-    return () => clearTimeout(t);
-  }, [focusRemaining, isPlaying]);
+    return () => clearInterval(timerInterval);
+  }, [isPlaying]);
 
 
   useEffect(() => {
@@ -954,7 +986,16 @@ export default function VideoTracker() {
       // ✅ Aggregate ALL sessions by date (sum of all sessions per day)
       const dailySecs = {};
       historyArr.forEach(item => {
-        const dateKey = item.watchedAt ? (item.watchedAt.split("T")[0] || item.watchedAt) : "";
+        let dateKey = "";
+        if (item.watchedAt) {
+          if (typeof item.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(item.watchedAt.trim())) {
+            dateKey = item.watchedAt.trim();
+          } else if (typeof item.watchedAt === "string" && item.watchedAt.includes("T")) {
+            dateKey = item.watchedAt.split("T")[0];
+          } else {
+            dateKey = getLocalDateString(item.watchedAt);
+          }
+        }
         if (!dateKey) return;
         const secs = Number(item.seconds ?? item.secondsWatched ?? 0) || 0;
         dailySecs[dateKey] = (dailySecs[dateKey] || 0) + secs;
@@ -1048,10 +1089,7 @@ export default function VideoTracker() {
 
   useEffect(() => {
     const coins = Number(appState.coins);
-
-    if (!isNaN(coins) && coins <= 0) {
-      setShowZeroCoinsPopup(true);
-    } else {
+    if (!isNaN(coins) && coins > 0) {
       setShowZeroCoinsPopup(false);
     }
   }, [appState.coins]);
@@ -1067,6 +1105,7 @@ export default function VideoTracker() {
     setPlayerReady(false);
     setIsPlaying(false);
     setSessionPlayedSeconds(0);
+    setTabSwitches(0);
     setSessionViewsTaken(0);
     setEarnedThisSessionCoins(false);
     setHasPlaybackStarted(false);
@@ -1098,6 +1137,10 @@ export default function VideoTracker() {
               setPlayerReady(true);
               setYoutubePlayerInstance(p);
               lastSampleRef.current = p.getCurrentTime() || 0;
+              const dur = Math.round(p.getDuration?.() || 0);
+              if (dur > 0) {
+                setVideoMeta((prev) => (prev ? { ...prev, duration: dur } : { duration: dur }));
+              }
               // Resume from saved position if available
               if (resumePosition > 0 && !hasResumedRef.current) {
                 p.seekTo(resumePosition, true);
@@ -1109,6 +1152,10 @@ export default function VideoTracker() {
               if (state === window.YT.PlayerState.PLAYING) {
                 setIsPlaying(true);
                 startPolling();
+                const dur = Math.round(p.getDuration?.() || 0);
+                if (dur > 0) {
+                  setVideoMeta((prev) => (prev ? { ...prev, duration: dur } : { duration: dur }));
+                }
                 if (resumePosition > 0 && !hasResumedRef.current) {
                   p.seekTo(resumePosition, true);
                   hasResumedRef.current = true;
@@ -1127,9 +1174,13 @@ export default function VideoTracker() {
                   saveResumeProgress(videoId, pos);
                 }
                 if (state === window.YT.PlayerState.ENDED) {
+                  isVideoEndingRef.current = true;
                   saveResumeProgress(videoId, 0); // Reset position on completion
                   finalizeSession(true);
                   updateVideosWatched(userId);
+                  setTimeout(() => {
+                    isVideoEndingRef.current = false;
+                  }, 3000);
                 }
               }
             },
@@ -1158,10 +1209,18 @@ export default function VideoTracker() {
         stopPolling();
       };
       const onEnded = () => {
+        isVideoEndingRef.current = true;
         setIsPlaying(false);
         stopPolling();
-        finalizeSession(true);
-        updateVideosWatched(userId);
+        if (sessionPlayedSeconds >= 5) {
+          handleStopSave();
+        } else {
+          finalizeSession(true);
+          updateVideosWatched(userId);
+        }
+        setTimeout(() => {
+          isVideoEndingRef.current = false;
+        }, 3000);
       };
       const onTimeUpdate = () => {
         setCurrentTime(videoElement.currentTime);
@@ -1178,6 +1237,10 @@ export default function VideoTracker() {
       videoElement.addEventListener("timeupdate", onTimeUpdate);
       videoElement.addEventListener("loadedmetadata", onReady);
 
+      if (videoElement.readyState >= 1) {
+        onReady();
+      }
+
       return () => {
         videoElement.removeEventListener("play", onPlay);
         videoElement.removeEventListener("pause", onPause);
@@ -1189,7 +1252,7 @@ export default function VideoTracker() {
     }
 
     return () => stopPolling();
-  }, [videoId, localVideoObjectUrl, focusDuration, hasPlaybackStarted, isFocusTimerPending]);
+  }, [videoId, localVideoObjectUrl]);
 
   // ─── Resume progress save: every 60 seconds while playing ──────────
   useEffect(() => {
@@ -1448,63 +1511,86 @@ export default function VideoTracker() {
 
 
 
+  const isPlayingRef = useRef(isPlaying);
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
+
+
   useEffect(() => {
     let tabSwitchTriggered = false;
     let timeoutId = null;
     let lastSwitchTimestamp = 0;
 
     const handleVisibilityChange = async () => {
-      const now = Date.now();
+      // 1. When leaving this tab to go to another tab:
+      if (document.visibilityState === "hidden") {
+        if (isVideoEndingRef.current) return;
 
-      // ✅ Tab switch penalty when video is playing (YouTube + Local)
-      if (
-        (document.visibilityState === "hidden" || document.hasFocus() === false) &&
-        isPlaying &&
-        !tabSwitchTriggered
-      ) {
-        if (now - lastSwitchTimestamp < 800) return;
+        // Tab switch ONLY counts when focus timer is active AND actively running with video playing
+        // If video is paused, focus timer is paused, or focus timer is not active -> DO NOT count tab switch!
+        const isLocalActive = Boolean(
+          localVideoRef.current &&
+          !localVideoRef.current.paused &&
+          !localVideoRef.current.ended &&
+          localVideoRef.current.readyState >= 2
+        );
+        const isYtActive = Boolean(
+          youtubePlayerRef.current?.getPlayerState &&
+          youtubePlayerRef.current.getPlayerState() === 1
+        );
+        const isVideoPlaying = isLocalActive || isYtActive || isPlayingRef.current;
+        const isFocusTimerRunning = Boolean(
+          focusRemainingRef.current !== null &&
+          focusRemainingRef.current > 0 &&
+          isVideoPlaying
+        );
+
+        if (!isFocusTimerRunning || tabSwitchTriggered) return;
+
+        const now = Date.now();
+        if (now - lastSwitchTimestamp < 1000) return;
         lastSwitchTimestamp = now;
 
         tabSwitchTriggered = true;
 
-        const deducted = TAB_SWITCH_COST;
+        const deducted = TAB_SWITCH_COST; // 5 coins
+
+        // ✅ Optimistically deduct 5 coins once and increment tab switch counter
+        setAppState((prev) => {
+          const newCoins = Math.max((prev.coins || 0) - deducted, 0);
+          if (newCoins <= 0) setShowZeroCoinsPopup(true);
+          return { ...prev, coins: newCoins };
+        });
+
+        setTabSwitches((prev) => prev + 1);
 
         try {
           await updateBackendCoins(deducted);
-
-          setAppState((prev) => {
-            const newCoins = Math.max((prev.coins || 0) - deducted, 0);
-            if (newCoins <= 0) setShowZeroCoinsPopup(true);
-            return { ...prev, coins: newCoins };
-          });
-
-          await updateVideosSwitched(userId);
-
-          setTabSwitches((prev) => prev + 1);
-          console.log("📊 Tab switch +1 ✅");
+          console.log("📊 Tab switch +1, -5 coins ✅");
         } catch (e) {
           console.error("❌ Coin deduction failed:", e);
         }
+        return;
       }
 
-      // unlock
+      // 2. When returning to this tab:
+      // Wapas aane par kuch nahi karna, sirf flag unlock karna hai next switch ke liye
       if (document.visibilityState === "visible") {
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
           tabSwitchTriggered = false;
-        }, 600);
+        }, 500);
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("blur", handleVisibilityChange);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("blur", handleVisibilityChange);
       clearTimeout(timeoutId);
     };
-  }, [isPlaying, userId]);
+  }, [userId]);
 
 
 
@@ -1538,8 +1624,8 @@ export default function VideoTracker() {
     const currentVideoIdentifier = videoId || localVideoFile?.name;
     if (!currentVideoIdentifier) return;
 
-    // ✅ +1 reward for completing focus session
-    const reward = 1;
+    // ✅ +2 reward for completing focus session
+    const reward = 2;
 
     try {
       console.log("🎬 Finalizing session... checking penalty order");
@@ -1547,11 +1633,11 @@ export default function VideoTracker() {
       // 🕒 Small delay ensures any -5 deduction from tab switch is processed first
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      // ✅ Reward 1 coin for focus session completion
+      // ✅ Reward 2 coins for focus session completion
       if (!earnedThisSessionCoins) {
         await updateBackendCoinsGain(reward);
         setEarnedThisSessionCoins(true);
-        console.log(`🎉 Focus session complete — +${reward} coin saved!`);
+        console.log(`🎉 Focus session complete — +${reward} coins saved!`);
       }
     } catch (error) {
       console.error("❌ Error finalizing session:", error);
@@ -1593,6 +1679,21 @@ export default function VideoTracker() {
 
   const currentActiveVideoIdentifier = videoId || localVideoFile?.name;
   const isVideoLoaded = videoId || localVideoObjectUrl;
+
+  const displayTags = (() => {
+    if (tagText?.trim()) return [tagText.trim()];
+    if (appState.tags?.[currentActiveVideoIdentifier]) return [appState.tags[currentActiveVideoIdentifier]];
+    if (videoMeta?.tags && Array.isArray(videoMeta.tags) && videoMeta.tags.length > 0) return videoMeta.tags.slice(0, 3);
+    const title = (videoMeta?.title || localVideoFile?.name || "").toLowerCase();
+    const tags = [];
+    if (title.includes("graph") || title.includes("math") || title.includes("discrete")) tags.push("Discrete Maths");
+    if (title.includes("gate") || title.includes("exam") || title.includes("cse")) tags.push("GATE 2024");
+    if (tags.length === 0) {
+      if (videoId || localVideoFile) tags.push("Study", "Focus");
+      else tags.push("Focus Mode", "StudyBuddy", "Smart Tracking");
+    }
+    return tags;
+  })();
 
   // --- THIS IS THE ONLY UPDATED PART ---
   const getAnalysisString = () => {
@@ -1725,6 +1826,8 @@ export default function VideoTracker() {
     setLocalVideoFile(null);
     setVideoMeta(null);
     setResumePosition(0);
+    setSessionPlayedSeconds(0);
+    setTabSwitches(0);
     hasResumedRef.current = false;
     loadYouTubeData(vid);
 
@@ -1748,6 +1851,40 @@ export default function VideoTracker() {
     if (e && e.preventDefault) e.preventDefault();
     if (!historyEntry?.videoId) return;
     const vid = historyEntry.videoId;
+    const isLocal =
+      !/^[0-9A-Za-z_-]{11}$/.test(vid) ||
+      historyEntry.url === "Local Video" ||
+      historyEntry.url === "Local File" ||
+      (historyEntry.url && !historyEntry.url.startsWith("http"));
+
+    if (isLocal) {
+      if (
+        localVideoFile &&
+        (localVideoFile.name === vid || localVideoFile.name === historyEntry.videoTitle)
+      ) {
+        setShowWatchHistoryModal(false);
+        setShowLogsModal(false);
+        setSessionPlayedSeconds(0);
+        setTabSwitches(0);
+        if (localVideoRef.current) {
+          const pos = historyEntry.lastWatchedPosition || 0;
+          localVideoRef.current.currentTime = pos;
+          localVideoRef.current.play().catch(() => { });
+        }
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        setShowWatchHistoryModal(false);
+        setShowLogsModal(false);
+        alert(
+          `📁 To resume "${historyEntry.videoTitle || vid}", please choose it using "Choose Video from System".`
+        );
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        const fileInput = document.getElementById("local-video-upload");
+        if (fileInput) fileInput.click();
+      }
+      return;
+    }
+
     const allowed = await isStudyVideo(vid);
     if (!allowed) {
       setBlockedTitle("This video is not study related!");
@@ -1761,10 +1898,81 @@ export default function VideoTracker() {
     setLocalVideoFile(null);
     setVideoMeta(null);
     setResumePosition(pos);
+    setSessionPlayedSeconds(0);
+    setTabSwitches(0);
     hasResumedRef.current = false;
     loadYouTubeData(vid);
     setShowTimerPopup(true);
   };
+
+  const getUniqueVideoCards = (historyArr = []) => {
+    const cardsMap = new Map();
+    historyArr.forEach((item) => {
+      const rawId = item.videoId || item.url;
+      if (!rawId) return;
+      let key = String(rawId).trim();
+      const match = key.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+      if (match) key = match[1];
+
+      const secs = Number(item.secondsWatched ?? item.seconds ?? 0) || 0;
+      const switches = Number(item.tabSwitches || 0);
+      const note = item.note || appState.notes?.[key] || "";
+      const tag = item.tag || appState.tags?.[key] || "";
+      const isYoutube = /^[0-9A-Za-z_-]{11}$/.test(key);
+      const thumbnail = item.thumbnail || (isYoutube ? `https://img.youtube.com/vi/${key}/mqdefault.jpg` : null);
+
+      if (!cardsMap.has(key)) {
+        cardsMap.set(key, {
+          ...item,
+          videoId: key,
+          thumbnail,
+          channelTitle: item.channelTitle || (isYoutube ? "GATE Wallah CSE & DA" : "Local Video File"),
+          studyScore: item.studyScore || 75,
+          totalSecondsWatched: secs,
+          totalTabSwitches: switches,
+          latestWatchedAt: item.watchedAt,
+          duration: item.duration || item.videoDuration || 0,
+          note,
+          tag,
+        });
+      } else {
+        const existing = cardsMap.get(key);
+        existing.totalSecondsWatched += secs;
+        existing.totalTabSwitches += switches;
+        if (thumbnail && !existing.thumbnail) existing.thumbnail = thumbnail;
+        if (note) existing.note = note;
+        if (tag) existing.tag = tag;
+        if (item.videoTitle) existing.videoTitle = item.videoTitle;
+        if (item.watchedAt) existing.latestWatchedAt = item.watchedAt;
+        if (item.channelTitle) existing.channelTitle = item.channelTitle;
+        if (item.studyScore) existing.studyScore = item.studyScore;
+        if ((item.duration || item.videoDuration) && !existing.duration) {
+          existing.duration = item.duration || item.videoDuration;
+        }
+      }
+    });
+    return Array.from(cardsMap.values());
+  };
+
+  const uniqueCards = useMemo(() => getUniqueVideoCards(appState.history || []), [appState.history, appState.notes, appState.tags]);
+
+  const scrollSlider = (direction) => {
+    if (videoSliderRef.current) {
+      const scrollAmount = 280;
+      videoSliderRef.current.scrollBy({
+        left: direction === "left" ? -scrollAmount : scrollAmount,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  useEffect(() => {
+    const handleOutsideClick = () => setOpenMenuCardId(null);
+    if (openMenuCardId) {
+      window.addEventListener("click", handleOutsideClick);
+      return () => window.removeEventListener("click", handleOutsideClick);
+    }
+  }, [openMenuCardId]);
 
   const handleLoadContent = async () => {
 
@@ -1805,6 +2013,8 @@ export default function VideoTracker() {
       // Set video ID and reset local file
       setVideoId(id);
       setLocalVideoFile(null);
+      setSessionPlayedSeconds(0);
+      setTabSwitches(0);
       // Fetch video metadata and transcript from backend
       loadYouTubeData(id);
       // Load playlist if URL contains a playlist parameter
@@ -1816,6 +2026,8 @@ export default function VideoTracker() {
     // If local video chosen
     if (localVideoFile) {
       setVideoId(null);
+      setSessionPlayedSeconds(0);
+      setTabSwitches(0);
       setShowTimerPopup(true);
       // Local video handling unchanged
     }
@@ -1823,20 +2035,35 @@ export default function VideoTracker() {
 
 
   const handleFileChange = (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (file) {
-      setLocalVideoFile(file);
-      const objectUrl = URL.createObjectURL(file);
-      setLocalVideoObjectUrl(objectUrl);
+      if (sessionPlayedSeconds >= 5) {
+        handleStopSave();
+      }
+      setVideoId(null);
+      setVideoMeta(null);
       setInputUrl(""); // Clear any YouTube link
+      setLocalVideoFile(file);
+      setSessionPlayedSeconds(0);
+      setTabSwitches(0);
+      setFocusRemaining(null);
+      setIsPlaying(false);
+      e.target.value = ""; // Allow re-selecting the same file if needed
+      setShowTimerPopup(true); // Open the focus timer popup for local video
     }
   };
 
   const clearHistory = () => {
-    // Optional: clear backend stats if you’ve implemented an API for it
     setHistory([]);
     localStorage.removeItem("videoHistory");
-    console.log("History cleared!");
+    setVideoId(null);
+    setLocalVideoFile(null);
+    setLocalVideoObjectUrl(null);
+    setInputUrl("");
+    setIsPlaying(false);
+    setSessionPlayedSeconds(0);
+    setTabSwitches(0);
+    console.log("History & player reset!");
   };
 
   const confirmStartFocus = () => {
@@ -1860,32 +2087,57 @@ export default function VideoTracker() {
 
 
 
-  const handleStopSave = async () => {
+  const handleStopSave = async (isFocusComplete = false) => {
     try {
+      const isFocus = isFocusComplete === true;
+      isVideoEndingRef.current = true;
+      setTimeout(() => {
+        isVideoEndingRef.current = false;
+      }, 3000);
+
       // 1. Instant Player Pause & Resume Save
       if (youtubePlayerInstance?.pauseVideo) youtubePlayerInstance.pauseVideo();
       else if (localVideoRef.current && !localVideoRef.current.paused)
         localVideoRef.current.pause();
 
       const currentVideoKey = videoId || localVideoFile?.name;
+      const currentVideoTitle = videoMeta?.title || localVideoFile?.name || currentVideoKey || "Study Video";
+      const isLocal = !videoId && Boolean(localVideoFile || localVideoObjectUrl);
+
       if (videoId && youtubePlayerRef.current?.getCurrentTime) {
         saveResumeProgress(videoId, youtubePlayerRef.current.getCurrentTime());
+      } else if (isLocal && localVideoRef.current) {
+        saveResumeProgress(currentVideoKey, localVideoRef.current.currentTime || 0);
       }
 
-      if (!sessionPlayedSeconds || sessionPlayedSeconds < 5) {
+      const playedSeconds = sessionPlayedSecondsRef.current ?? sessionPlayedSeconds;
+      if (!isFocus && (!playedSeconds || playedSeconds < 5)) {
         alert("⚠️ Watch at least 5 seconds before saving!");
         return;
       }
 
-      const watchedSeconds = Math.round(sessionPlayedSeconds);
-      const totalTabSwitches = tabSwitches;
-      const currentNoteToSave = noteText.trim();
-      const currentTagToSave = tagText.trim();
+      const watchedSeconds = Math.max(1, Math.round(playedSeconds || 1));
+      const totalTabSwitches = tabSwitchesRef.current ?? tabSwitches;
+      const currentNoteToSave = (noteTextRef.current ?? noteText).trim();
+      const currentTagToSave = (tagTextRef.current ?? tagText).trim();
 
       const existingNote = appState.notes?.[currentVideoKey] || "";
       const cumulativeNote = (existingNote ? existingNote + (currentNoteToSave ? "\n" + currentNoteToSave : "") : currentNoteToSave).trim();
 
       const token = localStorage.getItem("token");
+
+      // Reward 2 coins if completing focus session
+      if (isFocus) {
+        setAppState((app) => ({
+          ...app,
+          coins: (app.coins || 0) + 2,
+        }));
+        try {
+          await updateBackendCoinsGain(2);
+        } catch (e) {
+          console.error("Coin gain error:", e);
+        }
+      }
 
       // 2. INSTANT Optimistic UI Update (Zero Latency)
       setAppState((prev) => {
@@ -1905,19 +2157,29 @@ export default function VideoTracker() {
           item.watchedAt = todayStr;
           if (cumulativeNote) item.note = cumulativeNote;
           if (currentTagToSave) item.tag = currentTagToSave;
+          if (!item.videoTitle || item.videoTitle === item.videoId) item.videoTitle = currentVideoTitle;
+          if (videoMeta?.duration && !item.duration) item.duration = videoMeta.duration;
+          if (videoMeta?.studyScore && !item.studyScore) item.studyScore = videoMeta.studyScore;
           updatedHistory.splice(existingIdx, 1);
           updatedHistory.unshift(item);
         } else {
           updatedHistory.unshift({
             videoId: currentVideoKey,
-            videoTitle: videoMeta?.title || currentVideoKey,
-            url: videoId ? `https://youtu.be/${videoId}` : localVideoFile?.name || "Local File",
+            videoTitle: currentVideoTitle,
+            url: videoId ? `https://youtu.be/${videoId}` : localVideoFile?.name || "Local Video",
             secondsWatched: watchedSeconds,
             tabSwitches: totalTabSwitches,
             watchedAt: todayStr,
+            duration: videoMeta?.duration || Math.round(localVideoRef.current?.duration || 0),
+            studyScore: videoMeta?.studyScore || 75,
             note: cumulativeNote,
             tag: currentTagToSave,
+            isStudyVideo: true,
           });
+        }
+
+        if (userId) {
+          localStorage.setItem(`userHistory_${userId}`, JSON.stringify(updatedHistory));
         }
 
         return {
@@ -1931,6 +2193,7 @@ export default function VideoTracker() {
       // Clear note textarea and reset session timer
       setNoteText("");
       setSessionPlayedSeconds(0);
+      setTabSwitches(0);
       finalizeSession(true);
 
       // 3. Parallel background API requests (All in 1 click)
@@ -1942,13 +2205,17 @@ export default function VideoTracker() {
         },
         body: JSON.stringify({
           videoId: currentVideoKey,
+          videoTitle: currentVideoTitle,
           url: videoId
             ? `https://youtu.be/${videoId}`
-            : localVideoFile?.name || "Local File",
+            : localVideoFile?.name || "Local Video",
           secondsWatched: watchedSeconds,
           tabSwitches: totalTabSwitches,
+          duration: videoMeta?.duration || Math.round(localVideoRef.current?.duration || 0),
+          studyScore: videoMeta?.studyScore || 0,
           note: cumulativeNote,
           tag: currentTagToSave,
+          isStudyVideo: true,
         }),
       })
         .then((res) => res.json())
@@ -1960,7 +2227,6 @@ export default function VideoTracker() {
             }
           }
         })
-
         .catch((err) => console.error("Error saving history:", err));
 
       if (currentNoteToSave || currentTagToSave) {
@@ -1990,11 +2256,21 @@ export default function VideoTracker() {
           .catch((err) => console.error("Error saving note/tag:", err));
       }
 
-      alert("✅ Session, Notes & Tag saved!");
+      if (isFocus) {
+        alert("🎉 Focus session complete! You've earned +2 coins.\n✅ Session, Notes & Tag saved automatically!");
+      } else {
+        alert("✅ Session, Notes & Tag saved!");
+      }
     } catch (error) {
       console.error("❌ Error saving session:", error);
     }
   };
+
+  handleStopSaveRef.current = handleStopSave;
+  useEffect(() => {
+    handleStopSaveRef.current = handleStopSave;
+  });
+
 
 
   const purchasePremium = () => {
@@ -2138,6 +2414,52 @@ export default function VideoTracker() {
     }
   };
 
+  const handleToolbarFormat = (formatType) => {
+    const textarea = noteTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+    const selected = noteText.substring(start, end);
+    const before = noteText.substring(0, start);
+    const after = noteText.substring(end);
+    let inserted = "";
+
+    switch (formatType) {
+      case "bold":
+        inserted = selected ? `**${selected}**` : "**bold text**";
+        break;
+      case "italic":
+        inserted = selected ? `*${selected}*` : "*italic text*";
+        break;
+      case "underline":
+        inserted = selected ? `<u>${selected}</u>` : "<u>underlined text</u>";
+        break;
+      case "bullet":
+        inserted = selected ? `\n• ${selected}` : "\n• ";
+        break;
+      case "number":
+        inserted = selected ? `\n1. ${selected}` : "\n1. ";
+        break;
+      case "table":
+        inserted = `\n| Key Concept | Details |\n|---|---|\n| Point 1 | Description |\n`;
+        break;
+      case "link":
+        inserted = selected ? `[${selected}](url)` : "[Link title](https://)";
+        break;
+      default:
+        break;
+    }
+
+    const newText = before + inserted + after;
+    setNoteText(newText);
+    setTimeout(() => {
+      textarea.focus();
+      const newPos = start + inserted.length;
+      textarea.setSelectionRange(newPos, newPos);
+    }, 0);
+  };
+
   // ⬇️ put handleSaveNotes here, inside component ⬇️
   const handleSaveNotes = async () => {
     if (!noteText.trim() && !tagText.trim()) {
@@ -2226,26 +2548,24 @@ export default function VideoTracker() {
 
 
   const handleStartFocusTimer = () => {
-    // ✅ Focus timer ONLY for YouTube
-    if (!videoId) {
-      alert("Focus timer only works for YouTube videos.");
-      setShowTimerPopup(false);
-      return;
-    }
-
     if (!focusMinutes || focusMinutes <= 0) {
       alert("Please enter a valid focus time!");
       return;
     }
 
     setFocusRemaining(focusMinutes * 60);
+    setFocusDuration(focusMinutes * 60);
+    setIsFocusTimerPending(false);
+    setHasPlaybackStarted(true);
     setShowTimerPopup(false);
 
     setTimeout(() => {
       if (youtubePlayerRef.current?.playVideo) {
         youtubePlayerRef.current.playVideo();
+      } else if (localVideoRef.current) {
+        localVideoRef.current.play().catch(() => { });
       }
-    }, 500);
+    }, 300);
   };
 
   // ─── Render Panels for YouTube Metadata, Transcript, Playlist ──────
@@ -2750,139 +3070,308 @@ export default function VideoTracker() {
 
   return (
     <div style={{ ...styles.page, padding: 0 }}>
-      {/* Navbar */}
-      <nav className="bg-white/30 backdrop-blur-lg shadow-lg py-4 px-8 flex justify-between items-center sticky top-0 z-50 rounded-b-2xl">
-        <Link
-          to="/"
-          className="text-2xl font-extrabold bg-gradient-to-r from-indigo-700 via-purple-700 to-pink-600 bg-clip-text text-transparent tracking-tight"
-        >
-          StudyBuddy
-        </Link>
-
-        <div className="hidden md:flex gap-8 font-medium">
-          <Link
-            to="/dashboard"
-            onClick={(e) => handleProtectedLinkClick(e, '/dashboard')}
-            className="hover:text-pink-500 transition-colors duration-300"
-          >
-            Dashboard
-          </Link>
-          <button
-            onClick={() => navigate("/")}
-            className="hover:text-pink-500 transition-colors duration-300"
-          >
-            About Us
-          </button>
-          <Link to="/blogs" className="hover:text-pink-500 transition-colors duration-300">Blogs</Link>
-          <Link to="/contact" className="hover:text-pink-500 transition-colors duration-300">Contact Us</Link>
-        </div>
-
-        {user ? (
-          <div className="relative">
-            <button onClick={() => setDropdownOpen(!isDropdownOpen)} className="flex items-center gap-3 cursor-pointer">
-              <img
-                src={user.profileImage || profileIcon}
-                alt="Profile"
-                className="w-10 h-10 rounded-full border-2 border-indigo-700"
-              />
-              <span className="font-semibold text-gray-900">{user.name}</span>
-            </button>
-
-            {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 py-2 w-52 bg-white rounded-xl shadow-2xl z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
-                <button
-                  onClick={() => {
-                    setDropdownOpen(false);
-                    setIsProfileModalOpen(true);
-                  }}
-                  className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 font-semibold flex items-center gap-2 transition-colors"
-                >
-                  👤 View Profile
-                </button>
-                <div className="border-t border-gray-100 my-1"></div>
-                <button
-                  onClick={handleLogout}
-                  className="w-full text-left px-4 py-2.5 text-sm text-red-600 font-bold hover:bg-red-50 flex items-center gap-2 transition-colors"
-                >
-                  🚪 Logout
-                </button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="flex gap-3">
-            <Link
-              to="/login"
-              className="px-4 py-2 border border-indigo-700 text-indigo-700 rounded-lg hover:bg-indigo-50 transition-all duration-300"
-            >
-              Login
-            </Link>
-            <Link
-              to="/register"
-              className="px-4 py-2 bg-gradient-to-r from-indigo-700 to-pink-600 text-white rounded-lg shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-            >
-              Sign Up
-            </Link>
-          </div>
-        )}
-      </nav>
+      {/* Unified Navbar with ThemeToggle */}
+      <Navbar />
 
       <div style={{ ...styles.container, padding: "24px" }}>
-        <div style={styles.header}>
-          <h1 style={styles.title}>Study Video Tracker</h1>
-          <div style={styles.wallet}>
-            <span style={styles.statChip}>🪙 {appState.coins}</span>
-            <span style={styles.statChip}>
-              🔥 {appState.streak} day streak
-            </span>
+        {/* ================= HERO STUDY BANNER (IMAGE 1 DESIGN + IMAGE 2 BACKGROUND) ================= */}
+        <div
+          className={`relative w-full rounded-3xl overflow-hidden border shadow-sm transition-all mb-6 ${isDark
+            ? "border-slate-800 bg-[#0d1319]"
+            : "border-slate-200/90 bg-[#f9f8f6]"
+            }`}
+          style={{
+            backgroundImage: `url(${studyBannerBg})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center 45%",
+          }}
+        >
+          {/* Frosted Glass Translucent Gradient Overlay for crystal clear readability */}
+          <div
+            className={`w-full h-full p-6 sm:p-8 lg:p-10 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 ${isDark
+              ? "bg-gradient-to-r from-slate-950/95 via-slate-950/85 to-slate-950/40"
+              : "bg-gradient-to-r from-[#fcfbfa]/95 via-[#fcfbfa]/85 to-[#fcfbfa]/25"
+              }`}
+          >
+            {/* Left Content */}
+            <div className="max-w-2xl flex-1">
+              {/* Top Greeting */}
+              <div className="flex items-center gap-2 mb-2">
+                <span className={`text-sm sm:text-base font-bold tracking-tight ${isDark ? "text-slate-200" : "text-slate-800"
+                  }`}>
+                  {greetingText}, {userName}! 👋
+                </span>
+              </div>
+
+              {/* Headline: Small Steps Big Learning */}
+              <h1 className="m-0 mb-3 text-3xl sm:text-4xl lg:text-5xl font-black font-serif tracking-tight leading-[1.15] text-[#1b3f30] dark:text-emerald-300">
+                Small Steps <br />
+                Big Learning
+              </h1>
+
+              {/* Subtitle */}
+              <p className={`m-0 text-xs sm:text-sm font-medium leading-relaxed max-w-xl ${isDark ? "text-slate-300" : "text-slate-600"
+                }`}>
+                Track your study hours, stay focused and turn your every video into meaningful progress with AI.
+              </p>
+            </div>
+
+            {/* Right Group: Floating Thought (in empty space) + 2 Stat Cards on far right */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 sm:gap-10 lg:gap-12 shrink-0 lg:ml-auto self-stretch lg:self-center justify-start lg:justify-end">
+              {/* Thought Form (Bina card ke, center-aligned, top margin aligned with cards) */}
+              <div className="flex flex-col items-center justify-center text-center max-w-[240px] select-none pt-3.5 sm:mr-8 lg:mr-14 relative -translate-x-5 sm:-translate-x-10">
+                <p className={`m-0 font-serif italic text-xs sm:text-sm lg:text-[15px] leading-relaxed tracking-wide text-center ${isDark
+                  ? "text-emerald-100 font-medium drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)]"
+                  : "text-[#183e2b] font-semibold drop-shadow-[0_1px_2px_rgba(255,255,255,0.9)]"
+                  }`}>
+                  “A focused mind today builds a brighter tomorrow.”
+                </p>
+              </div>
+
+              {/* 2 Small Stat Cards (Image 2 Style) */}
+              <div className="flex items-center gap-3 shrink-0">
+                {/* Card 1: Your Learning Streak (Image 2 style) */}
+                <div
+                  className={`w-[145px] sm:w-[152px] h-[205px] rounded-2xl overflow-hidden border shadow-sm flex flex-col justify-between transition-all shrink-0 relative ${isDark
+                    ? "bg-[#141c24] border-slate-700/70"
+                    : "bg-[#fbf9f5] border-slate-200/90"
+                    }`}
+                  style={{
+                    backgroundImage: `linear-gradient(to bottom, ${isDark
+                      ? "rgba(20,28,36,0.96) 0%, rgba(20,28,36,0.90) 48%, rgba(20,28,36,0.2) 75%, transparent 100%"
+                      : "rgba(251,249,245,0.98) 0%, rgba(251,249,245,0.92) 48%, rgba(251,249,245,0.15) 75%, transparent 100%"
+                      }), url(${streakCardBg})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "bottom center",
+                  }}
+                >
+                  <div className="p-3.5 flex flex-col h-full justify-between relative z-10">
+                    <div>
+                      {/* Top Row: Title + Flame Icon */}
+                      <div className="flex items-start justify-between">
+                        <div className={`text-[12px] font-bold leading-[1.25] ${isDark ? "text-slate-100" : "text-slate-800"
+                          }`}>
+                          Your<br />Learning<br />Streak
+                        </div>
+                        <div className="text-xl leading-none drop-shadow-xs">
+                          🔥
+                        </div>
+                      </div>
+
+                      {/* Streak Days Count */}
+                      <div className={`text-base font-extrabold mt-2.5 leading-none ${isDark ? "text-white" : "text-slate-900"
+                        }`}>
+                        {appState.streak || 0} {appState.streak === 1 ? "day" : "days"}
+                      </div>
+
+                      {/* Subtitle */}
+                      <p className={`text-[10px] font-medium leading-snug mt-1 m-0 ${isDark ? "text-slate-300" : "text-slate-600"
+                        }`}>
+                        {appState.streak > 0
+                          ? "Keep building consistency!"
+                          : "Start today and build consistency!"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card 2: Your Study Coins (Image 2 style) */}
+                <div
+                  className={`w-[145px] sm:w-[152px] h-[205px] rounded-2xl overflow-hidden border shadow-sm flex flex-col justify-between transition-all shrink-0 relative ${isDark
+                    ? "bg-[#141c24] border-slate-700/70"
+                    : "bg-[#fbf9f5] border-slate-200/90"
+                    }`}
+                  style={{
+                    backgroundImage: `linear-gradient(to bottom, ${isDark
+                      ? "rgba(20,28,36,0.96) 0%, rgba(20,28,36,0.90) 48%, rgba(20,28,36,0.2) 75%, transparent 100%"
+                      : "rgba(251,249,245,0.98) 0%, rgba(251,249,245,0.92) 48%, rgba(251,249,245,0.15) 75%, transparent 100%"
+                      }), url(${streakCardBg})`,
+                    backgroundSize: "cover",
+                    backgroundPosition: "bottom center",
+                  }}
+                >
+                  <div className="p-3.5 flex flex-col h-full justify-between relative z-10">
+                    <div>
+                      {/* Top Row: Title + Coin Icon */}
+                      <div className="flex items-start justify-between">
+                        <div className={`text-[12px] font-bold leading-[1.25] ${isDark ? "text-slate-100" : "text-slate-800"
+                          }`}>
+                          Your<br />Study<br />Coins
+                        </div>
+                        <div className="text-xl leading-none drop-shadow-xs">
+                          🪙
+                        </div>
+                      </div>
+
+                      {/* Coins Count */}
+                      <div className={`text-base font-extrabold mt-2.5 leading-none ${isDark ? "text-amber-300" : "text-amber-800"
+                        }`}>
+                        {appState.coins ?? 150} coins
+                      </div>
+
+                      {/* Subtitle */}
+                      <p className={`text-[10px] font-medium leading-snug mt-1 m-0 ${isDark ? "text-slate-300" : "text-slate-600"
+                        }`}>
+                        Earn coins by focusing &amp; completing lessons!
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Input + Load */}
-        <div style={styles.panel}>
-          <div style={{ display: "flex", gap: "12px", flexDirection: "column" }}>
-            <div style={{ display: "flex", gap: "12px" }}>
-              <input
-                placeholder="Paste YouTube URL or id..."
-                value={inputUrl}
-                onChange={(e) => { setInputUrl(e.target.value); setLocalVideoFile(null); }}
-                style={styles.input}
-                disabled={appState.coins <= 0}
-              />
-              <button
-                onClick={handleLoadContent}
-                style={styles.button}
-                disabled={appState.coins <= 0 || (!inputUrl.trim() && !localVideoFile)}
-              >
-                {appState.coins <= 0 ? "Locked" : (videoId || localVideoFile ? "Load New" : "Load Video")}
-              </button>
-              {videoId && (
-                <button
-                  onClick={() => setShowQuizConfigModal(true)}
-                  style={{
-                    padding: "10px 18px",
-                    background: "linear-gradient(135deg, #6366f1 0%, #a855f7 100%)",
-                    color: "#ffffff",
-                    border: "none",
-                    borderRadius: "10px",
-                    fontWeight: "700",
-                    fontSize: "0.88rem",
-                    cursor: "pointer",
-                    boxShadow: "0 4px 12px rgba(99, 102, 241, 0.3)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    whiteSpace: "nowrap",
-                    transition: "all 0.2s ease",
-                  }}
+        {/* Top Controls Grid: Lesson Input (Step 01) & Focus Companion (Camera Analysis) */}
+        <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch mb-6">
+          {/* CARD 1: Bring your lesson in */}
+          <div
+            className={`rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 border ${theme === "dark"
+              ? "bg-[#161a20] border-gray-800/90 shadow-[0_8px_32px_rgba(0,0,0,0.35)] text-white"
+              : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_8px_30px_rgba(0,0,0,0.03)] text-gray-900"
+              }`}
+          >
+            {/* Header: Title, Icon & Step 01 badge */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3.5">
+                <div
+                  className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${theme === "dark"
+                    ? "bg-indigo-950/70 text-indigo-400 border border-indigo-800/40"
+                    : "bg-[#f2edff] text-[#6366f1]"
+                    }`}
                 >
-                  ✨ Generate Quiz
+                  <svg
+                    className="w-5 h-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M7 17L17 7" />
+                    <path d="M7 7h10v10" />
+                  </svg>
+                </div>
+                <div>
+                  <h2
+                    className={`text-xl sm:text-2xl font-black tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"
+                      }`}
+                  >
+                    Bring your lesson in
+                  </h2>
+                  <p
+                    className={`text-xs sm:text-sm font-medium mt-0.5 ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                      }`}
+                  >
+                    Paste a YouTube link or open a video from your device.
+                  </p>
+                </div>
+              </div>
+
+              <span className="px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wider uppercase bg-[#eaf7d7] text-[#4d7c0f] border border-[#d3efa9] flex-shrink-0">
+                STEP 01
+              </span>
+            </div>
+
+            {/* Input Bar: Red YouTube Icon, Input field & Load lesson button */}
+            <div className="my-5">
+              <div
+                className={`rounded-2xl p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${theme === "dark"
+                  ? "bg-[#0f1318] border-gray-800 focus-within:border-indigo-500/70"
+                  : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
+                  }`}
+              >
+                {/* Red YouTube Play Icon */}
+                <div className="pl-2 flex-shrink-0 text-red-500">
+                  <svg
+                    className="w-5 h-5 sm:w-6 sm:h-6"
+                    viewBox="0 0 24 24"
+                    fill="currentColor"
+                  >
+                    <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
+                  </svg>
+                </div>
+
+                {/* Input text */}
+                <input
+                  type="text"
+                  placeholder="Paste a YouTube URL..."
+                  value={inputUrl}
+                  onChange={(e) => {
+                    setInputUrl(e.target.value);
+                    setLocalVideoFile(null);
+                  }}
+                  disabled={appState.coins <= 0}
+                  className="flex-1 bg-transparent text-white placeholder-gray-400 text-sm sm:text-base outline-none min-w-0"
+                />
+
+                {/* Load video button */}
+                <button
+                  onClick={handleLoadContent}
+                  disabled={
+                    appState.coins <= 0 || (!inputUrl.trim() && !localVideoFile)
+                  }
+                  className={`px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap flex-shrink-0 ${
+                    isDark
+                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                  }`}
+                >
+                  <span>
+                    {appState.coins <= 0
+                      ? "Locked"
+                      : videoId || localVideoFile
+                        ? "Load New"
+                        : "Load video"}
+                  </span>
+                  <span className="font-extrabold text-sm">↗</span>
                 </button>
+              </div>
+
+              {/* Quiz Generation Quick Action if video loaded */}
+              {videoId && (
+                <div className="mt-2.5 flex justify-end">
+                  <button
+                    onClick={() => setShowQuizConfigModal(true)}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold text-white shadow-sm flex items-center gap-1.5 transition active:scale-95 ${
+                      isDark
+                        ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                    }`}
+                  >
+                    <span>✨ Generate Quiz</span>
+                  </button>
+                </div>
               )}
             </div>
-            <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-              <label htmlFor="local-video-upload" style={{ ...styles.button, ...styles.secondaryButton, flex: 1, textAlign: 'center' }}>
-                Choose Video from System
+
+            {/* Divider */}
+            <div className="flex items-center my-3 select-none">
+              <div
+                className={`flex-1 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-200"
+                  }`}
+              ></div>
+              <span className="px-4 text-[10px] sm:text-[11px] font-extrabold tracking-wider text-gray-400 uppercase">
+                OR OPEN A LOCAL FILE
+              </span>
+              <div
+                className={`flex-1 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-200"
+                  }`}
+              ></div>
+            </div>
+
+            {/* Local Video & Reset Actions */}
+            <div className="flex items-center flex-wrap gap-3 mt-1">
+              <label
+                htmlFor="local-video-upload"
+                className={`px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95 border ${isDark
+                  ? "bg-indigo-950/40 hover:bg-indigo-950/70 text-indigo-300 border-indigo-800/60"
+                  : "bg-white hover:bg-emerald-50/50 text-[#1b3f30] border-[#1b3f30]/30 shadow-sm"
+                  }`}
+              >
+                <span className="text-base leading-none font-black">+</span>
+                <span>Choose video</span>
               </label>
               <input
                 id="local-video-upload"
@@ -2892,239 +3381,240 @@ export default function VideoTracker() {
                 style={{ display: "none" }}
                 disabled={appState.coins <= 0}
               />
-              {localVideoFile && <span style={{ fontSize: "14px", color: "#4b5563" }}>Selected: {localVideoFile.name}</span>}
-            </div>
-            <button
-              onClick={clearHistory}
-              style={{ ...styles.button, ...styles.secondaryButton }}
-            >
-              Clear All
-            </button>
 
-            {/* 🎯 Focus Session Button
-      <button
-       onClick={() => setShowTimerPopup(true)}
-       style={{ ...styles.button, background: "#10b981", marginTop: "10px" }}
-       disabled={appState.coins <= 0}
-      >
-       🎯 Start Focus Session
-</button> */}
-          </div>
-        </div>
-
-        {/* NEW PANEL FOR CAMERA ANALYSIS
-        <div style={styles.panel}>
-          <h3 style={styles.sectionTitle}>
-            👁️ Live Focus & Face Detection (OpenCV)
-          </h3>
-          <button
-          onClick={toggleDetector}
-
-            style={{ ...styles.button, marginBottom: '16px' }}
-          >
-            {showCameraAnalysis ? "Stop Camera Analysis" : "Start Camera Analysis"}
-          </button>
-
-          {showCameraAnalysis && (
-            <div>
-              <video
-                ref={cameraVideoRef}
-                width="320"
-                height="240"
-                autoPlay
-                muted
-                style={{ border: "1px solid #ddd", borderRadius: "8px", marginBottom: "8px" }}
-              ></video>
-              <canvas ref={cameraCanvasRef} style={{ display: "none" }} width="320" height="240"></canvas>
-              <h4>Analysis Result:</h4>
-              <pre style={{
-                backgroundColor: "#2d3748",
-                color: "#e2e8f0",
-                padding: "10px",
-                borderRadius: "8px",
-                overflowX: "auto",
-                fontSize: "0.9em"
-              }}>
-                {getAnalysisString()}
-              </pre>
-
-                 <div style={{ marginTop: "20px" }}>
-      <h3>📊 Focus Dashboard</h3>
-
-      <iframe
-        src={STREAMLIT_URL}
-        style={{
-          width: "100%",
-          height: "400px",
-          border: "none",
-          borderRadius: "12px",
-        }}
-      />
-      </div>
-            </div>
-          )}
-        </div> */}
-
-
-
-        {/* PANEL FOR CAMERA ANALYSIS (Browser Camera -> Detector Pipeline) */}
-        <div style={styles.panel}>
-          <h3 style={styles.sectionTitle}>
-            👁️ Live Focus & Face Detection (OpenCV)
-          </h3>
-
-          <button
-            onClick={toggleDetector}
-            disabled={isCameraLoading}
-            style={{
-              ...styles.button,
-              marginBottom: "16px",
-              opacity: isCameraLoading ? 0.7 : 1,
-              cursor: isCameraLoading ? "not-allowed" : "pointer",
-            }}
-          >
-            {isCameraLoading
-              ? "Starting Camera..."
-              : showCameraAnalysis
-              ? "Stop Camera Analysis"
-              : "Start Camera Analysis"}
-          </button>
-
-          {cameraError && (
-            <div
-              style={{
-                padding: "12px 16px",
-                backgroundColor: "#fee2e2",
-                border: "1px solid #f87171",
-                borderRadius: "8px",
-                color: "#991b1b",
-                marginBottom: "16px",
-                fontSize: "0.9rem",
-              }}
-            >
-              ⚠️ {cameraError}
-            </div>
-          )}
-
-          {showCameraAnalysis && (
-            <div>
-              <h4 style={{ marginBottom: "10px" }}>
-                📷 Live Camera (Face + Phone Detection)
-              </h4>
-
-              {/* Hidden canvas for taking snapshot frames */}
-              <canvas
-                ref={cameraCanvasRef}
-                style={{ display: "none" }}
-              />
-
-              <div
-                style={{
-                  position: "relative",
-                  width: "100%",
-                  maxWidth: "520px",
-                  borderRadius: "12px",
-                  overflow: "hidden",
-                  border: "1px solid #ddd",
-                  marginBottom: "16px",
-                  backgroundColor: "#111827",
-                  minHeight: "260px",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
+              <button
+                onClick={clearHistory}
+                className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all active:scale-95 ${theme === "dark"
+                  ? "bg-gray-800 hover:bg-gray-700 text-gray-300"
+                  : "bg-[#f0f2ef] hover:bg-gray-200 text-gray-700"
+                  }`}
               >
-                {/* Live video feed from browser getUserMedia (always kept playing to supply fresh frames) */}
+                <span className="text-sm">⟲</span>
+                <span>Reset player</span>
+              </button>
+
+              {localVideoFile && (
+                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 truncate max-w-xs">
+                  Selected: {localVideoFile.name}
+                </span>
+              )}
+            </div>
+
+            {/* Bottom note */}
+            <p className="text-xs text-gray-400 dark:text-gray-500 mt-5 select-none">
+              A focused workspace starts with fewer distractions.
+            </p>
+          </div>
+
+          {/* CARD 2: Focus companion */}
+          <div className="rounded-3xl p-6 sm:p-7 flex flex-col justify-between bg-[#15191e] border border-gray-800/90 shadow-[0_8px_32px_rgba(0,0,0,0.35)] text-white transition-all duration-300">
+            {/* Header: Title, Icon & Badge */}
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3.5">
+                <div className="w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 bg-[#222831] text-[#ccff00] border border-gray-700/60 shadow-sm">
+                  {/* Focus Bullseye Target Icon */}
+                  <svg
+                    className="w-5 h-5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <circle cx="12" cy="12" r="6" />
+                    <circle cx="12" cy="12" r="2" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+                    Focus companion
+                  </h2>
+                  <p className="text-xs sm:text-sm font-medium mt-0.5 text-gray-400">
+                    Optional camera preview for your study session.
+                  </p>
+                </div>
+              </div>
+
+              <span className="px-3.5 py-1 rounded-full text-[10px] sm:text-[11px] font-extrabold tracking-wider uppercase bg-[#202919] text-[#ccff00] border border-[#3b4d24] flex-shrink-0">
+                READY WHEN YOU ARE
+              </span>
+            </div>
+
+            {/* Inner Content: Left preview box + Right 3 status cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 my-5 items-stretch">
+              {/* Left Sub-Box: Camera Radar / Active Video Feed */}
+              <div className="sm:col-span-7 rounded-2xl p-4 bg-[#0d1014] border border-gray-800/90 min-h-[220px] relative overflow-hidden flex flex-col items-center justify-center text-center">
+                {/* Video element - kept rendered for seamless stream attachment */}
                 <video
                   ref={cameraVideoRef}
                   autoPlay
                   playsInline
                   muted
-                  style={{
-                    width: "100%",
-                    display: "block",
-                    borderRadius: "12px",
-                  }}
+                  className={
+                    showCameraAnalysis
+                      ? "w-full h-full object-cover rounded-xl"
+                      : "hidden"
+                  }
+                  style={showCameraAnalysis ? { minHeight: "190px" } : {}}
                 />
 
-                {/* Annotated overlay frame returned from OpenCV detector */}
-                {annotatedFrame && (
-                  <img
-                    src={annotatedFrame}
-                    alt="Live Detector Feed"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      borderRadius: "12px",
-                      display: "block",
-                      pointerEvents: "none",
-                    }}
+                {/* Overlaid local canvas for live FaceMesh landmarks + Phone bounding box */}
+                {showCameraAnalysis && (
+                  <canvas
+                    ref={cameraCanvasRef}
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none rounded-xl"
                   />
+                )}
+
+                {/* Overlaid controls when camera is active */}
+                {showCameraAnalysis ? (
+                  <div className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 z-10 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
+                    <span className="text-[11px] font-bold text-lime-400 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-lime-400 animate-pulse"></span>
+                      CAMERA LIVE
+                    </span>
+                    <button
+                      onClick={toggleDetector}
+                      className="px-3 py-1 rounded-lg text-xs font-bold bg-red-600 hover:bg-red-700 text-white shadow transition active:scale-95"
+                    >
+                      Stop Camera
+                    </button>
+                  </div>
+                ) : (
+                  /* Radar / Target concentric circles when camera is inactive */
+                  <div className="flex flex-col items-center justify-center w-full h-full py-2 select-none">
+                    <div className="relative flex items-center justify-center mb-3">
+                      <div className="w-24 h-24 rounded-full border border-lime-500/15 flex items-center justify-center animate-pulse">
+                        <div className="w-16 h-16 rounded-full border border-lime-500/25 flex items-center justify-center">
+                          {/* Center neon lime square */}
+                          <div className="w-11 h-11 rounded-2xl bg-[#ccff00] flex items-center justify-center text-black font-black shadow-[0_0_20px_rgba(204,255,0,0.4)]">
+                            <svg
+                              className="w-5 h-5 text-black"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <circle cx="12" cy="12" r="7" />
+                              <circle cx="12" cy="12" r="3" />
+                              <circle cx="12" cy="12" r="1" fill="currentColor" />
+                            </svg>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-gray-400 text-xs sm:text-[13px] leading-relaxed max-w-[210px] mb-4">
+                      Make a little space for deep work.
+                      <br />
+                      Your camera stays in this browser.
+                    </p>
+
+                    <div className="flex items-center gap-2.5 flex-wrap justify-center">
+                      <button
+                        onClick={toggleDetector}
+                        disabled={isCameraLoading}
+                        className={`px-4 py-2 rounded-xl font-extrabold text-xs sm:text-sm text-white transition-all active:scale-95 disabled:opacity-60 flex items-center gap-1.5 ${
+                          isDark
+                            ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-[0_4px_14px_rgba(79,70,229,0.35)]"
+                            : "bg-[#1b3f30] hover:bg-[#143024] shadow-[0_4px_14px_rgba(27,63,48,0.35)]"
+                        }`}
+                      >
+                        <span>
+                          {isCameraLoading ? "Starting..." : "Enable camera"}
+                        </span>
+                        <span className="text-sm font-black">↗</span>
+                      </button>
+                      <span className="px-3 py-1.5 rounded-full text-[11px] font-bold bg-[#1f242b] text-gray-400 border border-gray-700/60 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                        CAMERA OFF
+                      </span>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Live monitoring status summary */}
-              {detectorStats && (
-                <div
-                  style={{
-                    display: "flex",
-                    gap: "10px",
-                    flexWrap: "wrap",
-                    marginBottom: "16px",
-                  }}
-                >
-                  <span
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "8px",
-                      background: detectorStats.status.includes("Focused")
-                        ? "#dcfce7"
-                        : "#fee2e2",
-                      color: detectorStats.status.includes("Focused")
-                        ? "#166534"
-                        : "#991b1b",
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    Status: {detectorStats.status}
-                  </span>
-                  <span
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "8px",
-                      background: "#f3f4f6",
-                      color: "#374151",
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    Focus Score: {detectorStats.focus_score}/100
-                  </span>
-                  <span
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: "8px",
-                      background: detectorStats.phone_detected
-                        ? "#fee2e2"
-                        : "#f3f4f6",
-                      color: detectorStats.phone_detected
-                        ? "#991b1b"
-                        : "#374151",
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                    }}
-                  >
-                    Phone: {detectorStats.phone_detected ? "Detected 📱" : "Not Detected"}
-                  </span>
+              {/* Right Sub-Box: 3 Stacked Status Cards */}
+              <div className="sm:col-span-5 flex flex-col justify-between gap-2.5">
+                {/* 1: Face tracking */}
+                <div className="bg-[#1b2027] border border-gray-800/80 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${showCameraAnalysis
+                        ? "bg-lime-400 animate-pulse"
+                        : "bg-gray-400"
+                        }`}
+                    ></span>
+                    <span className="text-white font-bold text-xs sm:text-sm">
+                      Face tracking
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 pl-4">
+                    {showCameraAnalysis && detectorStats
+                      ? detectorStats.status
+                      : "Ready to start"}
+                  </p>
                 </div>
-              )}
+
+                {/* 2: Focus session */}
+                <div className="bg-[#1b2027] border border-gray-800/80 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${showCameraAnalysis && detectorStats
+                        ? "bg-indigo-400"
+                        : "bg-gray-400"
+                        }`}
+                    ></span>
+                    <span className="text-white font-bold text-xs sm:text-sm">
+                      Focus session
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 pl-4">
+                    {showCameraAnalysis && detectorStats
+                      ? `Score: ${detectorStats.focus_score}/100`
+                      : "Not running"}
+                  </p>
+                </div>
+
+                {/* 3: Privacy */}
+                <div className="bg-[#1b2027] border border-gray-800/80 rounded-2xl p-3 sm:p-3.5 flex flex-col justify-center">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`w-2 h-2 rounded-full ${showCameraAnalysis && detectorStats?.phone_detected
+                        ? "bg-rose-400 animate-bounce"
+                        : "bg-gray-400"
+                        }`}
+                    ></span>
+                    <span className="text-white font-bold text-xs sm:text-sm">
+                      Privacy
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1 pl-4">
+                    {showCameraAnalysis && detectorStats?.phone_detected
+                      ? "Phone: Detected 📱"
+                      : "On-device preview"}
+                  </p>
+                </div>
+              </div>
             </div>
-          )}
+
+            {/* Error Notification Banner if any */}
+            {cameraError && (
+              <div className="mt-2 p-3 bg-red-950/70 border border-red-800/80 rounded-xl text-red-200 text-xs flex items-center justify-between gap-2">
+                <span>⚠️ {cameraError}</span>
+                <button
+                  onClick={() => setCameraError(null)}
+                  className="text-red-400 hover:text-white font-bold text-xs ml-2"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
 
@@ -3157,23 +3647,49 @@ export default function VideoTracker() {
                 />
                 <span style={{ fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em' }}>minutes</span>
               </div>
-              <div style={{ marginTop: "16px" }}>
-                <button onClick={handleStartFocusTimer}
-                  style={{ ...styles.button, fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em' }}>
-                  Set Timer ({focusMinutes} min)
+              <div style={{ marginTop: "16px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                <button
+                  onClick={handleStartFocusTimer}
+                  style={{ ...styles.button, fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em' }}
+                >
+                  ⏱️ Set Timer ({focusMinutes} min)
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTimerPopup(false);
+                    setFocusRemaining(null);
+                    setIsFocusTimerPending(false);
+                    setIsFocusTimerPopupMaximized(false);
+                    setTimeout(() => {
+                      if (localVideoRef.current) {
+                        localVideoRef.current.play().catch(() => { });
+                      } else if (youtubePlayerRef.current?.playVideo) {
+                        youtubePlayerRef.current.playVideo();
+                      }
+                    }, 300);
+                  }}
+                  style={{
+                    ...styles.button,
+                    ...styles.secondaryButton,
+                    fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em',
+                  }}
+                >
+                  ▶ Watch Without Timer
                 </button>
                 <button
                   onClick={() => {
                     setShowTimerPopup(false);
                     setVideoId(null);
                     setLocalVideoFile(null);
+                    setLocalVideoObjectUrl(null);
                     setIsFocusTimerPopupMaximized(false);
                   }}
                   style={{
                     ...styles.button,
                     ...styles.secondaryButton,
-                    marginLeft: 8,
-                    fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em'
+                    fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em',
+                    background: '#f3f4f6',
+                    color: '#6b7280'
                   }}
                 >
                   Cancel
@@ -3208,9 +3724,31 @@ export default function VideoTracker() {
         )}
 
 
-        {coinsLoaded && appState.coins === 0 && (
+        {showZeroCoinsPopup && appState.coins <= 0 && (
           <div style={styles.popup}>
-            <div style={{ ...styles.popupInner, border: "2px solid #f59e0b" }}>
+            <div style={{ ...styles.popupInner, border: "2px solid #f59e0b", position: "relative" }}>
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setShowZeroCoinsPopup(false)}
+                style={{
+                  position: "absolute",
+                  top: "14px",
+                  right: "14px",
+                  background: "transparent",
+                  border: "none",
+                  color: isDark ? "#cbd5e1" : "#475569",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                  padding: "4px 8px",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+
               <h3 style={{ ...styles.popupTitle, color: "#d97706" }}>
                 ⚠️ You’re out of coins!
               </h3>
@@ -3223,64 +3761,404 @@ export default function VideoTracker() {
                 fontSize: "1.4em",
                 fontWeight: "700",
                 margin: "10px 0",
-                color: "#111",
+                color: isDark ? "#fff" : "#111",
               }}>
                 💎 Premium – <span style={{ color: "#16a34a" }}>₹299</span>
               </div>
 
-              <button
-                onClick={purchasePremium}
-                style={{
-                  ...styles.button,
-                  background: "#16a34a",
-                  width: "100%",
-                  padding: "12px",
-                  fontSize: "1.1em",
-                }}
-              >
-                Unlock Premium for ₹299
-              </button>
-
-
+              <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexDirection: "column" }}>
+                <button
+                  onClick={purchasePremium}
+                  style={{
+                    ...styles.button,
+                    background: "#16a34a",
+                    width: "100%",
+                    padding: "12px",
+                    fontSize: "1.05em",
+                    fontWeight: "bold",
+                  }}
+                >
+                  Unlock Premium for ₹299
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowZeroCoinsPopup(false)}
+                  style={{
+                    ...styles.button,
+                    background: isDark ? "#334155" : "#e2e8f0",
+                    color: isDark ? "#f1f5f9" : "#334155",
+                    width: "100%",
+                    padding: "10px",
+                    fontSize: "0.95em",
+                  }}
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           </div>
         )}
 
 
-        {/* Player Area */}
-        <div style={styles.panel}>
-          {focusRemaining !== null && (
-            <div style={styles.focusBar}>
-              ⏱ Focus Time Remaining:{" "}
-              <strong>
-                {Math.floor(focusRemaining / 60)}:
-                {String(focusRemaining % 60).padStart(2, "0")}
-              </strong>
-            </div>
-          )}
+        {/* ========================================================================= */}
+        {/* 🎬 HERO VIDEO PLAYER SECTION (Left: Video Info & 3 Stat Cards | Right: Video) */}
+        {/* ========================================================================= */}
+        <div
+          className="w-full rounded-3xl p-5 sm:p-7 lg:p-8 transition-all shadow-xl"
+          style={{
+            background: isDark
+              ? "linear-gradient(145deg, #0b0f19 0%, #0f172a 50%, #0d1527 100%)"
+              : "#ffffff",
+            border: isDark
+              ? "1px solid rgba(255, 255, 255, 0.1)"
+              : "1px solid #e2e8f0",
+            color: isDark ? "#ffffff" : "#0f172a",
+            boxShadow: isDark
+              ? "0 20px 40px rgba(0,0,0,0.4)"
+              : "0 10px 30px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.04)",
+          }}
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
 
-          {isVideoLoaded ? (
-            <>
+            {/* ─── LEFT COLUMN: Video Info + 3 Live Stat Cards + Actions ─── */}
+            <div className="lg:col-span-5 flex flex-col justify-between h-full space-y-5">
+
+              {/* 1. Video Info Header (Image 1 style) */}
+              <div>
+                {/* NOW STUDYING Eyebrow */}
+                <div className="flex items-center gap-2 mb-2">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold tracking-widest uppercase border ${isDark
+                      ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                      }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full animate-pulse ${isDark ? "bg-amber-400" : "bg-amber-500"
+                        }`}
+                    ></span>
+                    NOW STUDYING
+                  </span>
+                </div>
+
+                {/* Video Title */}
+                <h2
+                  className={`text-xl sm:text-2xl lg:text-3xl font-extrabold leading-tight tracking-tight line-clamp-2 ${isDark ? "text-white" : "text-slate-900"
+                    }`}
+                  title={
+                    videoMeta?.title ||
+                    (localVideoFile
+                      ? localVideoFile.name
+                      : videoId
+                        ? "YouTube Video"
+                        : "Ready to Learn?")
+                  }
+                >
+                  {videoMeta?.title ||
+                    (localVideoFile
+                      ? localVideoFile.name.replace(/\.[^/.]+$/, "")
+                      : videoId
+                        ? "Loading Video Details..."
+                        : "Ready to Learn?")}
+                </h2>
+
+                {/* Subtitle / Channel */}
+                <p
+                  className={`mt-2 text-xs sm:text-sm font-medium flex items-center flex-wrap gap-2 ${isDark ? "text-slate-300" : "text-slate-600"
+                    }`}
+                >
+                  <span>
+                    {videoMeta?.channelTitle ||
+                      (localVideoFile
+                        ? "Offline Video File"
+                        : videoId
+                          ? "YouTube Study Video"
+                          : "Paste a YouTube link or open a video to start")}
+                  </span>
+                  {videoMeta?.duration > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>⏱ {formatDuration(videoMeta.duration)}</span>
+                    </>
+                  )}
+                  {videoMeta?.studyScore > 0 && (
+                    <>
+                      <span>·</span>
+                      <span className="text-emerald-500 font-semibold">
+                        📊 {videoMeta.studyScore}% score
+                      </span>
+                    </>
+                  )}
+                </p>
+
+                {/* Tags / Chips (Image 1 style) */}
+                <div className="flex flex-wrap gap-2 mt-3.5">
+                  {displayTags.map((tag, idx) => (
+                    <span
+                      key={idx}
+                      className={`px-3 py-1 rounded-full text-xs font-semibold tracking-wide border transition-all ${isDark
+                        ? "border-white/20 bg-white/10 text-white/90 backdrop-blur-sm"
+                        : "border-slate-200 bg-slate-100 text-slate-700"
+                        }`}
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. THE 3 STAT CARDS (Image 2 style: Focus Time Remaining, Watched, Tab Switches) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+                {/* Card 1: Focus Time Remaining with Circular Progress Ring */}
+                <div
+                  onClick={() => setShowTimerPopup(true)}
+                  className={`rounded-2xl p-3.5 sm:p-4 border transition-all cursor-pointer hover:scale-[1.02] text-slate-900 group ${isDark
+                    ? "bg-white/95 border-white/80 shadow-md"
+                    : "bg-white/95 border-slate-200/90 shadow-sm hover:border-slate-300"
+                    }`}
+                  title="Click to set or adjust focus timer"
+                >
+                  <div className="flex items-center gap-1.5 text-slate-600 font-medium text-xs mb-2">
+                    <svg
+                      className="w-4 h-4 text-slate-600 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                    <span className="truncate">Focus Time Remaining</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                      {focusRemaining !== null
+                        ? `${Math.floor(focusRemaining / 60)}:${String(
+                          focusRemaining % 60
+                        ).padStart(2, "0")}`
+                        : "00:00"}
+                    </span>
+
+                    {/* Circular Progress Indicator Ring */}
+                    <svg
+                      className="w-9 h-9 shrink-0 -rotate-90"
+                      viewBox="0 0 36 36"
+                    >
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="14"
+                        fill="none"
+                        stroke="#d1fae5"
+                        strokeWidth="3.5"
+                      />
+                      <circle
+                        cx="18"
+                        cy="18"
+                        r="14"
+                        fill="none"
+                        stroke="#059669"
+                        strokeWidth="3.5"
+                        strokeDasharray={2 * Math.PI * 14}
+                        strokeDashoffset={
+                          2 *
+                          Math.PI *
+                          14 *
+                          (1 -
+                            Math.max(
+                              0,
+                              Math.min(
+                                1,
+                                (focusRemaining !== null
+                                  ? focusRemaining
+                                  : 0) /
+                                ((focusDuration || focusMinutes * 60) || 1)
+                              )
+                            ))
+                        }
+                        strokeLinecap="round"
+                        className="transition-all duration-500 ease-out"
+                      />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Card 2: Watched */}
+                <div
+                  className={`rounded-2xl p-3.5 sm:p-4 border transition-all text-slate-900 ${isDark
+                    ? "bg-white/95 border-white/80 shadow-md"
+                    : "bg-white/95 border-slate-200/90 shadow-sm"
+                    }`}
+                >
+                  <div className="flex items-center gap-1.5 text-slate-600 font-medium text-xs mb-2">
+                    <svg
+                      className="w-4 h-4 text-sky-500 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                    <span>Watched</span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    {niceTime(sessionPlayedSeconds)}
+                  </div>
+                </div>
+
+                {/* Card 3: Tab Switches */}
+                <div
+                  className={`rounded-2xl p-3.5 sm:p-4 border transition-all text-slate-900 ${isDark
+                    ? "bg-white/95 border-white/80 shadow-md"
+                    : "bg-white/95 border-slate-200/90 shadow-sm"
+                    }`}
+                >
+                  <div className="flex items-center gap-1.5 text-slate-600 font-medium text-xs mb-2">
+                    <svg
+                      className="w-4 h-4 text-sky-500 shrink-0"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                      <line x1="8" y1="21" x2="16" y2="21" />
+                      <line x1="12" y1="17" x2="12" y2="21" />
+                    </svg>
+                    <span className="truncate">Tab Switches</span>
+                  </div>
+                  <div className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                    {tabSwitches}
+                  </div>
+                </div>
+
+              </div>
+
+              {/* 3. Action Buttons */}
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  onClick={() => setShowTimerPopup(true)}
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                    isDark
+                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                  }`}
+                  title="Set or adjust focus timer"
+                >
+                  ⏱️ Focus Timer
+                </button>
+
+                <button
+                  onClick={handleStopSave}
+                  className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 cursor-pointer"
+                >
+                  Stop & Save
+                </button>
+
+                <button
+                  onClick={handleVoiceDoubtInTracker}
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                    isVoiceListening
+                      ? "bg-red-600 animate-pulse"
+                      : isDark
+                        ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                  }`}
+                  title="Speak your doubt out loud to StudyBuddy AI"
+                >
+                  {isVoiceListening ? "🎙️ Listening..." : "🎙️ Voice Doubt"}
+                </button>
+
+                {isSpeaking && (
+                  <button
+                    onClick={stopSpeakingText}
+                    className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+                    title="Stop AI Assistant Voice Speech"
+                  >
+                    ⏹️ Stop Voice
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setIsChatOpen((s) => !s)}
+                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
+                    isDark
+                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                  }`}
+                >
+                  💬 AI Chat
+                </button>
+              </div>
+
+            </div>
+
+            {/* ─── RIGHT COLUMN: The Video Player (Image 1 style) ─── */}
+            <div className="lg:col-span-7 flex flex-col items-center justify-center">
               <div
                 ref={playerContainerRef}
-                style={isPlayerMaximized ? styles.playerMax : styles.player}
+                style={
+                  isPlayerMaximized
+                    ? styles.playerMax
+                    : {
+                      position: "relative",
+                      width: "100%",
+                      aspectRatio: "16 / 9",
+                      minHeight: "260px",
+                      maxHeight: "480px",
+                      background: "#000",
+                      borderRadius: "20px",
+                      overflow: "hidden",
+                      boxShadow: isDark
+                        ? "0 14px 40px rgba(0, 0, 0, 0.45)"
+                        : "0 10px 30px rgba(0, 0, 0, 0.15)",
+                      border: isDark
+                        ? "2px solid rgba(255, 255, 255, 0.12)"
+                        : "2px solid #e2e8f0",
+                    }
+                }
               >
-                <div style={{ display: isPlayerMaximized ? "flex" : "none", position: "absolute", top: "16px", right: "20px", zIndex: 210, gap: "10px", alignItems: "center" }}>
+                {/* Floating Controls when Maximized */}
+                <div
+                  style={{
+                    display: isPlayerMaximized ? "flex" : "none",
+                    position: "absolute",
+                    top: "16px",
+                    right: "20px",
+                    zIndex: 210,
+                    gap: "10px",
+                    alignItems: "center",
+                  }}
+                >
                   <button
                     onClick={handleVoiceDoubtInTracker}
                     style={{
                       padding: "10px 18px",
                       borderRadius: "10px",
-                      background: isVoiceListening ? "#ef4444" : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                      background: isVoiceListening
+                        ? "#ef4444"
+                        : isDark ? "#4f46e5" : "#1b3f30",
                       color: "#fff",
                       fontWeight: "bold",
                       fontSize: "14px",
                       border: "none",
                       cursor: "pointer",
-                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+                      boxShadow: isDark
+                        ? "0 4px 15px rgba(79, 70, 229, 0.4)"
+                        : "0 4px 15px rgba(27, 63, 48, 0.4)",
                       display: "flex",
                       alignItems: "center",
-                      gap: "6px"
+                      gap: "6px",
                     }}
                     title="Speak doubt out loud to StudyBuddy AI (or press V)"
                   >
@@ -3291,16 +4169,18 @@ export default function VideoTracker() {
                     style={{
                       padding: "10px 18px",
                       borderRadius: "10px",
-                      background: "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)",
+                      background: isDark ? "#4f46e5" : "#1b3f30",
                       color: "#fff",
                       fontWeight: "bold",
                       fontSize: "14px",
                       border: "none",
                       cursor: "pointer",
-                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
+                      boxShadow: isDark
+                        ? "0 4px 15px rgba(79, 70, 229, 0.4)"
+                        : "0 4px 15px rgba(27, 63, 48, 0.4)",
                       display: "flex",
                       alignItems: "center",
-                      gap: "6px"
+                      gap: "6px",
                     }}
                   >
                     💬 {isChatOpen ? "Close AI Chat" : "Open AI Chat"}
@@ -3316,163 +4196,552 @@ export default function VideoTracker() {
                       fontSize: "14px",
                       border: "1px solid rgba(255,255,255,0.3)",
                       cursor: "pointer",
-                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)"
+                      boxShadow: "0 4px 15px rgba(0,0,0,0.5)",
                     }}
                   >
                     📉 Minimize
                   </button>
                 </div>
-                <div style={{ width: "100%", height: "100%" }}>
-                  {videoId && (
+
+                {/* Video Elements */}
+                {videoId ? (
+                  <div style={{ width: "100%", height: "100%" }}>
                     <div
                       id="vt-youtube-player"
                       style={{ width: "100%", height: "100%" }}
                     />
-                  )}
-                </div>
-                {localVideoObjectUrl && (
+                  </div>
+                ) : localVideoObjectUrl ? (
                   <video
                     ref={localVideoRef}
                     src={localVideoObjectUrl}
                     controls
-                    style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                    playsInline
+                    autoPlay
+                    onPlay={() => {
+                      setIsPlaying(true);
+                      startPolling();
+                      if (isFocusTimerPending && !hasPlaybackStarted) {
+                        setFocusRemaining(focusMinutes * 60);
+                        setIsFocusTimerPending(false);
+                        setHasPlaybackStarted(true);
+                      }
+                    }}
+                    onPlaying={() => {
+                      setIsPlaying(true);
+                      startPolling();
+                    }}
+                    onPause={() => {
+                      setIsPlaying(false);
+                      stopPolling();
+                    }}
+                    onEnded={() => {
+                      isVideoEndingRef.current = true;
+                      setIsPlaying(false);
+                      stopPolling();
+                      if (sessionPlayedSeconds >= 5) {
+                        handleStopSave();
+                      } else {
+                        finalizeSession(true);
+                        updateVideosWatched(userId);
+                      }
+                      setTimeout(() => {
+                        isVideoEndingRef.current = false;
+                      }, 3000);
+                    }}
+                    onTimeUpdate={(e) => {
+                      setCurrentTime(e.target.currentTime);
+                    }}
+                    onLoadedMetadata={() => {
+                      setPlayerReady(true);
+                      if (localVideoRef.current) {
+                        lastSampleRef.current =
+                          localVideoRef.current.currentTime || 0;
+                      }
+                    }}
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "contain",
+                      display: "block",
+                      backgroundColor: "#000",
+                    }}
                   />
-                )}
-                <button
-                  onClick={toggleMaximizePlayer}
-                  style={styles.toggleMaxMinButton}
-                >
-                  {isPlayerMaximized ? "Minimize" : "Maximize"}
-                </button>
-              </div>
-              <div style={styles.controlsAndStats}>
-                <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                  <button
-                    onClick={handleStopSave}
-                    style={{
-                      ...styles.smallBtn,
-                      background: "#ef4444",
-                    }}
-                  >
-                    Stop & Save
-                  </button>
-                  <button
-                    onClick={handleVoiceDoubtInTracker}
-                    style={{
-                      ...styles.smallBtn,
-                      background: isVoiceListening
-                        ? "#ef4444"
-                        : "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-                      color: "#ffffff",
-                      fontWeight: "bold",
-                    }}
-                    title="Speak your doubt out loud to StudyBuddy AI"
-                  >
-                    {isVoiceListening ? "🎙️ Listening..." : "🎙️ Voice Doubt"}
-                  </button>
-                  {isSpeaking && (
-                    <button
-                      onClick={stopSpeakingText}
-                      style={{
-                        ...styles.smallBtn,
-                        background: "#ef4444",
-                        color: "#ffffff",
-                        fontWeight: "bold",
-                      }}
-                      title="Stop AI Assistant Voice Speech"
-                    >
-                      ⏹️ Stop Voice
-                    </button>
-                  )}
-                  <button
-                    onClick={() => setIsChatOpen((s) => !s)}
-                    style={{
-                      ...styles.smallBtn,
-                      background: "#6366f1",
-                      color: "#ffffff",
-                      fontWeight: "bold",
-                    }}
-                  >
-                    💬 AI Chat
-                  </button>
-                </div>
-                <div style={styles.statsText}>
-                  <div>
-                    Watched: <strong>{niceTime(sessionPlayedSeconds)}</strong>
+                ) : (
+                  /* Placeholder with Circular Gold Play Button (matching Image 2: Green in light mode, original in dark mode) */
+                  <div className={`w-full h-full flex flex-col items-center justify-center p-6 text-center select-none group ${
+                    isDark
+                      ? "bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950/80"
+                      : "bg-gradient-to-br from-[#07130d] via-[#0d2218] to-[#1b3f30]"
+                  }`}>
+                    <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-amber-500/20 border-2 border-amber-500/40 flex items-center justify-center shadow-xl group-hover:scale-105 transition-transform duration-300">
+                      <div className="w-11 h-11 sm:w-14 sm:h-14 rounded-full bg-amber-500 flex items-center justify-center shadow-md">
+                        <svg
+                          className="w-5 h-5 sm:w-6 sm:h-6 text-slate-950 translate-x-0.5"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      </div>
+                    </div>
+                    <p className={`mt-4 text-xs sm:text-sm font-semibold max-w-xs ${
+                      isDark ? "text-slate-300" : "text-emerald-100/90"
+                    }`}>
+                      Load a YouTube link or choose a local video from your device to begin.
+                    </p>
                   </div>
-                  This Video Tab Switches: <strong>{tabSwitches}</strong>
+                )}
+
+                {/* Maximize / Minimize button */}
+                {(videoId || localVideoObjectUrl) && (
+                  <button
+                    onClick={toggleMaximizePlayer}
+                    style={styles.toggleMaxMinButton}
+                  >
+                    {isPlayerMaximized ? "Minimize" : "Maximize"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Notes Section: Side-by-Side (Take Notes on Left, Saved Notes on Right) */}
+          {(videoId || localVideoObjectUrl) && (
+            <div className="mt-6 w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+              {/* LEFT COLUMN: Take Notes & Save Important Points */}
+              <div
+                className={`p-5 sm:p-6 rounded-3xl border transition-all duration-300 shadow-sm flex flex-col justify-between ${isDark
+                  ? "bg-[#151921] border-slate-700/80 text-white"
+                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800"
+                  }`}
+              >
+              {/* Header with Step Badge, Title & Spiral Notebook Graphic */}
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3.5">
+                  {/* Step 3 Number Badge */}
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#1b3d2f] text-white flex items-center justify-center font-bold text-lg sm:text-xl shrink-0 shadow-xs">
+                    3
+                  </div>
+
+                  <div>
+                    <h3 className="m-0 text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+                      Take Notes &amp; Save Important Points
+                    </h3>
+                    <p className="m-0 mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                      Write, organize and save your notes for this video.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Spiral Notebook & Pen Vector Illustration (Adapts to Light & Dark themes) */}
+                <div className="relative shrink-0 hidden sm:block select-none pointer-events-none">
+                  <svg
+                    className="w-16 h-16 sm:w-20 sm:h-20 drop-shadow-md transition-all duration-300"
+                    viewBox="0 0 100 100"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    {/* Notebook Group (rotated -8 deg like reference image) */}
+                    <g transform="rotate(-8 45 48)">
+                      {/* Back Cover / Under-pages Drop Layer for 3D depth */}
+                      <rect
+                        x="18"
+                        y="12"
+                        width="54"
+                        height="72"
+                        rx="5"
+                        fill={isDark ? "#090d13" : "#e5e0d8"}
+                      />
+                      <rect
+                        x="17"
+                        y="11"
+                        width="54"
+                        height="72"
+                        rx="5"
+                        fill={isDark ? "#0e1520" : "#eeeae3"}
+                      />
+
+                      {/* Main Notepad Page */}
+                      <rect
+                        x="16"
+                        y="10"
+                        width="54"
+                        height="72"
+                        rx="5"
+                        fill={isDark ? "#17202c" : "#faf8f5"}
+                        stroke={isDark ? "#2a3749" : "#e2ded4"}
+                        strokeWidth="1.2"
+                      />
+
+                      {/* Ruled Horizontal Lines */}
+                      {[22, 29, 36, 43, 50, 57, 64, 71].map((y) => (
+                        <line
+                          key={y}
+                          x1="28"
+                          y1={y}
+                          x2="63"
+                          y2={y}
+                          stroke={isDark ? "#2d3b4d" : "#e2ded6"}
+                          strokeWidth="1.4"
+                          strokeLinecap="round"
+                        />
+                      ))}
+
+                      {/* Left Margin Accent Line */}
+                      <line
+                        x1="25"
+                        y1="12"
+                        x2="25"
+                        y2="80"
+                        stroke={isDark ? "#f43f5e" : "#fca5a5"}
+                        strokeWidth="0.8"
+                        strokeOpacity={isDark ? "0.35" : "0.5"}
+                      />
+
+                      {/* Spiral Wire Coils & Binding Holes */}
+                      {[16, 23, 30, 37, 44, 51, 58, 65, 72].map((y) => (
+                        <g key={y}>
+                          {/* Punched Hole */}
+                          <ellipse
+                            cx="17"
+                            cy={y}
+                            rx="1.5"
+                            ry="1.8"
+                            fill={isDark ? "#0c1219" : "#44403c"}
+                          />
+                          {/* Spiral Metallic Ring Loop */}
+                          <path
+                            d={`M 11.5 ${y - 1.5} C 11.5 ${y - 4.5}, 18.5 ${y - 4.5}, 18.5 ${y} C 18.5 ${y + 2.5}, 13.5 ${y + 2.5}, 13.5 ${y}`}
+                            fill="none"
+                            stroke={isDark ? "#94a3b8" : "#292524"}
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                          {/* Subtle Ring Highlight */}
+                          <path
+                            d={`M 13 ${y - 3} C 15 ${y - 3.5}, 17 ${y - 2}, 17.5 ${y - 0.5}`}
+                            fill="none"
+                            stroke={isDark ? "#e2e8f0" : "#78716c"}
+                            strokeWidth="0.8"
+                            strokeLinecap="round"
+                          />
+                        </g>
+                      ))}
+                    </g>
+
+                    {/* Pen Group (angled next to notebook on right) */}
+                    <g transform="rotate(24 74 52)">
+                      {/* Pen Drop Shadow */}
+                      <rect
+                        x="72"
+                        y="17"
+                        width="5"
+                        height="46"
+                        rx="2.5"
+                        fill="black"
+                        fillOpacity="0.18"
+                      />
+
+                      {/* Pen Body */}
+                      <rect
+                        x="71"
+                        y="16"
+                        width="5.5"
+                        height="48"
+                        rx="2.5"
+                        fill={isDark ? "#064e3b" : "#0f172a"}
+                        stroke={isDark ? "#059669" : "#1e293b"}
+                        strokeWidth="0.8"
+                      />
+
+                      {/* Metallic Pen Clip */}
+                      <path
+                        d="M 70.5 21 L 70.5 37 Q 70.5 39 72 39"
+                        fill="none"
+                        stroke={isDark ? "#cbd5e1" : "#94a3b8"}
+                        strokeWidth="1.2"
+                        strokeLinecap="round"
+                      />
+
+                      {/* Metallic Rings */}
+                      <rect
+                        x="70.5"
+                        y="20"
+                        width="6.5"
+                        height="1.8"
+                        rx="0.5"
+                        fill={isDark ? "#e2e8f0" : "#cbd5e1"}
+                      />
+                      <rect
+                        x="70.5"
+                        y="58"
+                        width="6.5"
+                        height="1.8"
+                        rx="0.5"
+                        fill={isDark ? "#e2e8f0" : "#cbd5e1"}
+                      />
+
+                      {/* Pen Top Cap */}
+                      <path
+                        d="M 71 16 Q 73.75 13 76.5 16 Z"
+                        fill={isDark ? "#cbd5e1" : "#64748b"}
+                      />
+
+                      {/* Pen Nib Cone */}
+                      <polygon
+                        points="71,60 76.5,60 74.3,70 73.2,70"
+                        fill={isDark ? "#94a3b8" : "#cbd5e1"}
+                      />
+                      {/* Pen Ballpoint Tip */}
+                      <polygon
+                        points="73.2,70 74.3,70 73.9,72.5 73.6,72.5"
+                        fill={isDark ? "#022c22" : "#090d16"}
+                      />
+                    </g>
+                  </svg>
                 </div>
               </div>
-              <div style={{ marginTop: "16px" }}>
+
+              {/* Notes Editor Box */}
+              <div
+                className={`rounded-2xl border transition-all overflow-hidden ${isDark
+                  ? "bg-slate-900/60 border-slate-700 focus-within:border-emerald-600/60"
+                  : "bg-white border-slate-200 focus-within:border-emerald-700/60"
+                  }`}
+              >
+                {/* Formatting Toolbar */}
+                <div
+                  className={`px-3 py-2 border-b flex items-center gap-1 sm:gap-2 flex-wrap ${isDark
+                    ? "bg-slate-800/40 border-slate-700/80 text-slate-300"
+                    : "bg-slate-50/80 border-slate-200 text-slate-600"
+                    }`}
+                >
+                  {/* Bold */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("bold")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 font-extrabold text-sm transition-colors cursor-pointer"
+                    title="Bold (**text**)"
+                  >
+                    B
+                  </button>
+
+                  {/* Italic */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("italic")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 font-serif italic text-sm transition-colors cursor-pointer"
+                    title="Italic (*text*)"
+                  >
+                    I
+                  </button>
+
+                  {/* Underline */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("underline")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 underline text-sm font-semibold transition-colors cursor-pointer"
+                    title="Underline (<u>text</u>)"
+                  >
+                    U
+                  </button>
+
+                  <div className="w-[1px] h-4 bg-slate-300 dark:bg-slate-700 mx-0.5" />
+
+                  {/* Bullet List */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("bullet")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Bullet List"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="9" y1="6" x2="20" y2="6" />
+                      <line x1="9" y1="12" x2="20" y2="12" />
+                      <line x1="9" y1="18" x2="20" y2="18" />
+                      <circle cx="4" cy="6" r="1.5" fill="currentColor" stroke="none" />
+                      <circle cx="4" cy="12" r="1.5" fill="currentColor" stroke="none" />
+                      <circle cx="4" cy="18" r="1.5" fill="currentColor" stroke="none" />
+                    </svg>
+                  </button>
+
+                  {/* Numbered List */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("number")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Numbered List"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="10" y1="6" x2="21" y2="6" />
+                      <line x1="10" y1="12" x2="21" y2="12" />
+                      <line x1="10" y1="18" x2="21" y2="18" />
+                      <text x="2" y="8" fontSize="8" fontWeight="bold" fill="currentColor" stroke="none">1</text>
+                      <text x="2" y="14" fontSize="8" fontWeight="bold" fill="currentColor" stroke="none">2</text>
+                      <text x="2" y="20" fontSize="8" fontWeight="bold" fill="currentColor" stroke="none">3</text>
+                    </svg>
+                  </button>
+
+                  {/* Table */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("table")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Insert Table"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="3" y="3" width="18" height="18" rx="2" />
+                      <path d="M3 9h18" />
+                      <path d="M3 15h18" />
+                      <path d="M9 3v18" />
+                    </svg>
+                  </button>
+
+                  {/* Link */}
+                  <button
+                    type="button"
+                    onClick={() => handleToolbarFormat("link")}
+                    className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-700 transition-colors cursor-pointer"
+                    title="Insert Link"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Textarea */}
                 <textarea
-                  placeholder="Your notes for this video..."
+                  ref={noteTextareaRef}
+                  placeholder="Write your notes here... (e.g. important concepts, formulas, questions, etc.)"
                   value={noteText}
                   onChange={(e) => setNoteText(e.target.value)}
-                  style={styles.textarea}
+                  className={`w-full p-4 bg-transparent outline-none border-none text-sm leading-relaxed resize-y min-h-[140px] ${isDark
+                    ? "text-slate-100 placeholder:text-slate-500"
+                    : "text-slate-800 placeholder:text-slate-400"
+                    }`}
                 />
+              </div>
+
+              {/* Bottom Tag & Save Actions Bar */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mt-3.5">
+                {/* Tag Input */}
                 <div
-                  style={{
-                    marginTop: "12px",
-                    display: "flex",
-                    gap: "12px",
-                  }}
+                  className={`flex-1 flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl border transition-all ${isDark
+                    ? "bg-slate-900/70 border-slate-700 focus-within:border-emerald-600/70"
+                    : "bg-white border-slate-200 focus-within:border-emerald-600/70"
+                    }`}
                 >
+                  <svg className="w-4 h-4 text-slate-400 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21.41 11.58l-9-9C12.05 2.22 11.55 2 11 2H4c-1.1 0-2 .9-2 2v7c0 .55.22 1.05.59 1.42l9 9c.36.36.86.58 1.41.58.55 0 1.05-.22 1.41-.59l7-7c.37-.36.59-.86.59-1.41 0-.55-.23-1.06-.59-1.42zM5.5 7C4.67 7 4 6.33 4 5.5S4.67 4 5.5 4 7 4.67 7 5.5 6.33 7z" />
+                  </svg>
                   <input
-                    placeholder="Tag (e.g., 'React Hooks')"
+                    placeholder="Tag (e.g., 'Graph Theory', 'GATE', 'Important')"
                     value={tagText}
                     onChange={(e) => setTagText(e.target.value)}
-                    style={{ ...styles.input, width: "250px" }}
+                    className={`flex-1 bg-transparent border-none outline-none text-xs sm:text-sm font-medium ${isDark
+                      ? "text-slate-100 placeholder:text-slate-500"
+                      : "text-slate-800 placeholder:text-slate-400"
+                      }`}
                   />
-                  <button onClick={handleSaveNotes} style={styles.button}>
-                    Save Notes
-                  </button>
                 </div>
+
+                {/* Save Notes Button */}
+                <button
+                  type="button"
+                  onClick={handleSaveNotes}
+                  className={`active:scale-95 text-white px-5 sm:px-6 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0 ${
+                    isDark
+                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                  }`}
+                >
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                  </svg>
+                  <span>Save Notes</span>
+                </button>
               </div>
-
-
-
-
-            </>
-          ) : (
-            <div style={styles.placeholder}>
-              Paste a YouTube link or choose a local video to begin your study session.
             </div>
-          )}
-        </div>
 
-
-        {/* ================== PERMANENT NOTES PANEL ================== */}
-        {/* ================== STICKY NOTE STYLE NOTES PANEL ================== */}
-        <div style={stickyNotes.panel}>
-
-          <h3 style={stickyNotes.heading}>
-            <span style={stickyNotes.icon}>📌</span> Saved Notes
-          </h3>
-
-          {!currentActiveVideoIdentifier ? (
-            <p style={stickyNotes.emptyMsg}>Load a video to view saved notes.</p>
-          ) : (() => {
-            const existing = appState.notes?.[currentActiveVideoIdentifier] || "";
-            const cumulative = (existing ? existing + (noteText.trim() ? "\n" + noteText : "") : noteText).trim();
-
-            if (!cumulative) return <p style={stickyNotes.emptyMsg}>No notes saved yet for this video. Add one! ✨</p>;
-
-            return (
-              <div style={stickyNotes.stickyCard}>
-                <div style={stickyNotes.pin}></div>
-                <div style={stickyNotes.noteText}>{cumulative}</div>
-                {appState.tags?.[currentActiveVideoIdentifier] && (
-                  <div style={stickyNotes.tag}>#{appState.tags[currentActiveVideoIdentifier]}</div>
-                )}
-                <div style={stickyNotes.date}>
-                  Last updated: <strong>{new Date().toLocaleString()}</strong>
+            {/* RIGHT COLUMN: Saved Notes Section (Side by side with Take Notes) */}
+            <div
+              className={`p-5 sm:p-6 rounded-3xl border transition-all duration-300 shadow-sm flex flex-col justify-between min-w-0 w-full overflow-hidden ${isDark
+                ? "bg-[#151921] border-slate-700/80 text-white"
+                : "bg-[#fdfbf7] border-[#eee8de] text-slate-800"
+                }`}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-[#1b3d2f] text-white flex items-center justify-center font-bold text-lg sm:text-xl shrink-0 shadow-xs">
+                    📌
+                  </div>
+                  <div>
+                    <h3 className="m-0 text-base sm:text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+                      Saved Notes
+                    </h3>
+                    <p className="m-0 mt-0.5 text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-medium">
+                      Your saved insights and pinned sticky notes for this lesson.
+                    </p>
+                  </div>
                 </div>
               </div>
-            );
-          })()}
 
-        </div>
-        {/* ================================================================== */}
+              {/* Sticky Note Content */}
+              {!currentActiveVideoIdentifier ? (
+                <div className="flex-1 flex items-center justify-center py-10 text-center">
+                  <p style={stickyNotes.emptyMsg}>Load a video to view saved notes.</p>
+                </div>
+              ) : (() => {
+                const existing = appState.notes?.[currentActiveVideoIdentifier] || "";
+                const cumulative = (existing ? existing + (noteText.trim() ? "\n" + noteText : "") : noteText).trim();
+
+                if (!cumulative) {
+                  return (
+                    <div className="flex-1 flex items-center justify-center py-10 text-center">
+                      <p style={stickyNotes.emptyMsg}>No notes saved yet for this video. Add one! ✨</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="flex-1 flex flex-col justify-start min-w-0 w-full overflow-hidden">
+                    <div
+                      style={{
+                        ...stickyNotes.stickyCard,
+                        height: "100%",
+                        minHeight: "240px",
+                        maxHeight: "380px",
+                        boxSizing: "border-box",
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        wordBreak: "break-word",
+                        overflowWrap: "anywhere"
+                      }}
+                    >
+                      <div style={stickyNotes.pin}></div>
+                      <div style={stickyNotes.noteText}>{cumulative}</div>
+                      {appState.tags?.[currentActiveVideoIdentifier] && (
+                        <div style={stickyNotes.tag}>#{appState.tags[currentActiveVideoIdentifier]}</div>
+                      )}
+                      <div style={stickyNotes.date}>
+                        Last updated: <strong>{new Date().toLocaleString()}</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+      </div>
 
 
 
@@ -3480,12 +4749,23 @@ export default function VideoTracker() {
         <div style={styles.panel}>
           <h3 style={styles.sectionTitle}>📊 Monthly Study Performance</h3>
 
-          {/* Month selector */}
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+          {/* Month selector & Controls */}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center", marginBottom: 14 }}>
             <select
               value={selectedMonth}
               onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              style={{ padding: "8px 10px", borderRadius: 8 }}
+              style={{
+                padding: "8px 12px",
+                borderRadius: 10,
+                background: isDark ? "#1e293b" : "#ffffff",
+                color: isDark ? "#f8fafc" : "#0f172a",
+                border: isDark ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid #cbd5e1",
+                fontSize: "14px",
+                fontWeight: 600,
+                outline: "none",
+                cursor: "pointer",
+                boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.06)",
+              }}
             >
               {MONTHS.map((m, i) => (
                 <option key={m} value={i}>{m}</option>
@@ -3496,19 +4776,50 @@ export default function VideoTracker() {
               type="number"
               value={selectedYear}
               onChange={(e) => setSelectedYear(Number(e.target.value))}
-              style={{ width: 100, padding: "8px 10px", borderRadius: 8 }}
+              style={{
+                width: 95,
+                padding: "8px 12px",
+                borderRadius: 10,
+                background: isDark ? "#1e293b" : "#ffffff",
+                color: isDark ? "#f8fafc" : "#0f172a",
+                border: isDark ? "1px solid rgba(255, 255, 255, 0.15)" : "1px solid #cbd5e1",
+                fontSize: "14px",
+                fontWeight: 600,
+                outline: "none",
+                boxShadow: isDark ? "0 2px 8px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.06)",
+              }}
             />
 
-            <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
               <button
                 onClick={() => setMonthStartIndex((s) => Math.max(0, s - 10))}
-                style={{ padding: "6px 10px", fontSize: 14 }}
+                style={{
+                  padding: "7px 13px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 10,
+                  background: isDark ? "rgba(99, 102, 241, 0.15)" : "#eaf3ee",
+                  color: isDark ? "#a5b4fc" : "#1b3f30",
+                  border: isDark ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid rgba(27, 63, 48, 0.25)",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
               >
                 ◀ Prev 10
               </button>
               <button
                 onClick={() => setMonthStartIndex((s) => Math.min(Math.max(0, monthData.length - 10), s + 10))}
-                style={{ padding: "6px 10px", fontSize: 14 }}
+                style={{
+                  padding: "7px 13px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  borderRadius: 10,
+                  background: isDark ? "rgba(99, 102, 241, 0.15)" : "#eaf3ee",
+                  color: isDark ? "#a5b4fc" : "#1b3f30",
+                  border: isDark ? "1px solid rgba(99, 102, 241, 0.3)" : "1px solid rgba(27, 63, 48, 0.25)",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
               >
                 Next 10 ▶
               </button>
@@ -3516,96 +4827,506 @@ export default function VideoTracker() {
           </div>
 
           {/* Info - swipe/trackpad to move by 10 days */}
-          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 8 }}>
-            <span style={{ color: "#6b7280" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10 }}>
+            <span style={{ color: isDark ? "#94a3b8" : "#64748b", fontSize: 13, fontWeight: 500 }}>
               Showing {monthData.length ? monthData[Math.min(monthStartIndex, monthData.length - 1)].label : "—"}
               {" "}to{" "}
               {monthData.length ? monthData[Math.min(monthStartIndex + 9, monthData.length - 1)].label : "—"}
             </span>
-            <span style={{ marginLeft: "auto", color: "#9ca3af", fontSize: 13 }}>
-            </span>
           </div>
 
-          {/* Chart area listens for wheel/touch to change frame by 10 days */}
+          {/* Chart area: Smooth Spline Area Chart matching StudyBuddy 'Study' Logo Indigo/Violet Theme */}
           <div
             onWheel={handleWheelNav}
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
-            style={{ height: 320, marginTop: "8px", touchAction: "pan-y", cursor: "grab" }}
+            style={{ height: 330, marginTop: "6px", touchAction: "pan-y", cursor: "grab" }}
           >
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthData.slice(monthStartIndex, monthStartIndex + 10)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                <XAxis dataKey="label" tick={{ fill: "#4b5563" }} />
-                {/* <YAxis tick={{ fill: "#4b5563" }} /> */}
-                <YAxis
-                  domain={[0, 1440]}
-                  ticks={[0, 180, 360, 540, 720, 900, 1080, 1260, 1440]}
-                  tickFormatter={(v) => {
-                    const hours = v / 60;
-                    return hours === 0 ? "0" : `${hours}h`;
-                  }}
-                  tick={{ fill: "#4b5563" }}
-                  interval={0}
-                />
-
-                <Tooltip contentStyle={styles.tooltip} />
-                <Bar dataKey="mins" fill="url(#colorUv)" radius={[8, 8, 0, 0]} />
+              <AreaChart
+                data={monthData.slice(monthStartIndex, monthStartIndex + 10)}
+                margin={{ top: 20, right: 20, left: -10, bottom: 5 }}
+              >
                 <defs>
-                  <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.85} />
-                    <stop offset="95%" stopColor="#d946ef" stopOpacity={0.85} />
+                  {/* Indigo/Violet in Dark Mode (Original), Forest Green #1b3f30 in Light Mode */}
+                  <linearGradient id="studyLogoArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={isDark ? "#6366f1" : "#1b3f30"} stopOpacity={isDark ? 0.42 : 0.42} />
+                    <stop offset="55%" stopColor={isDark ? "#6366f1" : "#1b3f30"} stopOpacity={isDark ? 0.10 : 0.10} />
+                    <stop offset="100%" stopColor={isDark ? "#6366f1" : "#1b3f30"} stopOpacity={0.0} />
+                  </linearGradient>
+                  <linearGradient id="studyLogoStroke" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor={isDark ? "#4f46e5" : "#1b3f30"} />
+                    <stop offset="50%" stopColor={isDark ? "#6366f1" : "#265944"} />
+                    <stop offset="100%" stopColor={isDark ? "#7c3aed" : "#1b3f30"} />
                   </linearGradient>
                 </defs>
-              </BarChart>
+
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  vertical={true}
+                  horizontal={true}
+                  stroke={isDark ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.06)"}
+                />
+
+                <XAxis
+                  dataKey="label"
+                  tickFormatter={(lbl) => {
+                    if (!lbl) return "";
+                    const parts = lbl.split(" ");
+                    return parts.length === 2 ? `${parts[0].slice(0, 3)} ${parts[1]}` : lbl;
+                  }}
+                  tick={{ fill: isDark ? "#94a3b8" : "#64748b", fontSize: 11, fontWeight: 500 }}
+                  axisLine={{ stroke: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.12)" }}
+                  tickLine={{ stroke: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.12)" }}
+                  dy={6}
+                />
+
+                {/* Flexible Minutes Y-Axis (Image 2 style values & elasticity) */}
+                <YAxis
+                  stroke={isDark ? "#94a3b8" : "#64748b"}
+                  tick={{ fill: isDark ? "#94a3b8" : "#64748b", fontSize: 11, fontWeight: 500 }}
+                  axisLine={{ stroke: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.12)" }}
+                  tickLine={{ stroke: isDark ? "rgba(255, 255, 255, 0.14)" : "rgba(0, 0, 0, 0.12)" }}
+                  allowDecimals={false}
+                  domain={[0, (dataMax) => {
+                    if (!dataMax || dataMax <= 0) return 10;
+                    if (dataMax <= 5) return 6;
+                    if (dataMax <= 10) return 12;
+                    if (dataMax <= 20) return 24;
+                    if (dataMax <= 60) return Math.ceil(dataMax * 1.25 / 5) * 5;
+                    return Math.ceil(dataMax * 1.2 / 10) * 10;
+                  }]}
+                  tickFormatter={(v) => (v === 0 ? "0" : `${v}m`)}
+                  dx={-4}
+                />
+
+                {/* Floating Sleek Tooltip */}
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (active && payload && payload.length) {
+                      const mins = Number(payload[0].value) || 0;
+                      const hrs = Math.floor(mins / 60);
+                      const rem = mins % 60;
+                      const formatted =
+                        hrs > 0
+                          ? `${hrs}h ${rem > 0 ? `${rem}m` : ""}`.trim()
+                          : `${rem} min`;
+
+                      return (
+                        <div
+                          style={{
+                            background: isDark ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.98)",
+                            backdropFilter: "blur(16px)",
+                            border: isDark ? "1px solid rgba(99, 102, 241, 0.45)" : "1px solid rgba(27, 63, 48, 0.35)",
+                            borderRadius: "14px",
+                            padding: "10px 16px",
+                            boxShadow: isDark
+                              ? "0 12px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(99, 102, 241, 0.35)"
+                              : "0 10px 25px rgba(27, 63, 48, 0.2), 0 4px 10px rgba(0, 0, 0, 0.05)",
+                            textAlign: "center",
+                            minWidth: "120px",
+                            pointerEvents: "none",
+                          }}
+                        >
+                          <div style={{
+                            fontSize: "15px",
+                            fontWeight: "800",
+                            color: isDark ? "#a5b4fc" : "#1b3f30",
+                            letterSpacing: "-0.01em",
+                            lineHeight: 1.2,
+                          }}>
+                            {formatted}
+                          </div>
+                          <div style={{
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            color: isDark ? "#94a3b8" : "#64748b",
+                            marginTop: "3px",
+                          }}>
+                            {label}
+                          </div>
+                          <div style={{
+                            fontSize: "11px",
+                            color: isDark ? "#cbd5e1" : "#475569",
+                            marginTop: "6px",
+                            paddingTop: "6px",
+                            borderTop: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid rgba(0, 0, 0, 0.06)",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                          }}>
+                            <span>🕒 Total Watched:</span>
+                            <span style={{ fontWeight: "700", color: isDark ? "#818cf8" : "#143024" }}>
+                              {mins} min
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+
+                {/* Smooth curved Area with theme gradients & glowing nodes */}
+                <Area
+                  type="monotone"
+                  dataKey="mins"
+                  stroke="url(#studyLogoStroke)"
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#studyLogoArea)"
+                  dot={{
+                    r: 4.5,
+                    fill: isDark ? "#0f172a" : "#ffffff",
+                    stroke: isDark ? "#6366f1" : "#1b3f30",
+                    strokeWidth: 2.5,
+                  }}
+                  activeDot={{
+                    r: 7,
+                    fill: "#ffffff",
+                    stroke: isDark ? "#4f46e5" : "#1b3f30",
+                    strokeWidth: 3.5,
+                    style: { filter: isDark ? "drop-shadow(0 0 10px rgba(99, 102, 241, 0.9))" : "drop-shadow(0 0 10px rgba(27, 63, 48, 0.7))" },
+                  }}
+                />
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* 🎬 History Section - Compact Dashboard Widgets */}
-        {/* ✅ IMPORTANT: This section shows ONLY the last 5 sessions (sliced). */}
-        {/* The graph above uses ALL sessions from the database (unsliced). */}
-        <div style={styles.panel}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-            <div>
-              <h3 style={styles.sectionTitle}>🎬 Study Video Cards</h3>
-              <p style={{ margin: "2px 0 0 0", fontSize: "0.85rem", color: "#6b7280" }}>
-                Click below to view all saved study video cards and daily logs
-              </p>
+        {/* ========================================================================= */}
+        {/* 🎬 SAVED STUDY VIDEOS CAROUSEL / SLIDER (Matching Reference Image)        */}
+        {/* ========================================================================= */}
+        <div
+          className="w-full rounded-3xl p-5 sm:p-7 transition-all shadow-md mt-6"
+          style={{
+            background: isDark ? "rgba(15, 23, 42, 0.85)" : "#ffffff",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid #e2e8f0",
+            color: isDark ? "#ffffff" : "#0f172a",
+          }}
+        >
+          {/* Header Row: Count Badge + Title + Subtitle on Left | View History + Nav Arrows on Right */}
+          <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-3.5">
+              <div className={`w-11 h-11 rounded-full text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0 ${
+                isDark ? "bg-[#4f46e5]" : "bg-[#1b3f30]"
+              }`}>
+                {uniqueCards.length}
+              </div>
+              <div>
+                <h3 className="text-xl sm:text-2xl font-bold font-serif tracking-tight leading-tight">
+                  Your Study Videos
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                  All your saved study videos and daily logs.
+                </p>
+              </div>
             </div>
-            <button
+
+            <div className="flex items-center gap-2.5">
+              <button
+                onClick={() => setShowWatchHistoryModal(true)}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold text-white transition-all flex items-center gap-1.5 cursor-pointer shadow-md active:scale-95 ${
+                  isDark
+                    ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                    : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                }`}
+              >
+                View Watch History →
+              </button>
+
+              {/* Slider Arrow Buttons */}
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => scrollSlider("left")}
+                  className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 transition-all cursor-pointer shadow-sm font-bold text-base select-none"
+                  title="Previous videos"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={() => scrollSlider("right")}
+                  className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 transition-all cursor-pointer shadow-sm font-bold text-base select-none"
+                  title="Next videos"
+                >
+                  ›
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Horizontal Slider Track */}
+          <div
+            ref={videoSliderRef}
+            className="flex items-stretch gap-4 overflow-x-auto pb-4 pt-1 scroll-smooth select-none scrollbar-none"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {uniqueCards.length > 0 ? (
+              uniqueCards.map((h, i) => {
+                const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
+                const minutes = Math.floor(seconds / 60);
+                const secs = seconds % 60;
+                const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+                const switches = h.totalTabSwitches ?? h.tabSwitches ?? 0;
+                const rawDate = h.latestWatchedAt || h.watchedAt;
+                const watchDate = rawDate
+                  ? rawDate.includes("T")
+                    ? new Date(rawDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+                    : rawDate
+                  : "Recent";
+                const isLocal =
+                  !/^[0-9A-Za-z_-]{11}$/.test(h.videoId) ||
+                  h.url === "Local Video" ||
+                  h.url === "Local File" ||
+                  (h.url && !h.url.startsWith("http"));
+                const actualNote = h.note || h.notes || appState.notes?.[h.videoId] || "";
+
+                // Calculate watch completion percentage directly from duration
+                const rawTotal = Number(
+                  h.duration ||
+                  h.videoDuration ||
+                  (videoMeta && (h.videoId === videoId || h.videoId === videoMeta?.videoId) ? videoMeta.duration : 0)
+                );
+                // If total video duration is known (> 0), use it; otherwise use 3600s (standard 60-min study lecture baseline)
+                const effectiveTotalDuration = rawTotal > 0 ? rawTotal : Math.max(3600, Math.round(seconds * 1.15));
+                const completionPct = seconds > 0
+                  ? Math.min(100, Math.max(2, Math.round((seconds / effectiveTotalDuration) * 100)))
+                  : 0;
+
+                return (
+                  <div
+                    key={h.videoId || i}
+                    onClick={(e) => handleSessionCardClick(e, h)}
+                    className={`w-[260px] sm:w-[280px] shrink-0 rounded-2xl p-3.5 border transition-all flex flex-col justify-between cursor-pointer select-none group shadow-sm hover:shadow-md ${isDark
+                      ? "bg-slate-800/95 border-slate-700/80 hover:border-slate-600"
+                      : "bg-white/95 border-slate-200/90 hover:border-slate-300"
+                      }`}
+                  >
+                    <div>
+                      {/* Top Video Preview Thumbnail */}
+                      <div className="aspect-video w-full rounded-xl overflow-hidden relative bg-slate-950 mb-2.5 shadow-xs">
+                        {h.thumbnail ? (
+                          <img
+                            src={h.thumbnail}
+                            alt={h.videoTitle || "Video Thumbnail"}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950 text-white">
+                            <span className="text-2xl">🎬</span>
+                            <span className="text-[10px] text-slate-300 mt-1 font-semibold">Local Video</span>
+                          </div>
+                        )}
+
+                        {/* Clickable Play Overlay */}
+                        <div
+                          onClick={(e) => handleSessionCardClick(e, h)}
+                          className="absolute inset-0 bg-black/25 hover:bg-black/10 flex items-center justify-center transition-all cursor-pointer"
+                          title="Click to play video in tracker"
+                        >
+                          <div className="w-9 h-9 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                            <svg className="w-4 h-4 translate-x-0.5" viewBox="0 0 24 24" fill="currentColor">
+                              <polygon points="5 3 19 12 5 21 5 3" />
+                            </svg>
+                          </div>
+                        </div>
+
+                        {/* Duration Tag */}
+                        <span className="absolute bottom-2.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-semibold text-white z-20">
+                          {displayDuration}
+                        </span>
+
+                        {/* YouTube-Style Red Watch Progress Bar */}
+                        {completionPct > 0 && (
+                          <div
+                            className="absolute bottom-0 left-0 right-0 h-1 sm:h-1.5 bg-black/60 z-10 overflow-hidden pointer-events-none"
+                            title={`${completionPct}% completed`}
+                          >
+                            <div
+                              className="h-full bg-red-600 transition-all duration-300"
+                              style={{ width: `${completionPct}%` }}
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Title row */}
+                      <h4 className="m-0 mb-2 text-sm font-semibold">
+                        <div
+                          className={`flex items-center gap-1.5 truncate text-[0.88rem] font-bold ${isDark ? "text-indigo-400 hover:text-indigo-300" : "text-[#1b3f30] hover:text-[#143024]"
+                            }`}
+                          title={h.videoTitle || h.videoId}
+                        >
+                          <span className="shrink-0">{isLocal ? "📁" : "▶️"}</span>
+                          <span className="truncate">{h.videoTitle || (isLocal ? "Local Video" : `Video ${h.videoId}`)}</span>
+                        </div>
+                      </h4>
+
+                      {/* Stats Grid: DURATION & SWITCHES */}
+                      <div className="grid grid-cols-2 gap-2 mb-2">
+                        <div>
+                          <p className={`m-0 text-[10px] tracking-wider font-bold uppercase mb-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                            DURATION
+                          </p>
+                          <p className={`m-0 text-[0.92rem] font-extrabold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
+                            {displayDuration}
+                          </p>
+                        </div>
+                        <div>
+                          <p className={`m-0 text-[10px] tracking-wider font-bold uppercase mb-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                            SWITCHES
+                          </p>
+                          <p className={`m-0 text-[0.92rem] font-extrabold ${switches > 0 ? (isDark ? "text-rose-400" : "text-rose-600") : (isDark ? "text-slate-300" : "text-slate-700")}`}>
+                            {switches}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Date */}
+                      <p className={`m-0 mb-2 text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+                        {watchDate}
+                      </p>
+
+                      {/* Optional Tag badge */}
+                      {h.tag && (
+                        <div className="mb-2">
+                          <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${isDark
+                            ? "bg-indigo-950/60 text-indigo-300 border-indigo-800/60"
+                            : "bg-emerald-50 text-[#1b3f30] border-[#1b3f30]/25"
+                            }`}>
+                            #{h.tag}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Action Buttons: Original in Dark Mode, #1b3f30 Green in Light Mode */}
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setSelectedVideoForLogs(h);
+                          setShowLogsModal(true);
+                        }}
+                        className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs border ${isDark
+                          ? "bg-blue-950/70 text-blue-300 border-blue-800/80 hover:bg-blue-900/80"
+                          : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd]"
+                          }`}
+                      >
+                        📊 Daily Watch Logs
+                      </button>
+
+                      {actualNote && (
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedNote(actualNote);
+                            setShowNoteModal(true);
+                          }}
+                          className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs border ${isDark
+                            ? "bg-indigo-950/70 text-indigo-300 border-indigo-800/80 hover:bg-indigo-900/80"
+                            : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd]"
+                            }`}
+                        >
+                          📝 View Note
+                        </button>
+                      )}
+
+                      <div className="flex gap-2">
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (actualNote) {
+                              generateNotePDF(actualNote, `note-${h.videoId}-${i}`, "view");
+                            } else {
+                              alert("No notes saved yet for this video.");
+                            }
+                          }}
+                          disabled={!actualNote}
+                          className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1 ${actualNote
+                            ? isDark
+                              ? "bg-indigo-950/70 text-indigo-300 border-indigo-800/80 hover:bg-indigo-900/80 cursor-pointer"
+                              : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd] cursor-pointer"
+                            : isDark
+                              ? "bg-slate-800/60 text-slate-400 border-slate-700/60 cursor-not-allowed"
+                              : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                            }`}
+                        >
+                          📄 View PDF
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (actualNote) {
+                              generateNotePDF(actualNote, `note-${h.videoId}-${i}`, "download");
+                            } else {
+                              alert("No notes to download.");
+                            }
+                          }}
+                          disabled={!actualNote}
+                          className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1 ${actualNote
+                            ? isDark
+                              ? "bg-indigo-950/70 text-indigo-300 border-indigo-800/80 hover:bg-indigo-900/80 cursor-pointer"
+                              : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd] cursor-pointer"
+                            : isDark
+                              ? "bg-slate-800/60 text-slate-400 border-slate-700/60 cursor-not-allowed"
+                              : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                            }`}
+                        >
+                          📥 Download PDF
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : null}
+
+            {/* Banner Card at the end of slider (Build Your Learning Library - Always Shown) */}
+            <div
               onClick={() => setShowWatchHistoryModal(true)}
-              style={{
-                padding: "10px 20px",
-                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
-                color: "#ffffff",
-                border: "none",
-                borderRadius: "10px",
-                fontSize: "0.9rem",
-                fontWeight: "700",
-                cursor: "pointer",
-                boxShadow: "0 4px 12px rgba(79, 70, 229, 0.3)",
-                transition: "all 0.2s ease",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = "translateY(-1px)";
-                e.currentTarget.style.boxShadow = "0 6px 16px rgba(79, 70, 229, 0.4)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = "translateY(0)";
-                e.currentTarget.style.boxShadow = "0 4px 12px rgba(79, 70, 229, 0.3)";
-              }}
+              className={`w-[240px] sm:w-[260px] shrink-0 rounded-2xl p-4 text-white flex flex-col justify-between shadow-lg hover:scale-[1.02] transition-transform cursor-pointer relative overflow-hidden min-h-[200px] border ${
+                isDark
+                  ? "bg-gradient-to-br from-[#3730a3] via-[#312e81] to-[#1e1b4b] border-indigo-500/30 shadow-indigo-950/40"
+                  : "bg-gradient-to-br from-[#1b3f30] via-[#163327] to-[#0f241b] border-emerald-800/40 shadow-emerald-950/20"
+              }`}
             >
-              📜 View Watch History
-            </button>
+              <div>
+                <h4 className={`font-bold text-base sm:text-lg leading-snug font-serif ${isDark ? "text-white" : "text-emerald-100"}`}>
+                  Build Your Learning Library
+                </h4>
+                <p className={`text-xs mt-2 leading-relaxed ${isDark ? "text-indigo-100/90" : "text-emerald-200/80"}`}>
+                  Organize, Revisit and Master Topics.
+                </p>
+              </div>
+              <div className="flex items-center justify-between mt-6">
+                <span className="text-3xl select-none">🪴</span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowWatchHistoryModal(true);
+                  }}
+                  className={`w-8 h-8 rounded-full text-white flex items-center justify-center transition-all cursor-pointer shadow-md text-sm ${
+                    isDark
+                      ? "bg-[#4f46e5] hover:bg-[#4338ca]"
+                      : "bg-[#143024] hover:bg-[#0f241b] border border-emerald-600/40"
+                  }`}
+                  title="Open full watch history"
+                >
+                  →
+                </button>
+              </div>
+            </div>
+
           </div>
         </div>
 
         {/* ─── YouTube Enhancement Panels ─── */}
-        {renderMetadataPanel()}
         {renderPlaylistPanel()}
         {renderQuizSection()}
 
@@ -3637,10 +5358,11 @@ export default function VideoTracker() {
             style={{
               width: "100%",
               maxWidth: "460px",
-              background: "#ffffff",
+              background: isDark ? "#1e293b" : "#fdfbf7",
+              border: isDark ? "1px solid #334155" : "1px solid #eee8de",
               borderRadius: "20px",
               padding: "24px",
-              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.2)",
+              boxShadow: "0 20px 25px -5px rgba(0,0,0,0.15)",
             }}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3764,10 +5486,11 @@ export default function VideoTracker() {
         >
           <div
             style={{
-              backgroundColor: "#ffffff",
+              backgroundColor: isDark ? "#1e293b" : "#fdfbf7",
+              border: isDark ? "1px solid #334155" : "1px solid #eee8de",
               borderRadius: "16px",
               boxShadow: "0 20px 50px rgba(0, 0, 0, 0.25)",
-              maxWidth: "950px",
+              maxWidth: "1050px",
               width: "100%",
               maxHeight: "85vh",
               display: "flex",
@@ -3780,7 +5503,7 @@ export default function VideoTracker() {
             <div
               style={{
                 padding: "18px 24px",
-                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                background: isDark ? "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" : "linear-gradient(135deg, #1b3f30 0%, #265944 100%)",
                 color: "#ffffff",
                 display: "flex",
                 justifyContent: "space-between",
@@ -3812,57 +5535,21 @@ export default function VideoTracker() {
             </div>
 
             {/* Modal Body */}
-            <div style={{ padding: "20px", overflowY: "auto", flex: 1, backgroundColor: "#f9fafb" }}>
+            <div
+              className={`p-5 overflow-y-auto flex-1 ${isDark ? "bg-slate-900" : "bg-slate-50"
+                }`}
+            >
               {(() => {
-                const getUniqueVideoCards = (historyArr = []) => {
-                  const cardsMap = new Map();
-                  historyArr.forEach((item) => {
-                    const rawId = item.videoId || item.url;
-                    if (!rawId) return;
-                    let key = String(rawId).trim();
-                    const match = key.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-                    if (match) key = match[1];
-
-                    const secs = Number(item.secondsWatched ?? item.seconds ?? 0) || 0;
-                    const switches = Number(item.tabSwitches || 0);
-                    const note = item.note || appState.notes?.[key] || "";
-                    const tag = item.tag || appState.tags?.[key] || "";
-
-                    if (!cardsMap.has(key)) {
-                      cardsMap.set(key, {
-                        ...item,
-                        videoId: key,
-                        totalSecondsWatched: secs,
-                        totalTabSwitches: switches,
-                        latestWatchedAt: item.watchedAt,
-                        note,
-                        tag,
-                      });
-                    } else {
-                      const existing = cardsMap.get(key);
-                      existing.totalSecondsWatched += secs;
-                      existing.totalTabSwitches += switches;
-                      if (note) existing.note = note;
-                      if (tag) existing.tag = tag;
-                      if (item.videoTitle) existing.videoTitle = item.videoTitle;
-                      if (item.watchedAt) existing.latestWatchedAt = item.watchedAt;
-                    }
-                  });
-                  return Array.from(cardsMap.values());
-                };
-
-                const uniqueCards = getUniqueVideoCards(appState.history || []);
-
                 if (uniqueCards.length === 0) {
                   return (
-                    <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                      <p style={{ color: "#9ca3af", fontSize: "1rem", margin: 0 }}>No study video cards found.</p>
+                    <div className="py-12 text-center">
+                      <p className="text-slate-400 text-sm m-0">No study video cards found.</p>
                     </div>
                   );
                 }
 
                 return (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: "12px" }}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {uniqueCards.map((h, i) => {
                       const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
                       const minutes = Math.floor(seconds / 60);
@@ -3874,96 +5561,142 @@ export default function VideoTracker() {
                         ? rawDate.includes("T")
                           ? new Date(rawDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
                           : rawDate
-                        : "N/A";
+                        : "Recent";
+                      const isLocal =
+                        !/^[0-9A-Za-z_-]{11}$/.test(h.videoId) ||
+                        h.url === "Local Video" ||
+                        h.url === "Local File" ||
+                        (h.url && !h.url.startsWith("http"));
+                      const actualNote = h.note || h.notes || appState.notes?.[h.videoId] || "";
+
+                      // Calculate watch completion percentage directly from duration
+                      const rawTotal = Number(
+                        h.duration ||
+                        h.videoDuration ||
+                        (videoMeta && (h.videoId === videoId || h.videoId === videoMeta?.videoId) ? videoMeta.duration : 0)
+                      );
+                      // If total video duration is known (> 0), use it; otherwise use 3600s (standard 60-min study lecture baseline)
+                      const effectiveTotalDuration = rawTotal > 0 ? rawTotal : Math.max(3600, Math.round(seconds * 1.15));
+                      const completionPct = seconds > 0
+                        ? Math.min(100, Math.max(2, Math.round((seconds / effectiveTotalDuration) * 100)))
+                        : 0;
 
                       return (
                         <div
-                          key={i}
-                          onClick={(e) => handleSessionCardClick(e, h)}
-                          style={{
-                            background: "#ffffff",
-                            borderRadius: "10px",
-                            padding: "12px",
-                            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.08)",
-                            border: "1px solid #e5e7eb",
-                            display: "flex",
-                            flexDirection: "column",
-                            transition: "all 0.2s ease",
-                            cursor: "pointer",
+                          key={h.videoId || i}
+                          onClick={(e) => {
+                            handleSessionCardClick(e, h);
+                            setShowWatchHistoryModal(false);
                           }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.boxShadow = "0 3px 8px rgba(0, 0, 0, 0.12)";
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.boxShadow = "0 1px 3px rgba(0, 0, 0, 0.08)";
-                          }}
+                          className={`rounded-2xl p-3.5 border transition-all flex flex-col justify-between cursor-pointer select-none group shadow-sm hover:shadow-md ${isDark
+                            ? "bg-slate-800/95 border-slate-700/80 hover:border-slate-600"
+                            : "bg-white/95 border-slate-200/80 hover:border-slate-300"
+                            }`}
                         >
-                          {/* Title */}
-                          <h4 style={{ margin: "0 0 8px 0", fontSize: "0.9rem", fontWeight: "600", color: "#1f2937", wordBreak: "break-word" }}>
-                            <a
-                              href="#"
-                              onClick={(e) => handleSessionCardClick(e, h)}
-                              style={{
-                                color: "#4f46e5",
-                                textDecoration: "none",
-                                fontSize: "0.85rem",
-                                display: "block",
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                                cursor: "pointer",
-                              }}
-                            >
-                              {h.videoTitle || h.videoId}
-                            </a>
-                          </h4>
+                          <div>
+                            {/* Top Video Preview Thumbnail */}
+                            <div className="aspect-video w-full rounded-xl overflow-hidden relative bg-slate-950 mb-2.5 shadow-xs">
+                              {h.thumbnail ? (
+                                <img
+                                  src={h.thumbnail}
+                                  alt={h.videoTitle || "Video Thumbnail"}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-900 to-indigo-950 text-white">
+                                  <span className="text-2xl">🎬</span>
+                                  <span className="text-[10px] text-slate-300 mt-1 font-semibold">Local Video</span>
+                                </div>
+                              )}
 
-                          {/* Stats Grid */}
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", marginBottom: "8px" }}>
-                            <div>
-                              <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
-                                Duration
-                              </p>
-                              <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: "#059669" }}>
+                              {/* Clickable Play Overlay */}
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSessionCardClick(e, h);
+                                  setShowWatchHistoryModal(false);
+                                }}
+                                className="absolute inset-0 bg-black/25 hover:bg-black/10 flex items-center justify-center transition-all cursor-pointer"
+                                title="Click to play video in tracker"
+                              >
+                                <div className="w-9 h-9 rounded-full bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+                                  <svg className="w-4 h-4 translate-x-0.5" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                  </svg>
+                                </div>
+                              </div>
+
+                              {/* Duration Tag */}
+                              <span className="absolute bottom-2.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-semibold text-white z-20">
                                 {displayDuration}
-                              </p>
-                            </div>
-                            <div>
-                              <p style={{ margin: "0 0 2px 0", fontSize: "0.7rem", color: "#9ca3af", fontWeight: "600", textTransform: "uppercase" }}>
-                                Switches
-                              </p>
-                              <p style={{ margin: "0", fontSize: "0.85rem", fontWeight: "700", color: switches > 0 ? "#dc2626" : "#6b7280" }}>
-                                {switches}
-                              </p>
-                            </div>
-                          </div>
+                              </span>
 
-                          {/* Date */}
-                          <p style={{ margin: "0 0 8px 0", fontSize: "0.75rem", color: "#9ca3af" }}>
-                            {watchDate}
-                          </p>
-
-                          {/* Tag & Note */}
-                          <div style={{ marginTop: "auto" }}>
-                            {h.tag && (
-                              <div style={{ marginBottom: "8px" }}>
-                                <span
-                                  style={{
-                                    display: "inline-block",
-                                    background: "#f0f4ff",
-                                    color: "#4f46e5",
-                                    padding: "3px 8px",
-                                    borderRadius: "5px",
-                                    fontSize: "0.7rem",
-                                    fontWeight: "600",
-                                    whiteSpace: "nowrap",
-                                  }}
+                              {/* YouTube-Style Red Watch Progress Bar */}
+                              {completionPct > 0 && (
+                                <div
+                                  className="absolute bottom-0 left-0 right-0 h-1 sm:h-1.5 bg-black/60 z-10 overflow-hidden pointer-events-none"
+                                  title={`${completionPct}% completed`}
                                 >
+                                  <div
+                                    className="h-full bg-red-600 transition-all duration-300"
+                                    style={{ width: `${completionPct}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Title row */}
+                            <h4 className="m-0 mb-2 text-sm font-semibold">
+                              <div
+                                className={`flex items-center gap-1.5 truncate text-[0.88rem] font-bold ${isDark ? "text-indigo-400 hover:text-indigo-300" : "text-[#1b3f30] hover:text-[#143024]"
+                                  }`}
+                                title={h.videoTitle || h.videoId}
+                              >
+                                <span className="shrink-0">{isLocal ? "📁" : "▶️"}</span>
+                                <span className="truncate">{h.videoTitle || (isLocal ? "Local Video" : `Video ${h.videoId}`)}</span>
+                              </div>
+                            </h4>
+
+                            {/* Stats Grid: DURATION & SWITCHES */}
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              <div>
+                                <p className={`m-0 text-[10px] tracking-wider font-bold uppercase mb-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                  DURATION
+                                </p>
+                                <p className={`m-0 text-[0.92rem] font-extrabold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
+                                  {displayDuration}
+                                </p>
+                              </div>
+                              <div>
+                                <p className={`m-0 text-[10px] tracking-wider font-bold uppercase mb-0.5 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                                  SWITCHES
+                                </p>
+                                <p className={`m-0 text-[0.92rem] font-extrabold ${switches > 0 ? (isDark ? "text-rose-400" : "text-rose-600") : (isDark ? "text-slate-300" : "text-slate-700")}`}>
+                                  {switches}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Date */}
+                            <p className={`m-0 mb-2 text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+                              {watchDate}
+                            </p>
+
+                            {/* Optional Tag badge */}
+                            {h.tag && (
+                              <div className="mb-2">
+                                <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-semibold border ${isDark
+                                  ? "bg-indigo-950/60 text-indigo-300 border-indigo-800/60"
+                                  : "bg-emerald-50 text-[#1b3f30] border-[#1b3f30]/25"
+                                  }`}>
                                   #{h.tag}
                                 </span>
                               </div>
                             )}
+                          </div>
 
+                          {/* Action Buttons matching top cards */}
+                          <div className="mt-2 flex flex-col gap-1.5">
                             <button
                               onClick={(e) => {
                                 e.preventDefault();
@@ -3971,82 +5704,51 @@ export default function VideoTracker() {
                                 setSelectedVideoForLogs(h);
                                 setShowLogsModal(true);
                               }}
-                              style={{
-                                width: "100%",
-                                padding: "6px 12px",
-                                backgroundColor: "#eff6ff",
-                                border: "1px solid #bfdbfe",
-                                borderRadius: "5px",
-                                fontSize: "0.75rem",
-                                fontWeight: "600",
-                                color: "#2563eb",
-                                cursor: "pointer",
-                                transition: "all 0.2s ease",
-                                marginBottom: "6px",
-                              }}
-                              onMouseEnter={(e) => {
-                                e.target.style.backgroundColor = "#dbeafe";
-                              }}
-                              onMouseLeave={(e) => {
-                                e.target.style.backgroundColor = "#eff6ff";
-                              }}
+                              className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs border ${isDark
+                                ? "bg-blue-950/70 text-blue-300 border-blue-800/80 hover:bg-blue-900/80"
+                                : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd]"
+                                }`}
                             >
                               📊 Daily Watch Logs
                             </button>
 
-                            {(h.note || h.notes) && (
+                            {actualNote && (
                               <button
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  const actualNote = h.note || h.notes;
                                   setSelectedNote(actualNote);
                                   setShowNoteModal(true);
                                 }}
-                                style={{
-                                  width: "100%",
-                                  padding: "6px 12px",
-                                  backgroundColor: "#f0f4ff",
-                                  border: "1px solid #c7d2fe",
-                                  borderRadius: "5px",
-                                  fontSize: "0.75rem",
-                                  fontWeight: "600",
-                                  color: "#4f46e5",
-                                  cursor: "pointer",
-                                  transition: "all 0.2s ease",
-                                  marginBottom: "6px",
-                                }}
-                                onMouseEnter={(e) => {
-                                  e.target.style.backgroundColor = "#e0e7ff";
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.target.style.backgroundColor = "#f0f4ff";
-                                }}
+                                className={`w-full py-2 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 shadow-xs border ${isDark
+                                  ? "bg-indigo-950/70 text-indigo-300 border-indigo-800/80 hover:bg-indigo-900/80"
+                                  : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd]"
+                                  }`}
                               >
                                 📝 View Note
                               </button>
                             )}
 
-                            <div style={{ display: "flex", gap: "6px" }}>
+                            <div className="flex gap-2">
                               <button
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  const actualNote = h.note || h.notes;
-                                  generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'view');
+                                  if (actualNote) {
+                                    generateNotePDF(actualNote, `note-${h.videoId}-${i}`, "view");
+                                  } else {
+                                    alert("No notes saved yet for this video.");
+                                  }
                                 }}
-                                disabled={!(h.note || h.notes)}
-                                style={{
-                                  flex: 1,
-                                  padding: "6px 4px",
-                                  backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
-                                  border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
-                                  borderRadius: "5px",
-                                  fontSize: "0.65rem",
-                                  fontWeight: "600",
-                                  color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
-                                  cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
-                                }}
+                                disabled={!actualNote}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1 ${actualNote
+                                  ? isDark
+                                    ? "bg-indigo-950/70 text-indigo-300 border-indigo-800/80 hover:bg-indigo-900/80 cursor-pointer"
+                                    : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd] cursor-pointer"
+                                  : isDark
+                                    ? "bg-slate-800/60 text-slate-400 border-slate-700/60 cursor-not-allowed"
+                                    : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                                  }`}
                               >
                                 📄 View PDF
                               </button>
@@ -4054,21 +5756,21 @@ export default function VideoTracker() {
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
-                                  const actualNote = h.note || h.notes;
-                                  generateNotePDF(actualNote, `note-${h.videoId}-${i}`, 'download');
+                                  if (actualNote) {
+                                    generateNotePDF(actualNote, `note-${h.videoId}-${i}`, "download");
+                                  } else {
+                                    alert("No notes to download.");
+                                  }
                                 }}
-                                disabled={!(h.note || h.notes)}
-                                style={{
-                                  flex: 1,
-                                  padding: "6px 4px",
-                                  backgroundColor: (h.note || h.notes) ? "#f0f4ff" : "#f9fafb",
-                                  border: `1px solid ${(h.note || h.notes) ? "#c7d2fe" : "#e5e7eb"}`,
-                                  borderRadius: "5px",
-                                  fontSize: "0.65rem",
-                                  fontWeight: "600",
-                                  color: (h.note || h.notes) ? "#4f46e5" : "#9ca3af",
-                                  cursor: (h.note || h.notes) ? "pointer" : "not-allowed",
-                                }}
+                                disabled={!actualNote}
+                                className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all flex items-center justify-center gap-1 ${actualNote
+                                  ? isDark
+                                    ? "bg-indigo-950/70 text-indigo-300 border-indigo-800/80 hover:bg-indigo-900/80 cursor-pointer"
+                                    : "bg-[#eaf3ee] text-[#1b3f30] border-[#1b3f30]/30 hover:bg-[#d4e7dd] cursor-pointer"
+                                  : isDark
+                                    ? "bg-slate-800/60 text-slate-400 border-slate-700/60 cursor-not-allowed"
+                                    : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
+                                  }`}
                               >
                                 📥 Download PDF
                               </button>
@@ -4106,7 +5808,8 @@ export default function VideoTracker() {
         >
           <div
             style={{
-              backgroundColor: "#ffffff",
+              backgroundColor: isDark ? "#1e293b" : "#fdfbf7",
+              border: isDark ? "1px solid #334155" : "1px solid #eee8de",
               borderRadius: "16px",
               boxShadow: "0 20px 50px rgba(0, 0, 0, 0.25)",
               maxWidth: "650px",
@@ -4122,7 +5825,7 @@ export default function VideoTracker() {
             <div
               style={{
                 padding: "18px 24px",
-                background: "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)",
+                background: isDark ? "linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)" : "linear-gradient(135deg, #1b3f30 0%, #265944 100%)",
                 color: "#ffffff",
                 display: "flex",
                 justifyContent: "space-between",
@@ -4162,7 +5865,10 @@ export default function VideoTracker() {
               {(() => {
                 const vidKey = selectedVideoForLogs.videoId || selectedVideoForLogs.url;
                 const logs = (appState.history || []).filter(
-                  (item) => item.videoId === vidKey || item.url === vidKey
+                  (item) =>
+                    item.videoId === vidKey ||
+                    item.url === vidKey ||
+                    (item.videoTitle && selectedVideoForLogs.videoTitle && item.videoTitle === selectedVideoForLogs.videoTitle)
                 );
 
                 const totalSecs = selectedVideoForLogs.totalSecondsWatched ?? selectedVideoForLogs.secondsWatched ?? 0;
@@ -4193,7 +5899,7 @@ export default function VideoTracker() {
                           handleSessionCardClick(e, selectedVideoForLogs);
                         }}
                         style={{
-                          backgroundColor: "#4f46e5",
+                          backgroundColor: isDark ? "#4f46e5" : "#1b3f30",
                           color: "#ffffff",
                           border: "none",
                           borderRadius: "8px",
@@ -4201,7 +5907,7 @@ export default function VideoTracker() {
                           fontWeight: "600",
                           fontSize: "0.85rem",
                           cursor: "pointer",
-                          boxShadow: "0 2px 5px rgba(79, 70, 229, 0.3)",
+                          boxShadow: isDark ? "0 2px 5px rgba(79, 70, 229, 0.3)" : "0 2px 5px rgba(27, 63, 48, 0.3)",
                         }}
                       >
                         ▶️ Resume Video
@@ -4422,70 +6128,339 @@ export default function VideoTracker() {
   );
 }
 
-// Basic styles to make the component runnable
-const styles = {
-
-  page: { background: '#f3f4f6', width: '100vw', minHeight: '100vh', padding: '24px', boxSizing: 'border-box', fontFamily: 'sans-serif' },
-  container: { width: '100%', maxWidth: '100%', margin: '0', display: 'flex', flexDirection: 'column', gap: '24px' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  title: {
-    fontSize: "2.5rem",
-    fontWeight: "800",
-    background: "linear-gradient(to right, #6366f1, #ec4899)",
-    WebkitBackgroundClip: "text",
-    WebkitTextFillColor: "transparent",
-    margin: 0,
-    fontFamily: "'Inter', sans-serif",
-  },
-  wallet: { display: 'flex', gap: '12px' },
-  statChip: { background: '#fff', padding: '8px 12px', borderRadius: '16px', fontSize: '14px', fontWeight: '500', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' },
-  panel: { background: '#fff', padding: '24px', borderRadius: '12px', boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1)' },
-  input: { flexGrow: 1, padding: '10px 14px', borderRadius: '8px', border: '1px solid #d1d5db', fontSize: '1em' },
-  button: { padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#4f46e5', color: 'white', fontSize: '1em', cursor: 'pointer' },
-  secondaryButton: { background: '#e5e7eb', color: '#111827' },
-  sectionTitle: { fontSize: '1.25em', color: '#111827', margin: '0 0 16px 0' },
-  popup: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100 },
-  popupInner: { background: 'white', padding: '24px', borderRadius: '12px', width: '90%', maxWidth: '400px' },
-  maximizedPopupInner: { background: 'white', padding: '24px', borderRadius: '12px', width: '80vw', height: '80vh', display: 'flex', flexDirection: 'column', justifyContent: 'center' },
-  popupTitle: { fontSize: '1.5em', margin: '0 0 16px 0' },
-  focusInputContainer: { display: 'flex', alignItems: 'center', gap: '12px' },
-  popupText: { color: '#4b5563', lineHeight: 1.5, marginTop: '16px' },
-  smallBtn: { padding: '6px 12px', borderRadius: '6px', border: 'none', color: 'white', cursor: 'pointer' },
-  focusBar: { background: '#dbeafe', color: '#1e40af', padding: '12px', borderRadius: '8px', marginBottom: '16px', textAlign: 'center', fontWeight: '500' },
-  player: { position: 'relative', width: '100%', height: '70vh', background: '#000' },
-  playerMax: { position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 200, background: '#000' },
-  toggleMaxMinButton: { position: 'absolute', bottom: '10px', right: '10px', zIndex: 210, background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', padding: '8px 12px', borderRadius: '6px', cursor: 'pointer' },
-  controlsAndStats: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' },
-  statsText: { display: 'flex', gap: '24px', color: '#4b5563' },
-  textarea: {
-    width: '100%',
-    height: '200px',          // ✅ fixed bigger height
-    padding: '14px 16px',
-    borderRadius: '10px',
-    border: '1px solid #d1d5db',
-    fontSize: '1.05em',
-    resize: 'none',           // ✅ size fixed rahe
-    overflowY: 'auto',        // ✅ andar scroll
-    lineHeight: '1.6',
-  },
-
-  placeholder: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '200px', background: '#f9fafb', borderRadius: '8px', color: '#6b7280' },
-  tooltip: { background: '#fff', border: '1px solid #d1d5db', padding: '8px', borderRadius: '8px' },
-  warningBanner: {
-    position: "fixed",
-    top: 12,
-    left: "50%",
-    transform: "translateX(-50%)",
-    background: "#111827",
-    color: "white",
-    padding: "10px 16px",
-    borderRadius: "12px",
-    fontWeight: "600",
-    zIndex: 99999,
-    boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
-  },
-
+// Dual-theme styles function for Light and Dark modes
+const getThemeStyles = (theme) => {
+  const isDark = theme === "dark";
+  return {
+    page: {
+      background: "transparent",
+      width: "100%",
+      minHeight: "100vh",
+      padding: "0",
+      boxSizing: "border-box",
+      fontFamily: "'Inter', sans-serif",
+      position: "relative",
+      zIndex: 10,
+      color: isDark ? "#ffffff" : "#1e293b",
+    },
+    container: {
+      width: "100%",
+      maxWidth: "100%",
+      margin: "0",
+      display: "flex",
+      flexDirection: "column",
+      gap: "24px",
+    },
+    header: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      flexWrap: "wrap",
+      gap: "16px",
+    },
+    title: {
+      fontSize: "2.5rem",
+      fontWeight: "800",
+      background: "linear-gradient(to right, #6366f1, #ec4899)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      margin: 0,
+      fontFamily: "'Inter', sans-serif",
+      letterSpacing: "-0.03em",
+    },
+    wallet: { display: "flex", gap: "12px", alignItems: "center" },
+    statChip: isDark
+      ? {
+        background: "rgba(30, 41, 59, 0.8)",
+        color: "#e2e8f0",
+        padding: "8px 16px",
+        borderRadius: "16px",
+        fontSize: "14px",
+        fontWeight: "600",
+        border: "1px solid rgba(168,85,247,0.3)",
+        boxShadow: "0 4px 14px rgba(0,0,0,0.25)",
+      }
+      : {
+        background: "rgba(255, 255, 255, 0.85)",
+        color: "#1e293b",
+        padding: "8px 16px",
+        borderRadius: "16px",
+        fontSize: "14px",
+        fontWeight: "600",
+        boxShadow: "0 4px 14px rgba(0, 0, 0, 0.06)",
+        border: "1px solid rgba(255,255,255,0.9)",
+      },
+    panel: isDark
+      ? {
+        background: "rgba(15, 23, 42, 0.82)",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        borderRadius: "24px",
+        padding: "24px",
+        border: "1px solid rgba(168, 85, 247, 0.2)",
+        boxShadow: "0 20px 40px rgba(0,0,0,0.4)",
+        color: "#f8fafc",
+      }
+      : {
+        background: "#fdfbf7",
+        backdropFilter: "blur(24px)",
+        WebkitBackdropFilter: "blur(24px)",
+        borderRadius: "24px",
+        padding: "24px",
+        border: "1px solid #eee8de",
+        boxShadow:
+          "0 10px 35px rgba(0,0,0,0.04), inset 0 1px 1px rgba(255,255,255,0.95)",
+        color: "#1e293b",
+      },
+    input: isDark
+      ? {
+        flexGrow: 1,
+        padding: "10px 16px",
+        borderRadius: "12px",
+        border: "1px solid rgba(168,85,247,0.35)",
+        background: "rgba(30,41,59,0.8)",
+        color: "#ffffff",
+        fontSize: "1em",
+      }
+      : {
+        flexGrow: 1,
+        padding: "10px 16px",
+        borderRadius: "12px",
+        border: "1px solid #cbd5e1",
+        background: "rgba(255,255,255,0.9)",
+        color: "#0f172a",
+        fontSize: "1em",
+      },
+    button: {
+      padding: "10px 22px",
+      borderRadius: "12px",
+      border: "none",
+      background: isDark ? "#4f46e5" : "#1b3f30",
+      color: "white",
+      fontSize: "1em",
+      fontWeight: "600",
+      cursor: "pointer",
+      boxShadow: isDark
+        ? "0 4px 14px rgba(79, 70, 229, 0.35)"
+        : "0 4px 14px rgba(27, 63, 48, 0.30)",
+      transition: "all 0.2s ease",
+    },
+    secondaryButton: isDark
+      ? {
+        background: "rgba(51, 65, 85, 0.8)",
+        color: "#f1f5f9",
+        border: "1px solid rgba(255,255,255,0.1)",
+      }
+      : {
+        background: "rgba(241, 245, 249, 0.9)",
+        color: "#334155",
+        border: "1px solid #cbd5e1",
+      },
+    sectionTitle: {
+      fontSize: "1.25em",
+      color: isDark ? "#e2e8f0" : "#0f172a",
+      margin: "0 0 16px 0",
+      fontWeight: "700",
+    },
+    popup: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: "rgba(0,0,0,0.65)",
+      backdropFilter: "blur(6px)",
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      zIndex: 100,
+    },
+    popupInner: isDark
+      ? {
+        background: "rgba(15, 23, 42, 0.95)",
+        backdropFilter: "blur(20px)",
+        padding: "24px",
+        borderRadius: "20px",
+        width: "90%",
+        maxWidth: "400px",
+        boxShadow: "0 20px 40px rgba(0,0,0,0.6)",
+        border: "1px solid rgba(168,85,247,0.3)",
+        color: "#fff",
+      }
+      : {
+        background: "rgba(255,255,255,0.95)",
+        backdropFilter: "blur(20px)",
+        padding: "24px",
+        borderRadius: "20px",
+        width: "90%",
+        maxWidth: "400px",
+        boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+        border: "1px solid rgba(255,255,255,0.85)",
+        color: "#0f172a",
+      },
+    maximizedPopupInner: isDark
+      ? {
+        background: "rgba(15, 23, 42, 0.96)",
+        padding: "28px",
+        borderRadius: "24px",
+        width: "80vw",
+        height: "80vh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        border: "1px solid rgba(168,85,247,0.3)",
+        color: "#fff",
+      }
+      : {
+        background: "rgba(255,255,255,0.96)",
+        padding: "28px",
+        borderRadius: "24px",
+        width: "80vw",
+        height: "80vh",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        border: "1px solid rgba(255,255,255,0.85)",
+        color: "#0f172a",
+      },
+    popupTitle: { fontSize: "1.5em", margin: "0 0 16px 0", fontWeight: "700" },
+    focusInputContainer: { display: "flex", alignItems: "center", gap: "12px" },
+    popupText: {
+      color: isDark ? "#94a3b8" : "#475569",
+      lineHeight: 1.5,
+      marginTop: "16px",
+    },
+    smallBtn: {
+      padding: "6px 14px",
+      borderRadius: "8px",
+      border: "none",
+      color: "white",
+      cursor: "pointer",
+      fontWeight: "600",
+    },
+    focusBar: isDark
+      ? {
+        background: "rgba(30, 41, 59, 0.8)",
+        color: "#93c5fd",
+        padding: "12px",
+        borderRadius: "12px",
+        marginBottom: "16px",
+        textAlign: "center",
+        fontWeight: "600",
+        border: "1px solid rgba(59, 130, 246, 0.3)",
+      }
+      : {
+        background: "#dbeafe",
+        color: "#1e40af",
+        padding: "12px",
+        borderRadius: "12px",
+        marginBottom: "16px",
+        textAlign: "center",
+        fontWeight: "600",
+      },
+    player: {
+      position: "relative",
+      width: "100%",
+      height: "70vh",
+      background: "#000",
+      borderRadius: "16px",
+      overflow: "hidden",
+    },
+    playerMax: {
+      position: "fixed",
+      top: 0,
+      left: 0,
+      width: "100vw",
+      height: "100vh",
+      zIndex: 200,
+      background: "#000",
+    },
+    toggleMaxMinButton: {
+      position: "absolute",
+      bottom: "10px",
+      right: "10px",
+      zIndex: 210,
+      background: "rgba(0,0,0,0.6)",
+      color: "white",
+      border: "none",
+      padding: "8px 12px",
+      borderRadius: "6px",
+      cursor: "pointer",
+    },
+    controlsAndStats: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginTop: "16px",
+      flexWrap: "wrap",
+      gap: "10px",
+    },
+    statsText: {
+      display: "flex",
+      gap: "24px",
+      color: isDark ? "#94a3b8" : "#475569",
+      fontWeight: "500",
+    },
+    textarea: isDark
+      ? {
+        width: "100%",
+        height: "200px",
+        padding: "14px 16px",
+        borderRadius: "12px",
+        border: "1px solid rgba(168,85,247,0.3)",
+        background: "rgba(30, 41, 59, 0.8)",
+        color: "#ffffff",
+        fontSize: "1.05em",
+        resize: "none",
+        overflowY: "auto",
+        lineHeight: "1.6",
+      }
+      : {
+        width: "100%",
+        height: "200px",
+        padding: "14px 16px",
+        borderRadius: "12px",
+        border: "1px solid #cbd5e1",
+        background: "rgba(255,255,255,0.9)",
+        color: "#0f172a",
+        fontSize: "1.05em",
+        resize: "none",
+        overflowY: "auto",
+        lineHeight: "1.6",
+      },
+    placeholder: {
+      display: "flex",
+      justifyContent: "center",
+      alignItems: "center",
+      height: "200px",
+      background: isDark ? "rgba(30, 41, 59, 0.5)" : "#f9fafb",
+      borderRadius: "12px",
+      color: isDark ? "#94a3b8" : "#6b7280",
+    },
+    tooltip: {
+      background: isDark ? "#0f172a" : "#fff",
+      border: isDark ? "1px solid #334155" : "1px solid #d1d5db",
+      padding: "8px",
+      borderRadius: "8px",
+      color: isDark ? "#fff" : "#111827",
+    },
+    warningBanner: {
+      position: "fixed",
+      top: 12,
+      left: "50%",
+      transform: "translateX(-50%)",
+      background: "#111827",
+      color: "white",
+      padding: "10px 16px",
+      borderRadius: "12px",
+      fontWeight: "600",
+      zIndex: 99999,
+      boxShadow: "0 8px 20px rgba(0,0,0,0.25)",
+    },
+  };
 };
+
+const styles = getThemeStyles("dark");
 
 
 const blockedStyles = {
@@ -4643,8 +6618,10 @@ const stickyNotes = {
     position: "relative",
     background: "#fff8a8",
     padding: "20px",
-    height: "600px",          // ✅ fixed height
+    height: "100%",
     width: "100%",
+    maxWidth: "100%",
+    boxSizing: "border-box",
     borderRadius: "10px",
     fontFamily: "'Patrick Hand', cursive, sans-serif",
     fontSize: "1.1rem",
@@ -4654,6 +6631,8 @@ const stickyNotes = {
     // Scrollable content
     overflowY: "auto",        // ✅ scroll inside
     overflowX: "hidden",
+    wordBreak: "break-word",
+    overflowWrap: "anywhere",
 
     // Sticky note shadow + tilt
     boxShadow: "0 10px 18px rgba(0,0,0,0.12)",
@@ -4676,6 +6655,11 @@ const stickyNotes = {
 
   noteText: {
     marginBottom: "12px",
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    overflowWrap: "anywhere",
+    wordWrap: "break-word",
+    maxWidth: "100%",
   },
 
   tag: {

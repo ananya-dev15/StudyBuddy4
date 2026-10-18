@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
+import { Link } from "react-router-dom";
 import Lottie from "lottie-react";
 import chatAnimation from "../assets/chatAnimation.json";
 import { useAppContext } from "../context/AppContext";
+import ThemeToggle from "./ThemeToggle";
 
 export default function ChatBot({ standalone = false }) {
   const {
@@ -16,7 +18,10 @@ export default function ChatBot({ standalone = false }) {
     toggleVoiceRecognition,
     activeVideoContext,
     speakText,
+    theme,
   } = useAppContext();
+
+  const isDark = theme === "dark";
 
   const [input, setInput] = useState("");
   const chatEndRef = useRef(null);
@@ -51,111 +56,149 @@ export default function ChatBot({ standalone = false }) {
   // If standalone page like /chatbot
   if (standalone) {
     return (
-      <div className="max-w-4xl mx-auto my-6 p-4 bg-white shadow-xl rounded-2xl border border-gray-100 flex flex-col h-[650px]">
-        <div className="bg-gradient-to-r from-indigo-700 to-purple-700 text-white p-4 font-bold text-xl rounded-t-xl flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <span>📚 StudyBuddy AI Assistant</span>
-            {isSpeaking && (
-              <button
-                onClick={stopSpeakingText}
-                className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all"
-                title="Stop Voice Speech"
-              >
-                ⏹️ Stop Voice
-              </button>
-            )}
-          </div>
-          {activeVideoContext && (
-            <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium">
-              📺 Video: {activeVideoContext.videoTitle || activeVideoContext.videoId}
-            </span>
-          )}
+      <div className={`min-h-screen relative z-10 p-6 md:p-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
+        {/* Top Bar with Navigation & Permanent Theme Toggle */}
+        <div className="max-w-4xl mx-auto flex items-center justify-between mb-6">
+          <Link
+            to="/dashboard"
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
+              isDark
+                ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
+                : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
+            }`}
+          >
+            <span>← Back to Dashboard</span>
+          </Link>
+          <ThemeToggle />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50">
-          {chatMessages.map((m, idx) => (
-            <div
-              key={idx}
-              className={`p-3 rounded-2xl max-w-[80%] text-sm leading-relaxed ${
-                m.sender === "bot"
-                  ? "bg-indigo-100 text-gray-900 self-start rounded-bl-none border border-indigo-200"
-                  : "bg-indigo-700 text-white self-end rounded-br-none ml-auto shadow-md"
-              }`}
-            >
-              <div>{m.text}</div>
-              {m.sender === "bot" && (
-                <div className="mt-1 flex justify-end">
-                  {isSpeaking ? (
-                    <button
-                      onClick={stopSpeakingText}
-                      className="text-xs text-red-600 hover:text-red-800 transition-colors font-bold flex items-center gap-1 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200"
-                      title="Stop Spoken Answer"
-                    >
-                      ⏹️ Stop Voice
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => speakText(m.text)}
-                      className="text-xs text-indigo-600 hover:text-indigo-800 transition-colors font-medium flex items-center gap-1"
-                      title="Listen to response"
-                    >
-                      🔊 Listen
-                    </button>
-                  )}
-                </div>
+        <div className={`max-w-4xl mx-auto backdrop-blur-2xl rounded-3xl border shadow-2xl flex flex-col h-[650px] overflow-hidden ${
+          isDark
+            ? "bg-slate-900/90 border-purple-500/25 text-white"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_15px_40px_rgba(0,0,0,0.04)] text-slate-800"
+        }`}>
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white p-4 font-bold text-xl flex justify-between items-center shadow-md">
+            <div className="flex items-center gap-2">
+              <span>🤖 StudyBuddy AI Assistant</span>
+              {isSpeaking && (
+                <button
+                  onClick={stopSpeakingText}
+                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all"
+                  title="Stop Voice Speech"
+                >
+                  ⏹️ Stop Voice
+                </button>
               )}
             </div>
-          ))}
-          {chatLoading && (
-            <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-3 rounded-2xl text-sm self-start animate-pulse">
-              🤖 StudyBuddy AI is thinking...
-            </div>
-          )}
-          <div ref={chatEndRef} />
-        </div>
+            {activeVideoContext && (
+              <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium truncate max-w-[200px]">
+                📺 Video: {activeVideoContext.videoTitle || activeVideoContext.videoId}
+              </span>
+            )}
+          </div>
 
-        {/* Quick action chips */}
-        <div className="flex flex-wrap gap-2 p-3 border-t border-gray-100 bg-white">
-          {["Reminders", "Assignments", "Video Tracker", "Streaks", "Analytics"].map((btn, idx) => (
+          {/* Messages */}
+          <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${isDark ? "bg-slate-950/60" : "bg-slate-50/70"}`}>
+            {chatMessages.map((m, idx) => (
+              <div
+                key={idx}
+                className={`p-3.5 rounded-2xl max-w-[80%] text-sm leading-relaxed ${
+                  m.sender === "bot"
+                    ? isDark
+                      ? "bg-slate-800/90 text-purple-100 self-start border border-purple-500/20"
+                      : "bg-purple-50 text-slate-800 self-start border border-purple-200/70 shadow-sm"
+                    : "bg-gradient-to-r from-purple-600 to-indigo-600 text-white self-end ml-auto shadow-md"
+                }`}
+              >
+                <div>{m.text}</div>
+                {m.sender === "bot" && (
+                  <div className="mt-2 flex justify-end">
+                    {isSpeaking ? (
+                      <button
+                        onClick={stopSpeakingText}
+                        className="text-xs text-red-500 font-bold flex items-center gap-1 bg-red-500/10 px-2 py-0.5 rounded-full"
+                      >
+                        ⏹️ Stop Voice
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => speakText(m.text)}
+                        className="text-xs text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1"
+                      >
+                        🔊 Listen
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {chatLoading && (
+              <div className="bg-purple-500/10 border border-purple-500/20 text-purple-400 p-3 rounded-2xl text-sm self-start animate-pulse">
+                🤖 StudyBuddy AI is analyzing and generating response...
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Suggestions */}
+          <div className={`flex flex-wrap gap-2 p-3 border-t ${
+            isDark ? "bg-slate-900 border-slate-800" : "bg-white/80 border-slate-200"
+          }`}>
+            {["Reminders", "Assignments", "Video Tracker", "Streaks", "Analytics"].map((btn, idx) => (
+              <button
+                key={idx}
+                onClick={() => sendMessageToChatbot(btn)}
+                className={`px-3 py-1 rounded-full text-xs font-semibold transition-all ${
+                  isDark
+                    ? "bg-slate-800 text-purple-200 hover:bg-slate-700 border border-purple-500/20"
+                    : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
+                }`}
+              >
+                {btn}
+              </button>
+            ))}
+          </div>
+
+          {/* Input Bar */}
+          <div className={`flex items-center gap-2 p-3 border-t ${
+            isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-200"
+          }`}>
+            <input
+              type="text"
+              className={`flex-1 p-3 rounded-xl border text-sm outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
+                isDark
+                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-400"
+                  : "bg-white border-slate-300 text-slate-800 placeholder-slate-400"
+              }`}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type your study doubt or request here..."
+            />
             <button
-              key={idx}
-              onClick={() => sendMessageToChatbot(btn)}
-              className="bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700 px-3 py-1 rounded-full text-xs font-semibold transition-all"
+              onClick={handleVoiceClick}
+              type="button"
+              className={`p-3 rounded-xl border transition-all ${
+                isVoiceListening
+                  ? "bg-red-500 text-white animate-bounce border-red-600"
+                  : isDark
+                  ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-300"
+              }`}
+              title="Ask by Voice"
             >
-              {btn}
+              🎤
             </button>
-          ))}
-        </div>
-
-        {/* Input Bar */}
-        <div className="flex items-center gap-2 p-3 border-t border-gray-100 bg-white rounded-b-xl">
-          <input
-            type="text"
-            className="flex-1 p-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Type your study doubt here..."
-          />
-          <button
-            onClick={handleVoiceClick}
-            type="button"
-            className={`p-2.5 rounded-xl border transition-all ${
-              isVoiceListening
-                ? "bg-red-500 text-white animate-bounce border-red-600"
-                : "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300"
-            }`}
-            title="Ask by Voice"
-          >
-            🎤
-          </button>
-          <button
-            onClick={handleSend}
-            disabled={!input.trim()}
-            className="bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl font-medium transition-colors text-sm"
-          >
-            Send
-          </button>
+            <button
+              onClick={handleSend}
+              disabled={!input.trim()}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white px-5 py-3 rounded-xl font-bold transition-all text-sm shadow-md"
+            >
+              Send
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -165,9 +208,13 @@ export default function ChatBot({ standalone = false }) {
   return (
     <div className="fixed bottom-5 right-5 z-[10000] flex flex-col items-end pointer-events-auto">
       {isChatOpen && (
-        <div className="mb-3 w-[360px] sm:w-[440px] h-[520px] bg-white shadow-2xl rounded-2xl overflow-hidden flex flex-col border border-indigo-100 animate-in fade-in zoom-in-95 duration-200">
+        <div className={`mb-3 w-[360px] sm:w-[440px] h-[520px] shadow-2xl rounded-3xl overflow-hidden flex flex-col border backdrop-blur-2xl transition-all duration-300 animate-in fade-in zoom-in-95 ${
+          isDark
+            ? "bg-slate-900/95 border-purple-500/30 text-white shadow-purple-950/40"
+            : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-[0_15px_40px_rgba(0,0,0,0.08)]"
+        }`}>
           {/* Header */}
-          <div className="bg-gradient-to-r from-indigo-700 to-purple-700 text-white p-3.5 font-semibold flex justify-between items-center text-base rounded-t-2xl shadow-md">
+          <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white p-3.5 font-bold flex justify-between items-center text-sm shadow-md">
             <div className="flex items-center gap-2">
               <span className="text-xl">🤖</span>
               <span>StudyBuddy AI</span>
@@ -193,20 +240,24 @@ export default function ChatBot({ standalone = false }) {
 
           {/* Context Notice if in Video Tracker */}
           {activeVideoContext?.videoTitle && (
-            <div className="bg-indigo-50 px-3 py-1.5 text-[11px] text-indigo-800 font-medium border-b border-indigo-100 truncate">
+            <div className={`px-3 py-1.5 text-[11px] font-semibold border-b truncate ${
+              isDark ? "bg-slate-800/80 text-purple-300 border-purple-500/20" : "bg-purple-50 text-purple-800 border-purple-100"
+            }`}>
               📺 Active Context: {activeVideoContext.videoTitle}
             </div>
           )}
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-2.5 bg-slate-50">
+          <div className={`flex-1 overflow-y-auto p-3 space-y-2.5 ${isDark ? "bg-slate-950/60" : "bg-slate-50/70"}`}>
             {chatMessages.map((m, idx) => (
               <div
                 key={idx}
                 className={`p-3 rounded-2xl max-w-[85%] text-xs leading-relaxed ${
                   m.sender === "bot"
-                    ? "bg-indigo-100 text-gray-900 self-start rounded-bl-none border border-indigo-200"
-                    : "bg-indigo-700 text-white self-end rounded-br-none ml-auto shadow-sm"
+                    ? isDark
+                      ? "bg-slate-800/90 text-purple-100 self-start rounded-bl-none border border-purple-500/20"
+                      : "bg-purple-50 text-slate-800 self-start rounded-bl-none border border-purple-200/60 shadow-sm"
+                    : "bg-gradient-to-r from-purple-600 to-indigo-600 text-white self-end rounded-br-none ml-auto shadow-sm"
                 }`}
               >
                 <div>{m.text}</div>
@@ -215,16 +266,14 @@ export default function ChatBot({ standalone = false }) {
                     {isSpeaking ? (
                       <button
                         onClick={stopSpeakingText}
-                        className="text-[10px] text-red-600 hover:text-red-800 transition-colors font-bold flex items-center gap-1 bg-red-50 px-2 py-0.5 rounded-full border border-red-200"
-                        title="Stop Reading Answer"
+                        className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-red-500/10 px-2 py-0.5 rounded-full"
                       >
                         ⏹️ Stop Voice
                       </button>
                     ) : (
                       <button
                         onClick={() => speakText(m.text)}
-                        className="text-[10px] text-indigo-600 hover:text-indigo-800 transition-colors font-medium flex items-center gap-0.5"
-                        title="Replay Spoken Answer"
+                        className="text-[10px] text-purple-400 hover:text-purple-300 font-medium flex items-center gap-0.5"
                       >
                         🔊 Listen
                       </button>
@@ -235,7 +284,7 @@ export default function ChatBot({ standalone = false }) {
             ))}
 
             {chatLoading && (
-              <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 p-2.5 rounded-2xl text-xs self-start animate-pulse">
+              <div className="bg-purple-500/10 border border-purple-500/20 text-purple-400 p-2.5 rounded-2xl text-xs self-start animate-pulse">
                 🤖 StudyBuddy AI is thinking...
               </div>
             )}
@@ -243,13 +292,19 @@ export default function ChatBot({ standalone = false }) {
           </div>
 
           {/* Predefined suggestion buttons */}
-          <div className="flex flex-wrap gap-1.5 p-2.5 border-t border-gray-100 bg-white">
+          <div className={`flex flex-wrap gap-1.5 p-2.5 border-t ${
+            isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100"
+          }`}>
             {["Reminders", "Assignments", "Video Tracker", "Streaks", "Analytics"].map(
               (btn, idx) => (
                 <button
                   key={idx}
                   onClick={() => sendMessageToChatbot(btn)}
-                  className="bg-gray-100 text-gray-700 hover:bg-indigo-100 hover:text-indigo-700 px-2.5 py-1 rounded-full text-[11px] font-medium transition-all"
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-medium transition-all ${
+                    isDark
+                      ? "bg-slate-800 text-purple-200 hover:bg-slate-700 border border-purple-500/20"
+                      : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-100"
+                  }`}
                 >
                   {btn}
                 </button>
@@ -258,10 +313,16 @@ export default function ChatBot({ standalone = false }) {
           </div>
 
           {/* Input field */}
-          <div className="flex items-center gap-2 p-2.5 border-t border-gray-100 bg-white">
+          <div className={`flex items-center gap-2 p-2.5 border-t ${
+            isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100"
+          }`}>
             <input
               type="text"
-              className="flex-1 p-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs"
+              className={`flex-1 p-2 rounded-xl border text-xs outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
+                isDark
+                  ? "bg-slate-800 border-slate-700 text-white placeholder-slate-400"
+                  : "bg-white border-slate-300 text-slate-800 placeholder-slate-400"
+              }`}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -273,7 +334,9 @@ export default function ChatBot({ standalone = false }) {
               className={`p-2 rounded-xl border text-sm transition-all ${
                 isVoiceListening
                   ? "bg-red-500 text-white animate-bounce border-red-600"
-                  : "bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-200"
+                  : isDark
+                  ? "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+                  : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
               }`}
               title="Ask by Voice"
             >
@@ -282,7 +345,7 @@ export default function ChatBot({ standalone = false }) {
             <button
               onClick={handleSend}
               disabled={!input.trim()}
-              className="bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors"
             >
               Send
             </button>
@@ -294,7 +357,7 @@ export default function ChatBot({ standalone = false }) {
       {!isChatOpen && (
         <div
           onClick={() => setIsChatOpen(true)}
-          className="cursor-pointer transition-transform hover:scale-110 active:scale-95"
+          className="cursor-pointer transition-transform hover:scale-110 active:scale-95 drop-shadow-xl"
           title="Open StudyBuddy AI Chatbot"
         >
           <Lottie
