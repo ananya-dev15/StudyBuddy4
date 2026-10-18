@@ -3228,7 +3228,7 @@ export default function VideoTracker() {
           <div
             className={`rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 border ${theme === "dark"
               ? "bg-[#161a20] border-gray-800/90 shadow-[0_8px_32px_rgba(0,0,0,0.35)] text-white"
-              : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_8px_30px_rgba(0,0,0,0.03)] text-gray-900"
+              : "bg-[#fbf9f3] border-[#eee8de] shadow-[0_8px_30px_rgba(0,0,0,0.03)] text-gray-900"
               }`}
           >
             {/* Header: Title, Icon & Step 01 badge */}
@@ -3808,14 +3808,14 @@ export default function VideoTracker() {
           style={{
             background: isDark
               ? "linear-gradient(145deg, #0b0f19 0%, #0f172a 50%, #0d1527 100%)"
-              : "#ffffff",
+              : "#fbf9f3",
             border: isDark
               ? "1px solid rgba(255, 255, 255, 0.1)"
-              : "1px solid #e2e8f0",
+              : "1px solid #eee8de",
             color: isDark ? "#ffffff" : "#0f172a",
             boxShadow: isDark
               ? "0 20px 40px rgba(0,0,0,0.4)"
-              : "0 10px 30px rgba(0, 0, 0, 0.05), 0 1px 3px rgba(0, 0, 0, 0.04)",
+              : "0 10px 30px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.03)",
           }}
         >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-center">
@@ -4314,7 +4314,7 @@ export default function VideoTracker() {
               <div
                 className={`p-5 sm:p-6 rounded-3xl border transition-all duration-300 shadow-sm flex flex-col justify-between ${isDark
                   ? "bg-[#151921] border-slate-700/80 text-white"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800"
                   }`}
               >
               {/* Header with Step Badge, Title & Spiral Notebook Graphic */}
@@ -4673,7 +4673,7 @@ export default function VideoTracker() {
             <div
               className={`p-5 sm:p-6 rounded-3xl border transition-all duration-300 shadow-sm flex flex-col justify-between min-w-0 w-full overflow-hidden ${isDark
                 ? "bg-[#151921] border-slate-700/80 text-white"
-                : "bg-[#fdfbf7] border-[#eee8de] text-slate-800"
+                : "bg-[#fbf9f3] border-[#eee8de] text-slate-800"
                 }`}
             >
               {/* Header */}
@@ -5001,8 +5001,8 @@ export default function VideoTracker() {
         <div
           className="w-full rounded-3xl p-5 sm:p-7 transition-all shadow-md mt-6"
           style={{
-            background: isDark ? "rgba(15, 23, 42, 0.85)" : "#ffffff",
-            border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid #e2e8f0",
+            background: isDark ? "rgba(15, 23, 42, 0.85)" : "#fbf9f3",
+            border: isDark ? "1px solid rgba(255, 255, 255, 0.1)" : "1px solid #eee8de",
             color: isDark ? "#ffffff" : "#0f172a",
           }}
         >
@@ -6202,7 +6202,7 @@ const getThemeStyles = (theme) => {
         color: "#f8fafc",
       }
       : {
-        background: "#fdfbf7",
+        background: "#fbf9f3",
         backdropFilter: "blur(24px)",
         WebkitBackdropFilter: "blur(24px)",
         borderRadius: "24px",
