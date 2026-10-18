@@ -764,14 +764,14 @@ const AssignmentCard = () => {
         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
         :root {
             --bg-start-color: #e6e0f0; --bg-end-color: #f0f3f8; --text-color: #333; --card-bg: #fff;
-            --btn-gradient: linear-gradient(to right, #4338ca, #db2777); --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            --btn-gradient: #1b3f30; --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             --heading-color: #6B57E0; --yellow-200: #fef08a; --green-200: #dcfce7; --red-200: #fecaca; --orange-200: #fed7aa;
             --cloud-bg-assignment: #f7e6f8; --cloud-bg-hackathon: #e6f8f7; --cloud-bg-reminder: #f8e6f7;
             --cloud-bg-completed: #dceefc; --cloud-bg-urgent: #fbc2c2; --cloud-bg-warning: #ffe6cc;
         }
         body { padding: 0; margin: 0; }
         .app-container { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, var(--bg-start-color), var(--bg-end-color)); color: var(--text-color); min-height: 100vh; }
-        .dark-mode { background: transparent; color: #e5e7eb; }
+        .dark-mode { --btn-gradient: linear-gradient(to right, #4338ca, #db2777); background: transparent; color: #e5e7eb; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
         .header h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.025em; }
         .status-section { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
@@ -781,12 +781,16 @@ const AssignmentCard = () => {
         .filter-section { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
         .filter-section button { padding: 0.6rem 1.25rem; border: none; border-radius: 0.75rem; font-weight: 600; box-shadow: var(--box-shadow); cursor: pointer; transition: all 0.2s ease; }
         .filter-section .active-filter { background: var(--btn-gradient); color: white; }
+        .filter-section .active-filter:hover { background: #143024; }
+        .dark-mode .filter-section .active-filter:hover { background: linear-gradient(to right, #4f46e5, #e11d48); }
         .filter-section .inactive-filter { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
         .dark-mode .filter-section .inactive-filter { background: rgba(30, 41, 59, 0.8); color: #e2e8f0; border: 1px solid rgba(168,85,247,0.3); }
+        .add-card button:hover, .status-btn:hover { background: #143024; opacity: 0.95; }
+        .dark-mode .add-card button:hover, .dark-mode .status-btn:hover { background: linear-gradient(to right, #4f46e5, #e11d48); }
         .cards-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 1.5rem; }
         @media (min-width: 768px) { .cards-grid { grid-template-columns: repeat(2, 1fr); } }
         @media (min-width: 1024px) { .cards-grid { grid-template-columns: repeat(3, 1fr); } }
-        .add-card { margin-bottom: 2rem; padding: 1.75rem; background: linear-gradient(to bottom, rgba(255,255,255,0.75), rgba(255,255,255,0.60), rgba(255,255,255,0.70)); backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.85); box-shadow: 0 10px 35px rgba(0,0,0,0.08), inset 0 1px 1px rgba(255,255,255,0.95); color: #1e293b; }
+        .add-card { margin-bottom: 2rem; padding: 1.75rem; background: #fbf9f3; backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid #eee8de; box-shadow: 0 10px 35px rgba(0,0,0,0.04), inset 0 1px 1px rgba(255,255,255,0.95); color: #1e293b; }
         .dark-mode .add-card { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid rgba(168, 85, 247, 0.25); box-shadow: 0 20px 40px rgba(0,0,0,0.4); color: #fff; }
         .add-card h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
         .add-card input { box-sizing: border-box; width: 100%; margin-bottom: 0.75rem; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 1px solid #cbd5e1; background: rgba(255,255,255,0.9); color: #0f172a; font-family: inherit; font-size: 0.95rem; }

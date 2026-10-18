@@ -443,4 +443,63 @@ router.get("/notes-tags", protect, async (req, res) => {
   }
 });
 
+// ✅ GET Leaderboard - Real users from database
+router.get("/leaderboard", async (req, res) => {
+  try {
+    const users = await User.find(
+      {},
+      "name email coins videosWatched videosSwitched streak history createdAt"
+    ).lean();
+
+    const leaderboard = users.map((u) => {
+      const historyVideosCount = Array.isArray(u.history) ? u.history.length : 0;
+      const videos = Math.max(u.videosWatched || 0, historyVideosCount);
+
+      let historyTabs = 0;
+      if (Array.isArray(u.history)) {
+        historyTabs = u.history.reduce((sum, h) => sum + (h.tabSwitches || 0), 0);
+      }
+      const tabs = Math.max(u.videosSwitched || 0, historyTabs);
+
+      const coins = u.coins ?? 50;
+
+      // Focus score formula consistent with student activity
+      let focusScore = ((videos * 10) + (coins * 0.3) - (tabs * 4)) / 10;
+      focusScore = Math.min(100, Math.max(0, parseFloat(focusScore.toFixed(1))));
+
+      if (videos === 0 && coins <= 50) {
+        // Base starting focus score for registered students
+        focusScore = Math.min(100, Math.max(10, parseFloat((coins * 0.4).toFixed(1))));
+      }
+
+      return {
+        _id: u._id,
+        name: u.name || "Student",
+        email: u.email,
+        coins,
+        videos,
+        tabs,
+        streak: u.streak || 0,
+        focusScore,
+      };
+    });
+
+    // Sort descending by focus score, then coins
+    leaderboard.sort((a, b) => {
+      if (b.focusScore !== a.focusScore) {
+        return b.focusScore - a.focusScore;
+      }
+      return b.coins - a.coins;
+    });
+
+    res.json({
+      success: true,
+      students: leaderboard,
+    });
+  } catch (err) {
+    console.error("⚠️ Error fetching leaderboard:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 export default router;

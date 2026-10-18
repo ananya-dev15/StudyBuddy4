@@ -502,7 +502,7 @@ const Analytics = () => {
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm hover:scale-105 ${
               isDark
                 ? "bg-lime-500/20 text-lime-300 border border-lime-500/40 hover:bg-lime-500/30"
-                : "bg-emerald-600 text-white hover:bg-emerald-700"
+                : "bg-[#1b3f30] hover:bg-[#143024] text-white"
             }`}
           >
             <span>🎥</span>
@@ -545,7 +545,7 @@ const Analytics = () => {
                 activeTab === idx
                   ? isDark
                     ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/25 scale-[1.02]"
-                    : "bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-md scale-[1.02]"
+                    : "bg-[#1b3f30] hover:bg-[#143024] text-white shadow-md scale-[1.02]"
                   : isDark
                   ? "bg-slate-900/50 hover:bg-slate-800/70 text-slate-300 border border-purple-500/20"
                   : "bg-white/70 hover:bg-white text-slate-700 border border-slate-200 shadow-sm"
@@ -570,7 +570,7 @@ const Analytics = () => {
             className={`text-center py-16 px-6 rounded-3xl backdrop-blur-2xl border max-w-xl mx-auto my-12 ${
               isDark
                 ? "bg-slate-900/70 border-purple-500/20 text-slate-300"
-                : "bg-[#fdfbf7] border-[#eee8de] text-slate-600 shadow-lg"
+                : "bg-[#fbf9f3] border-[#eee8de] text-slate-600 shadow-lg"
             }`}
           >
             <span className="text-6xl mb-4 block">🎯</span>
@@ -580,7 +580,11 @@ const Analytics = () => {
             </p>
             <Link
               to="/videos"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-500/30 hover:scale-105 transition"
+              className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-white shadow-lg transition hover:scale-105 ${
+                isDark
+                  ? "bg-gradient-to-r from-purple-600 to-indigo-600 shadow-purple-500/30"
+                  : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+              }`}
             >
               <span>🎥</span>
               <span>Start Camera Analysis</span>
@@ -599,7 +603,7 @@ const Analytics = () => {
                 className={`p-6 rounded-3xl border backdrop-blur-xl transition hover:scale-[1.01] ${
                   isDark
                     ? "bg-slate-900/80 border-purple-500/30 shadow-lg"
-                    : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                    : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -614,7 +618,7 @@ const Analytics = () => {
                 className={`p-6 rounded-3xl border backdrop-blur-xl transition hover:scale-[1.01] ${
                   isDark
                     ? "bg-slate-900/80 border-emerald-500/30 shadow-lg"
-                    : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                    : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -629,7 +633,7 @@ const Analytics = () => {
                 className={`p-6 rounded-3xl border backdrop-blur-xl transition hover:scale-[1.01] ${
                   isDark
                     ? "bg-slate-900/80 border-indigo-500/30 shadow-lg"
-                    : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                    : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
                 }`}
               >
                 <div className="flex items-center justify-between mb-2">
@@ -648,7 +652,7 @@ const Analytics = () => {
                 className={`lg:col-span-5 p-6 rounded-3xl border backdrop-blur-xl ${
                   isDark
                     ? "bg-slate-900/80 border-purple-500/30"
-                    : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                    : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
                 }`}
               >
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -688,7 +692,7 @@ const Analytics = () => {
                 className={`lg:col-span-7 p-6 rounded-3xl border backdrop-blur-xl ${
                   isDark
                     ? "bg-slate-900/80 border-purple-500/30"
-                    : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                    : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
                 }`}
               >
                 <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -727,7 +731,7 @@ const Analytics = () => {
               className={`p-6 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
@@ -770,7 +774,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
@@ -852,7 +856,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <div className="flex items-center justify-between mb-4">
@@ -925,7 +929,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
@@ -952,7 +956,11 @@ const Analytics = () => {
                   </div>
                   <button
                     onClick={generateTodayPDF}
-                    className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md hover:scale-[1.02] active:scale-95 transition"
+                    className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md hover:scale-[1.02] active:scale-95 transition ${
+                      isDark
+                        ? "bg-gradient-to-r from-emerald-500 to-teal-600 shadow-emerald-500/25"
+                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                    }`}
                   >
                     ⬇️ Download Today PDF
                   </button>
@@ -973,7 +981,11 @@ const Analytics = () => {
                   </div>
                   <button
                     onClick={generateWeeklyPDF}
-                    className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md hover:scale-[1.02] active:scale-95 transition"
+                    className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md hover:scale-[1.02] active:scale-95 transition ${
+                      isDark
+                        ? "bg-gradient-to-r from-indigo-500 to-purple-600 shadow-indigo-500/25"
+                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                    }`}
                   >
                     ⬇️ Download Weekly PDF
                   </button>
@@ -994,7 +1006,11 @@ const Analytics = () => {
                   </div>
                   <button
                     onClick={generateMonthlyPDF}
-                    className="w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm bg-gradient-to-r from-pink-500 to-rose-600 text-white shadow-md hover:scale-[1.02] active:scale-95 transition"
+                    className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md hover:scale-[1.02] active:scale-95 transition ${
+                      isDark
+                        ? "bg-gradient-to-r from-pink-500 to-rose-600 shadow-pink-500/25"
+                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                    }`}
                   >
                     ⬇️ Download Monthly PDF
                   </button>
@@ -1014,7 +1030,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
@@ -1070,7 +1086,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -1145,7 +1161,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
@@ -1213,7 +1229,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
@@ -1230,7 +1246,11 @@ const Analytics = () => {
                 <div className="flex items-center gap-3">
                   <button
                     onClick={() => exportLogsToCSV(selectedDate)}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white shadow transition hover:scale-105 active:scale-95"
+                    className={`px-4 py-2 rounded-xl text-xs font-bold text-white shadow transition hover:scale-105 active:scale-95 ${
+                      isDark
+                        ? "bg-purple-600 hover:bg-purple-700"
+                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                    }`}
                   >
                     ⬇️ Export CSV
                   </button>
@@ -1314,7 +1334,7 @@ const Analytics = () => {
               className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl ${
                 isDark
                   ? "bg-slate-900/80 border-purple-500/30"
-                  : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-md"
+                  : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
               }`}
             >
               <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
@@ -1359,7 +1379,11 @@ const Analytics = () => {
                           href={pdf.pdfUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="block text-center py-2 px-3 rounded-xl text-xs font-bold bg-purple-600 hover:bg-purple-700 text-white transition shadow"
+                          className={`block text-center py-2 px-3 rounded-xl text-xs font-bold text-white transition shadow hover:scale-[1.01] active:scale-95 ${
+                            isDark
+                              ? "bg-purple-600 hover:bg-purple-700"
+                              : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                          }`}
                         >
                           View / Download PDF ↗
                         </a>
