@@ -1,6 +1,9 @@
 // routes/trackingRoutes.js
 import express from "express";
+import fs from "fs";
+import path from "path";
 import User from "../models/User.js";
+import Detection from "../models/Detection.js";
 import protect from "../middlewares/authMiddleware.js";
 import {
   getLocalDateString,
@@ -443,13 +446,188 @@ router.get("/notes-tags", protect, async (req, res) => {
   }
 });
 
-// ✅ GET Leaderboard - Real users from database
+// ✅ Helper: Parse CSV focus logs from detector/focus_logs if available
+const getLatestCsvStats = () => {
+  const dirs = [
+    "./detector/focus_logs",
+    "./backend/detector/focus_logs",
+    "./focus_logs",
+    "../backend/detector/focus_logs",
+  ];
+  for (const d of dirs) {
+    try {
+      if (fs.existsSync(d)) {
+        const files = fs.readdirSync(d).filter((f) => f.endsWith(".csv")).sort();
+        if (files.length > 0) {
+          const latestFile = path.join(d, files[files.length - 1]);
+          const content = fs.readFileSync(latestFile, "utf-8");
+          const lines = content.trim().split("\n").slice(1);
+          if (lines.length > 0) {
+            let total = 0;
+            let focused = 0;
+            let phoneEvents = 0;
+            let lookAwayEvents = 0;
+            let faceAnomalies = 0;
+            let scoreSum = 0;
+            for (const line of lines) {
+              const parts = line.split(",");
+              if (parts.length >= 6) {
+                total += 1;
+                const status = parts[1] || "";
+                const faces = Number(parts[3]) || 0;
+                const phone = Number(parts[4]) || 0;
+                const score = Number(parts[5]) || 0;
+                scoreSum += score;
+                if (status.startsWith("Focused")) focused += 1;
+                if (phone === 1 || status.includes("Phone Detected")) phoneEvents += 1;
+                if (status.includes("Looking Away")) lookAwayEvents += 1;
+                if (status.includes("Multiple/No Face") || faces !== 1) faceAnomalies += 1;
+              }
+            }
+            if (total > 0) {
+              const focusPct = Math.round((focused / total) * 100);
+              const avgScore = Math.round(scoreSum / total);
+              const penalty = (phoneEvents * 20) + (lookAwayEvents * 10) + (faceAnomalies * 10);
+              const calculated = Math.max(0, Math.min(100, Math.min(focusPct, avgScore, 100 - penalty)));
+              return { total, focused, phoneEvents, lookAwayEvents, faceAnomalies, calculated };
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore directory read errors
+    }
+  }
+  return null;
+};
+
+// ✅ POST /sync-monitoring - Sync full monitoring analytics stats from frontend / detector
+router.post("/sync-monitoring", protect, async (req, res) => {
+  try {
+    const {
+      focusScore,
+      phoneDetections = 0,
+      lookAwayEvents = 0,
+      faceAnomalies = 0,
+      totalRecords = 0,
+      focusedRecords = 0,
+    } = req.body;
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    // Derive score exactly as the monitoring analytics dashboard computes it:
+    let calculatedScore = 100;
+    if (typeof focusScore === "number" && !isNaN(focusScore)) {
+      calculatedScore = Math.max(0, Math.min(100, Math.round(focusScore)));
+    } else if (totalRecords > 0) {
+      calculatedScore = Math.round((focusedRecords / totalRecords) * 100);
+    }
+
+    // Distraction penalties: phone detection, look away, no/multiple face
+    const penalties = (Number(phoneDetections) * 20) + (Number(lookAwayEvents) * 10) + (Number(faceAnomalies) * 10);
+    if (penalties > 0) {
+      calculatedScore = Math.min(calculatedScore, Math.max(0, 100 - penalties));
+    }
+
+    user.focusScore = calculatedScore;
+    user.monitoringStats = {
+      phoneDetections: Number(phoneDetections),
+      lookAwayEvents: Number(lookAwayEvents),
+      faceAnomalyEvents: Number(faceAnomalies),
+      totalRecords: Number(totalRecords),
+      focusedRecords: Number(focusedRecords),
+      lastSyncedAt: new Date(),
+    };
+
+    user.markModified("monitoringStats");
+    user.markModified("focusScore");
+    await saveUserWithRetry(user);
+
+    res.json({
+      success: true,
+      focusScore: user.focusScore,
+      monitoringStats: user.monitoringStats,
+    });
+  } catch (err) {
+    console.error("Error in /sync-monitoring:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ✅ POST /focus-score - Sync live camera monitoring focus score to User
+router.post("/focus-score", protect, async (req, res) => {
+  try {
+    const { focusScore, phoneDetected, lookAway, faceAnomaly } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+    if (focusScore !== undefined) {
+      let score = Math.max(0, Math.min(100, Math.round(Number(focusScore))));
+      if (phoneDetected) {
+        // Immediate deduction if phone detected
+        score = Math.min(score, Math.max(0, (user.focusScore !== undefined ? user.focusScore : 100) - 25));
+      }
+      user.focusScore = score;
+      if (!user.monitoringStats) {
+        user.monitoringStats = {
+          phoneDetections: 0,
+          lookAwayEvents: 0,
+          faceAnomalyEvents: 0,
+          totalRecords: 0,
+          focusedRecords: 0,
+        };
+      }
+      if (phoneDetected) {
+        user.monitoringStats.phoneDetections = (user.monitoringStats.phoneDetections || 0) + 1;
+      }
+      if (lookAway) {
+        user.monitoringStats.lookAwayEvents = (user.monitoringStats.lookAwayEvents || 0) + 1;
+      }
+      if (faceAnomaly) {
+        user.monitoringStats.faceAnomalyEvents = (user.monitoringStats.faceAnomalyEvents || 0) + 1;
+      }
+      user.markModified("monitoringStats");
+      user.markModified("focusScore");
+      await saveUserWithRetry(user);
+    }
+    res.json({ success: true, focusScore: user.focusScore });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ✅ GET Leaderboard - Real users ranked by monitoring-based focus score
+// Base = 100%, calculated from monitoring analytics data (phone detection, look-away, multiple/no-face)
 router.get("/leaderboard", async (req, res) => {
   try {
     const users = await User.find(
       {},
-      "name email coins videosWatched videosSwitched streak history createdAt"
+      "name email coins videosWatched videosSwitched streak history focusScore monitoringStats createdAt"
     ).lean();
+
+    const csvStats = getLatestCsvStats();
+
+    // Group detection events by userId
+    const detectionsByUser = {};
+    try {
+      const detections = await Detection.find({}).lean();
+      detections.forEach((d) => {
+        const uid = String(d.userId);
+        if (!detectionsByUser[uid]) {
+          detectionsByUser[uid] = { phoneEvents: 0, lookAwayEvents: 0, faceAnomalyEvents: 0 };
+        }
+        if (d.phone_detected) detectionsByUser[uid].phoneEvents += 1;
+        if (d.direction && d.direction !== "center" && d.direction !== "unknown") {
+          detectionsByUser[uid].lookAwayEvents += 1;
+        }
+        if (d.faces_count !== 1) {
+          detectionsByUser[uid].faceAnomalyEvents += 1;
+        }
+      });
+    } catch (e) {
+      console.warn("Detection query error in leaderboard:", e);
+    }
 
     const leaderboard = users.map((u) => {
       const historyVideosCount = Array.isArray(u.history) ? u.history.length : 0;
@@ -460,17 +638,56 @@ router.get("/leaderboard", async (req, res) => {
         historyTabs = u.history.reduce((sum, h) => sum + (h.tabSwitches || 0), 0);
       }
       const tabs = Math.max(u.videosSwitched || 0, historyTabs);
-
       const coins = u.coins ?? 50;
 
-      // Focus score formula consistent with student activity
-      let focusScore = ((videos * 10) + (coins * 0.3) - (tabs * 4)) / 10;
-      focusScore = Math.min(100, Math.max(0, parseFloat(focusScore.toFixed(1))));
+      // ─── MONITORING FOCUS SCORE LOGIC ───
+      // Starts at base 100%
+      let monitoringScore = 100;
 
-      if (videos === 0 && coins <= 50) {
-        // Base starting focus score for registered students
-        focusScore = Math.min(100, Math.max(10, parseFloat((coins * 0.4).toFixed(1))));
+      // 1. User's saved focusScore
+      if (typeof u.focusScore === "number" && !isNaN(u.focusScore)) {
+        monitoringScore = u.focusScore;
       }
+
+      // 2. Monitoring stats from analytics dashboard (phone detection, look away, no/multiple face)
+      if (u.monitoringStats) {
+        const {
+          phoneDetections = 0,
+          lookAwayEvents = 0,
+          faceAnomalyEvents = 0,
+          totalRecords = 0,
+          focusedRecords = 0,
+        } = u.monitoringStats;
+
+        if (totalRecords > 0) {
+          const focusPct = Math.round((focusedRecords / totalRecords) * 100);
+          monitoringScore = Math.min(monitoringScore, focusPct);
+        }
+
+        const penalties = (Number(phoneDetections) * 20) + (Number(lookAwayEvents) * 10) + (Number(faceAnomalyEvents) * 10);
+        if (penalties > 0) {
+          monitoringScore = Math.min(monitoringScore, Math.max(0, 100 - penalties));
+        }
+      }
+
+      // 3. Fallback CSV stats for local user if CSV logs present
+      if (csvStats && (csvStats.phoneEvents > 0 || csvStats.lookAwayEvents > 0 || csvStats.faceAnomalies > 0)) {
+        const isAnanya = (u.email && u.email.includes("ananya")) || (u.name && u.name.toLowerCase().includes("ananya"));
+        if (isAnanya) {
+          monitoringScore = Math.min(monitoringScore, csvStats.calculated);
+        }
+      }
+
+      // 4. Detection collection penalties
+      const uDetections = detectionsByUser[String(u._id)];
+      if (uDetections) {
+        const phonePenalty = uDetections.phoneEvents * 25;
+        const lookAwayPenalty = uDetections.lookAwayEvents * 15;
+        const facePenalty = uDetections.faceAnomalyEvents * 15;
+        monitoringScore = Math.max(0, monitoringScore - phonePenalty - lookAwayPenalty - facePenalty);
+      }
+
+      const focusScore = Math.min(100, Math.max(0, Math.round(monitoringScore)));
 
       return {
         _id: u._id,
@@ -484,12 +701,15 @@ router.get("/leaderboard", async (req, res) => {
       };
     });
 
-    // Sort descending by focus score, then coins
+    // Sort descending by focus score, then coins, then videos
     leaderboard.sort((a, b) => {
       if (b.focusScore !== a.focusScore) {
         return b.focusScore - a.focusScore;
       }
-      return b.coins - a.coins;
+      if (b.coins !== a.coins) {
+        return b.coins - a.coins;
+      }
+      return b.videos - a.videos;
     });
 
     res.json({

@@ -355,7 +355,7 @@ export class BrowserDetector {
   }
 
   /**
-   * Local Voice Alert ("Stay Focused")
+   * Local Voice Alert ("Stay Focused") - Female Voice
    */
   playLocalAlert() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -363,7 +363,31 @@ export class BrowserDetector {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance("Stay Focused");
         utterance.rate = 1.0;
-        utterance.pitch = 1.0;
+        utterance.pitch = 1.15; // Pleasant female pitch
+
+        // Select a female voice (macOS Samantha/Karen/Victoria, Google US Female, Zira, etc.)
+        const voices = window.speechSynthesis.getVoices() || [];
+        const femaleVoice = voices.find((v) => {
+          const name = (v.name || "").toLowerCase();
+          return (
+            name.includes("samantha") ||
+            name.includes("karen") ||
+            name.includes("victoria") ||
+            name.includes("zira") ||
+            name.includes("female") ||
+            name.includes("google us english") ||
+            name.includes("moira") ||
+            name.includes("tessa") ||
+            name.includes("veena") ||
+            name.includes("fiona") ||
+            name.includes("serena")
+          );
+        });
+
+        if (femaleVoice) {
+          utterance.voice = femaleVoice;
+        }
+
         window.speechSynthesis.speak(utterance);
       } catch (e) {
         console.warn("Speech synthesis alert failed:", e);

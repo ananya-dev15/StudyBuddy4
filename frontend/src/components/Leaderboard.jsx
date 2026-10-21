@@ -12,6 +12,7 @@ import {
 import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
 import API_BASE from "../services/apiBase";
+import { getAllMonitoringLogs } from "../services/monitoringDB";
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -19,21 +20,90 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend)
 const Leaderboard = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { theme } = useAppContext();
+  const { theme, appState } = useAppContext();
   const isDark = theme === "dark";
+
+  const currentUserId = appState?.user?._id || appState?.user?.id;
+  const currentUserEmail = appState?.user?.email;
 
   useEffect(() => {
     const fetchLeaderboard = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem("token");
+
+        // 1. Read local monitoring analytics data (IndexedDB)
+        let localComputedScore = null;
+        try {
+          const logs = await getAllMonitoringLogs();
+          if (logs && logs.length > 0) {
+            const total = logs.length;
+            const focused = logs.filter((l) => l.status && l.status.startsWith("Focused")).length;
+            const phoneCount = logs.filter(
+              (l) => Number(l.phone_detected) === 1 || (l.status && l.status.includes("Phone Detected"))
+            ).length;
+            const lookAwayCount = logs.filter(
+              (l) => l.status && l.status.includes("Looking Away")
+            ).length;
+            const faceCount = logs.filter(
+              (l) => (l.status && l.status.includes("Multiple/No Face")) || Number(l.faces_detected) !== 1
+            ).length;
+
+            const totalScore = logs.reduce((sum, l) => sum + (Number(l.focus_score) || 0), 0);
+            const avgScore = total > 0 ? Math.round(totalScore / total) : 100;
+            const focusPct = total > 0 ? Math.round((focused / total) * 100) : 100;
+            const penalty = (phoneCount * 20) + (lookAwayCount * 10) + (faceCount * 10);
+            localComputedScore = Math.max(0, Math.min(100, Math.min(avgScore, focusPct, 100 - penalty)));
+
+            // Sync to backend so MongoDB is updated for this user
+            if (token) {
+              await fetch(`${API_BASE}/api/tracking/sync-monitoring`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                  focusScore: localComputedScore,
+                  phoneDetections: phoneCount,
+                  lookAwayEvents: lookAwayCount,
+                  faceAnomalies: faceCount,
+                  totalRecords: total,
+                  focusedRecords: focused,
+                }),
+              });
+            }
+          }
+        } catch (e) {
+          console.warn("Local monitoring read note:", e);
+        }
+
+        // 2. Fetch all real users from backend
         const res = await fetch(`${API_BASE}/api/tracking/leaderboard`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           credentials: "include",
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.students)) {
-          setStudents(data.students);
+          let list = [...data.students];
+          if (localComputedScore !== null) {
+            const idx = list.findIndex(
+              (s) =>
+                (currentUserId && String(s._id) === String(currentUserId)) ||
+                (currentUserEmail && s.email === currentUserEmail)
+            );
+            if (idx !== -1) {
+              list[idx].focusScore = localComputedScore;
+            }
+          }
+          // Re-sort descending by focusScore, then coins, then videos
+          list.sort((a, b) => {
+            if (b.focusScore !== a.focusScore) return b.focusScore - a.focusScore;
+            if (b.coins !== a.coins) return b.coins - a.coins;
+            return b.videos - a.videos;
+          });
+          setStudents(list);
         }
       } catch (err) {
         console.error("Failed to load real users leaderboard:", err);
@@ -43,7 +113,7 @@ const Leaderboard = () => {
     };
 
     fetchLeaderboard();
-  }, []);
+  }, [currentUserId, currentUserEmail]);
 
   const top10 = students.slice(0, 10);
 
@@ -207,7 +277,7 @@ const Leaderboard = () => {
                   <tr className={`border-b text-xs uppercase tracking-wider font-bold ${
                     isDark
                       ? "bg-slate-800/60 border-purple-500/20 text-purple-300"
-                      : "bg-slate-100/70 border-slate-200 text-slate-700"
+                      : "bg-[#f4efe4] border-[#eee8de] text-slate-700"
                   }`}>
                     <th className="py-4 px-6">Rank</th>
                     <th className="py-4 px-6">Student Name</th>
@@ -217,12 +287,12 @@ const Leaderboard = () => {
                     <th className="py-4 px-6">Focus Score</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 text-sm font-medium">
+                <tbody className="divide-y divide-black/5 dark:divide-white/5 text-sm font-medium">
                   {students.map((s, i) => (
                     <tr
                       key={s._id || i}
                       className={`transition-colors ${
-                        isDark ? "hover:bg-slate-800/40" : "hover:bg-purple-50/50"
+                        isDark ? "hover:bg-slate-800/40" : "hover:bg-[#f5efe2]/70"
                       }`}
                     >
                       <td className="py-4 px-6 font-bold">
@@ -233,11 +303,11 @@ const Leaderboard = () => {
                       <td className="py-4 px-6">{s.videos}</td>
                       <td className="py-4 px-6 text-rose-500">{s.tabs}</td>
                       <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <span className={`font-bold w-12 ${isDark ? "text-purple-400" : "text-[#1b3f30]"}`}>{s.focusScore}%</span>
-                          <div className={`h-2 flex-1 max-w-[120px] rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-slate-200"}`}>
+                        <div className="flex items-center gap-4">
+                          <span className={`font-extrabold text-base w-14 ${isDark ? "text-purple-400" : "text-[#1b3f30]"}`}>{s.focusScore}%</span>
+                          <div className={`h-2.5 flex-1 max-w-[130px] rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-[#ded6c5]"}`}>
                             <div
-                              className={`h-full rounded-full ${isDark ? "bg-gradient-to-r from-purple-500 to-pink-500" : "bg-[#1b3f30]"}`}
+                              className={`h-full rounded-full transition-all duration-500 ${isDark ? "bg-gradient-to-r from-purple-500 to-pink-500" : "bg-[#1b3f30]"}`}
                               style={{ width: `${s.focusScore}%` }}
                             />
                           </div>

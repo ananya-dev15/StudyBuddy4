@@ -80,7 +80,7 @@ const Register = () => {
         }));
         localStorage.setItem("streak", data.user.streak || 0);
 
-        navigate("/");
+        navigate("/intro", { state: { destination: "/" }, replace: true });
       } else {
         alert(data.message || "Google sign-up failed.");
       }

@@ -11,6 +11,8 @@ import AuthModal from "./AuthModal";
 import UserProfileModal from "./UserProfileModal";
 import API_BASE, { STREAMLIT_URL, DETECTOR_URL } from "../services/apiBase";
 import { BrowserDetector } from "../services/browserDetector";
+import { getAllMonitoringLogs } from "../services/monitoringDB";
+import { eachDayOfInterval, format, startOfMonth, endOfMonth } from "date-fns";
 
 
 
@@ -361,6 +363,39 @@ export default function VideoTracker() {
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [focusRemaining, setFocusRemaining] = useState(null);
 
+  // 🔔 Custom Notification Popup Modal (same style as Focus Timer popup)
+  const [notificationPopup, setNotificationPopup] = useState({
+    show: false,
+    title: "",
+    subtitle: "",
+    badge: "",
+    badgeColor: "#10b981",
+    icon: "🎉",
+    details: [],
+    buttonText: "Awesome!",
+  });
+
+  const triggerNotification = useCallback(({
+    title,
+    subtitle = "",
+    badge = "",
+    badgeColor = "#10b981",
+    icon = "🎉",
+    details = [],
+    buttonText = "Awesome!",
+  }) => {
+    setNotificationPopup({
+      show: true,
+      title,
+      subtitle,
+      badge,
+      badgeColor,
+      icon,
+      details,
+      buttonText,
+    });
+  }, []);
+
   const focusRemainingRef = useRef(focusRemaining);
   useEffect(() => {
     focusRemainingRef.current = focusRemaining;
@@ -495,12 +530,39 @@ export default function VideoTracker() {
   const lastProgressSaveRef = useRef(0);
   const hasResumedRef = useRef(false);
   const isVideoEndingRef = useRef(false);
+  const lastScoreSyncRef = useRef(0);
 
   // Initialize BrowserDetector instance on mount and pre-warm models
   useEffect(() => {
     const detector = new BrowserDetector({
       onStatsUpdate: (stats) => {
         setDetectorStats(stats);
+        if (typeof stats.focus_score === "number") {
+          const now = Date.now();
+          const isDistracted = stats.phone_detected === 1 || (stats.status && stats.status.startsWith("Not Focused"));
+          // If phone is detected or not focused, sync IMMEDIATELY without waiting 10s!
+          const shouldSync = isDistracted || (now - lastScoreSyncRef.current > 5000);
+          if (shouldSync) {
+            lastScoreSyncRef.current = now;
+            const token = localStorage.getItem("token");
+            if (token) {
+              fetch(`${API_BASE}/api/tracking/focus-score`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${token}`,
+                },
+                credentials: "include",
+                body: JSON.stringify({
+                  focusScore: stats.focus_score,
+                  phoneDetected: stats.phone_detected === 1,
+                  lookAway: stats.status && stats.status.includes("Looking Away"),
+                  faceAnomaly: (stats.status && stats.status.includes("Multiple/No Face")) || (Number(stats.faces_detected) !== 1),
+                }),
+              }).catch(() => {});
+            }
+          }
+        }
       },
       onError: (err) => {
         setCameraError(err);
@@ -539,6 +601,42 @@ export default function VideoTracker() {
     isCameraActiveRef.current = false;
     if (browserDetectorRef.current) {
       browserDetectorRef.current.stop();
+
+      // Read complete IndexedDB monitoring logs to compute final session score & sync
+      getAllMonitoringLogs().then((logs) => {
+        if (logs && logs.length > 0) {
+          const total = logs.length;
+          const focused = logs.filter(l => l.status && l.status.startsWith("Focused")).length;
+          const phoneCount = logs.filter(l => Number(l.phone_detected) === 1 || (l.status && l.status.includes("Phone Detected"))).length;
+          const lookAwayCount = logs.filter(l => l.status && l.status.includes("Looking Away")).length;
+          const faceCount = logs.filter(l => (l.status && l.status.includes("Multiple/No Face")) || (Number(l.faces_detected) !== 1)).length;
+          const totalScore = logs.reduce((sum, l) => sum + (Number(l.focus_score) || 0), 0);
+          const avgScore = total > 0 ? Math.round(totalScore / total) : 100;
+          const focusPct = total > 0 ? Math.round((focused / total) * 100) : 100;
+          const penalty = (phoneCount * 20) + (lookAwayCount * 10) + (faceCount * 10);
+          const computedScore = Math.max(0, Math.min(100, Math.min(avgScore, focusPct, 100 - penalty)));
+
+          const token = localStorage.getItem("token");
+          if (token) {
+            fetch(`${API_BASE}/api/tracking/sync-monitoring`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: "include",
+              body: JSON.stringify({
+                focusScore: computedScore,
+                phoneDetections: phoneCount,
+                lookAwayEvents: lookAwayCount,
+                faceAnomalies: faceCount,
+                totalRecords: total,
+                focusedRecords: focused,
+              }),
+            }).catch(() => {});
+          }
+        }
+      }).catch(() => {});
     }
     if (cameraStreamRef.current) {
       cameraStreamRef.current.getTracks().forEach((track) => {
@@ -650,6 +748,51 @@ export default function VideoTracker() {
   const [monthData, setMonthData] = useState([]); // full month data (one item per day)
   const [monthStartIndex, setMonthStartIndex] = useState(0); // start index for visible 5-day window
 
+  // Study Activity Heatmap state (shifted from Student Dashboard)
+  const [heatmapMonth, setHeatmapMonth] = useState(new Date().getMonth());
+  const [heatmapYear, setHeatmapYear] = useState(new Date().getFullYear());
+
+  const heatmapActivity = useMemo(() => {
+    const act = {};
+    const historyList = (appState.history && appState.history.length > 0)
+      ? appState.history
+      : JSON.parse(localStorage.getItem(`userHistory_${userId}`)) || [];
+
+    if (historyList.length > 0) {
+      historyList.forEach((h) => {
+        let dayKey = "";
+        if (h.watchedAt) {
+          if (typeof h.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.watchedAt.trim())) {
+            dayKey = h.watchedAt.trim();
+          } else if (typeof h.watchedAt === "string" && h.watchedAt.includes("T")) {
+            dayKey = h.watchedAt.split("T")[0];
+          } else {
+            dayKey = getLocalDateString(h.watchedAt);
+          }
+        }
+        if (!dayKey) return;
+        if (!act[dayKey]) act[dayKey] = { totalSeconds: 0 };
+        act[dayKey].totalSeconds += Number(h.seconds ?? h.secondsWatched ?? 0) || 0;
+      });
+    }
+
+    try {
+      const cached = JSON.parse(localStorage.getItem("monthlyActivity") || "{}");
+      if (cached && Object.keys(cached).length > 0) {
+        Object.keys(cached).forEach((key) => {
+          if (!act[key]) act[key] = { totalSeconds: cached[key]?.totalSeconds || 0 };
+          else if (cached[key]?.totalSeconds > act[key].totalSeconds) {
+            act[key].totalSeconds = cached[key].totalSeconds;
+          }
+        });
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    return act;
+  }, [appState.history, userId]);
+
   const loadState = async () => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
     const storedCoins = storedUser?.coins ?? localStorage.getItem("coins") ?? 0;
@@ -729,9 +872,19 @@ export default function VideoTracker() {
             console.error("❌ Split screen coin deduction failed:", e);
           }
 
-          // Show alerts
-          alert("⚠️ Focus Alert: Split screen detected! 5 Coins Deducted!");
-          alert("⚠️ Please maximize the study window to continue!");
+          // Show popup modal notification
+          triggerNotification({
+            title: "Split Screen Detected!",
+            subtitle: "Split-screen distraction was detected during active focus study.",
+            badge: "⚠️ Penalty: -5 Coins",
+            badgeColor: "#ef4444",
+            icon: "🚨",
+            details: [
+              "💰 5 coins deducted as distraction penalty",
+              "🖥️ Please maximize your study window to stay focused",
+            ],
+            buttonText: "I'll Focus 🔥",
+          });
 
           if (socketRef.current) {
             socketRef.current.emit("split_screen_detected", {
@@ -2112,7 +2265,15 @@ export default function VideoTracker() {
 
       const playedSeconds = sessionPlayedSecondsRef.current ?? sessionPlayedSeconds;
       if (!isFocus && (!playedSeconds || playedSeconds < 5)) {
-        alert("⚠️ Watch at least 5 seconds before saving!");
+        triggerNotification({
+          title: "Session Too Short",
+          subtitle: "Please watch at least 5 seconds before saving your study session.",
+          badge: "⚠️ Notice",
+          badgeColor: "#f59e0b",
+          icon: "⏳",
+          details: ["Sessions under 5 seconds are not logged to prevent clutter."],
+          buttonText: "Understood",
+        });
         return;
       }
 
@@ -2257,9 +2418,32 @@ export default function VideoTracker() {
       }
 
       if (isFocus) {
-        alert("🎉 Focus session complete! You've earned +2 coins.\n✅ Session, Notes & Tag saved automatically!");
+        triggerNotification({
+          title: "Focus Session Completed!",
+          subtitle: "Great job! You stayed committed and finished your focus study timer.",
+          badge: "🎉 +2 Coins Gained",
+          badgeColor: "#10b981",
+          icon: "🎯",
+          details: [
+            "🪙 +2 Coins earned & credited to balance",
+            "📓 Study notes saved to history automatically",
+            "🏷️ Video tag saved successfully",
+          ],
+          buttonText: "Keep Learning! 🔥",
+        });
       } else {
-        alert("✅ Session, Notes & Tag saved!");
+        triggerNotification({
+          title: "Session Saved!",
+          subtitle: "Your study video progress has been saved successfully.",
+          badge: "✅ Saved",
+          badgeColor: "#3b82f6",
+          icon: "📚",
+          details: [
+            "⏱️ Watch time saved to history",
+            "📓 Study notes & tag recorded",
+          ],
+          buttonText: "Got it!",
+        });
       }
     } catch (error) {
       console.error("❌ Error saving session:", error);
@@ -2463,13 +2647,29 @@ export default function VideoTracker() {
   // ⬇️ put handleSaveNotes here, inside component ⬇️
   const handleSaveNotes = async () => {
     if (!noteText.trim() && !tagText.trim()) {
-      alert("Please enter a note or tag before saving!");
+      triggerNotification({
+        title: "Empty Notes / Tag",
+        subtitle: "Please write a study note or enter a tag before saving.",
+        badge: "⚠️ Input Required",
+        badgeColor: "#f59e0b",
+        icon: "✍️",
+        details: ["Type some study takeaways, formula, or topic tag."],
+        buttonText: "OK",
+      });
       return;
     }
 
     const currentVideoKey = videoId || localVideoFile?.name;
     if (!currentVideoKey) {
-      alert("No active video found!");
+      triggerNotification({
+        title: "No Video Loaded",
+        subtitle: "Please play or select a study video first to save notes.",
+        badge: "⚠️ Missing Video",
+        badgeColor: "#f59e0b",
+        icon: "🎬",
+        details: ["Load a YouTube URL or choose a video from your computer."],
+        buttonText: "OK",
+      });
       return;
     }
 
@@ -2514,11 +2714,29 @@ export default function VideoTracker() {
         JSON.stringify({ ...appState.tags, ...data.tags })
       );
 
-
-      alert("✅ Notes & Tag saved successfully!");
+      triggerNotification({
+        title: "Notes & Tag Saved!",
+        subtitle: "Your study notes and tag have been successfully saved for this video.",
+        badge: "📝 Saved Successfully",
+        badgeColor: "#10b981",
+        icon: "✅",
+        details: [
+          noteText.trim() ? "📓 Study notes saved to history" : null,
+          tagText.trim() ? `🏷️ Tag saved: "${tagText.trim()}"` : null,
+        ].filter(Boolean),
+        buttonText: "Awesome!",
+      });
     } catch (err) {
       console.error("❌ Error saving note/tag:", err);
-      alert("Failed to save note or tag.");
+      triggerNotification({
+        title: "Save Failed",
+        subtitle: err.message || "Failed to save note or tag. Please try again.",
+        badge: "❌ Error",
+        badgeColor: "#ef4444",
+        icon: "⚠️",
+        details: ["Check your network connection and retry."],
+        buttonText: "Dismiss",
+      });
     }
   };
 
@@ -2549,7 +2767,15 @@ export default function VideoTracker() {
 
   const handleStartFocusTimer = () => {
     if (!focusMinutes || focusMinutes <= 0) {
-      alert("Please enter a valid focus time!");
+      triggerNotification({
+        title: "Invalid Focus Time",
+        subtitle: "Please enter a valid duration (e.g., 25 minutes) to start.",
+        badge: "⏱️ Timer",
+        badgeColor: "#f59e0b",
+        icon: "⏱️",
+        details: ["Enter a number between 1 and 180 minutes."],
+        buttonText: "OK",
+      });
       return;
     }
 
@@ -3702,6 +3928,164 @@ export default function VideoTracker() {
             </div>
           </div>
 
+        )}
+
+        {/* 🔔 Notification / Alert Popup Modal (Exact style of Set Focus Timer popup) */}
+        {notificationPopup.show && (
+          <div
+            style={{
+              ...styles.popup,
+              zIndex: 9999,
+            }}
+            onClick={() => setNotificationPopup((prev) => ({ ...prev, show: false }))}
+          >
+            <div
+              style={{
+                ...styles.popupInner,
+                maxWidth: "420px",
+                textAlign: "center",
+                position: "relative",
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Close Button */}
+              <button
+                type="button"
+                onClick={() => setNotificationPopup((prev) => ({ ...prev, show: false }))}
+                style={{
+                  position: "absolute",
+                  top: "14px",
+                  right: "14px",
+                  background: "transparent",
+                  border: "none",
+                  fontSize: "1.2rem",
+                  cursor: "pointer",
+                  color: isDark ? "#94a3b8" : "#64748b",
+                  padding: "4px 8px",
+                  borderRadius: "8px",
+                  fontWeight: "bold",
+                }}
+                title="Close"
+              >
+                ✕
+              </button>
+
+              {/* Big Icon */}
+              <div
+                style={{
+                  width: "64px",
+                  height: "64px",
+                  borderRadius: "50%",
+                  margin: "0 auto 14px auto",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "32px",
+                  background: isDark ? "rgba(255,255,255,0.06)" : "rgba(27,63,48,0.08)",
+                  border: `2px solid ${notificationPopup.badgeColor || (isDark ? "#a855f7" : "#1b3f30")}`,
+                  boxShadow: `0 8px 24px ${notificationPopup.badgeColor ? `${notificationPopup.badgeColor}33` : "rgba(0,0,0,0.1)"}`,
+                }}
+              >
+                {notificationPopup.icon || "🎉"}
+              </div>
+
+              {/* Badge Pill */}
+              {notificationPopup.badge && (
+                <div style={{ marginBottom: "10px" }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      fontSize: "0.75rem",
+                      fontWeight: "700",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.06em",
+                      padding: "4px 12px",
+                      borderRadius: "999px",
+                      color: notificationPopup.badgeColor || (isDark ? "#a855f7" : "#1b3f30"),
+                      background: isDark ? "rgba(255,255,255,0.08)" : "rgba(27,63,48,0.1)",
+                      border: `1px solid ${notificationPopup.badgeColor || "#1b3f30"}40`,
+                    }}
+                  >
+                    {notificationPopup.badge}
+                  </span>
+                </div>
+              )}
+
+              {/* Title */}
+              <h3
+                style={{
+                  ...styles.popupTitle,
+                  fontSize: "1.35em",
+                  marginBottom: "8px",
+                  color: isDark ? "#f8fafc" : "#0f172a",
+                }}
+              >
+                {notificationPopup.title}
+              </h3>
+
+              {/* Subtitle Message */}
+              {notificationPopup.subtitle && (
+                <p
+                  style={{
+                    fontSize: "0.95em",
+                    color: isDark ? "#cbd5e1" : "#475569",
+                    margin: "0 0 16px 0",
+                    lineHeight: "1.5",
+                  }}
+                >
+                  {notificationPopup.subtitle}
+                </p>
+              )}
+
+              {/* Details List */}
+              {notificationPopup.details && notificationPopup.details.length > 0 && (
+                <div
+                  style={{
+                    background: isDark ? "rgba(15,23,42,0.6)" : "rgba(248,250,252,0.85)",
+                    border: isDark ? "1px solid rgba(255,255,255,0.08)" : "1px solid #e2e8f0",
+                    borderRadius: "14px",
+                    padding: "12px 16px",
+                    margin: "0 0 18px 0",
+                    textAlign: "left",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "8px",
+                  }}
+                >
+                  {notificationPopup.details.map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "10px",
+                        fontSize: "0.9em",
+                        fontWeight: "600",
+                        color: isDark ? "#e2e8f0" : "#1e293b",
+                      }}
+                    >
+                      <span style={{ fontSize: "1.1em" }}>•</span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Dismiss Button */}
+              <button
+                type="button"
+                onClick={() => setNotificationPopup((prev) => ({ ...prev, show: false }))}
+                style={{
+                  ...styles.button,
+                  width: "100%",
+                  padding: "12px 20px",
+                  fontSize: "1em",
+                }}
+              >
+                {notificationPopup.buttonText || "Got it!"}
+              </button>
+            </div>
+          </div>
         )}
 
 
@@ -5330,8 +5714,104 @@ export default function VideoTracker() {
         {renderPlaylistPanel()}
         {renderQuizSection()}
 
+        {/* ─── Study Activity Heat Map (Shifted from Student Dashboard) ─── */}
+        <div
+          className={`p-6 rounded-3xl backdrop-blur-2xl shadow-xl border transition-all duration-300 ${
+            isDark
+              ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+              : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+          }`}
+          style={{ marginTop: "16px", marginBottom: "8px" }}
+        >
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+            <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-300" : "text-slate-900"}`}>
+              <span>🗓️</span> Study Activity — {MONTHS[heatmapMonth]} {heatmapYear}
+            </h2>
 
+            {/* Month & Year Selectors */}
+            <div className="flex items-center gap-2">
+              <select
+                value={heatmapMonth}
+                onChange={(e) => setHeatmapMonth(Number(e.target.value))}
+                className={`px-3 py-1.5 rounded-xl text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer border transition-colors ${
+                  isDark
+                    ? "bg-slate-800/90 text-purple-200 border-purple-500/40"
+                    : "bg-white/90 text-slate-800 border-slate-300"
+                }`}
+              >
+                {MONTHS.map((m, i) => (
+                  <option key={m} value={i} className={isDark ? "bg-slate-900 text-white" : "bg-white text-slate-800"}>
+                    {m}
+                  </option>
+                ))}
+              </select>
 
+              <input
+                type="number"
+                value={heatmapYear}
+                onChange={(e) => setHeatmapYear(Number(e.target.value))}
+                className={`w-20 px-3 py-1.5 rounded-xl text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 border transition-colors ${
+                  isDark
+                    ? "bg-slate-800/90 text-purple-200 border-purple-500/40"
+                    : "bg-white/90 text-slate-800 border-slate-300"
+                }`}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-7 gap-2 text-center">
+            {eachDayOfInterval({
+              start: startOfMonth(new Date(heatmapYear, heatmapMonth, 1)),
+              end: endOfMonth(new Date(heatmapYear, heatmapMonth, 1)),
+            }).map((day, i) => {
+              const dateKey = format(day, "yyyy-MM-dd");
+              const totalSeconds = heatmapActivity[dateKey]?.totalSeconds || 0;
+              const totalMins = totalSeconds / 60;
+              const totalHours = totalMins / 60;
+
+              let bgClass = isDark
+                ? "bg-slate-800/60 text-slate-400 border border-white/5"
+                : "bg-slate-100 text-slate-500 border border-slate-200/50";
+              if (totalHours >= 9) bgClass = "bg-green-500 text-white font-bold shadow-md shadow-green-500/30";
+              else if (totalHours >= 5) bgClass = "bg-yellow-400 text-slate-900 font-bold shadow-md shadow-yellow-400/30";
+              else if (totalHours >= 2) bgClass = "bg-orange-500 text-white font-bold shadow-md shadow-orange-500/30";
+              else if (totalMins >= 1) bgClass = "bg-rose-500 text-white font-bold shadow-md shadow-rose-500/30";
+
+              const hrs = Math.floor(totalHours);
+              const mins = Math.floor(totalMins % 60);
+              const timeLabel =
+                totalMins >= 1 ? `${hrs ? `${hrs}h ` : ""}${mins}m` : "";
+
+              return (
+                <div
+                  key={i}
+                  className={`p-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-transform hover:scale-105 ${bgClass}`}
+                  title={`${timeLabel || "No activity"} on ${format(day, "MMM d")}`}
+                >
+                  <div>{format(day, "d")}</div>
+                  {timeLabel && (
+                    <div className="text-[10px] opacity-90 mt-0.5">{timeLabel}</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className={`flex justify-around mt-6 text-sm font-medium flex-wrap gap-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded-full bg-rose-500 shadow-sm" /> <span>0–2 hrs</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded-full bg-orange-500 shadow-sm" /> <span>2–5 hrs</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded-full bg-yellow-400 shadow-sm" /> <span>5–9 hrs</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-3.5 h-3.5 rounded-full bg-green-500 shadow-sm" /> <span>9+ hrs</span>
+            </div>
+          </div>
+        </div>
 
       </div>
 

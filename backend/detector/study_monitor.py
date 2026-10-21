@@ -23,9 +23,9 @@ def play_alert():
         return
     except Exception:
         pass
-    # macOS (say)
+    # macOS (say female voice Samantha)
     try:
-        os.system('say "Stay Focused" >/dev/null 2>&1 &')
+        os.system('say -v Samantha "Stay Focused" >/dev/null 2>&1 &')
         return
     except Exception:
         pass

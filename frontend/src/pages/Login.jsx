@@ -36,7 +36,7 @@ const Login = () => {
         }));
         localStorage.setItem("streak", data.user.streak || 0);
 
-        navigate("/");
+        navigate("/intro", { state: { destination: "/" }, replace: true });
       } else if (data.needsVerification) {
         const resend = confirm(data.message + "\nWould you like to resend the verification email?");
         if (resend) {
@@ -83,7 +83,7 @@ const Login = () => {
         }));
         localStorage.setItem("streak", data.user.streak || 0);
 
-        navigate("/");
+        navigate("/intro", { state: { destination: "/" }, replace: true });
       } else {
         alert(data.message || "Google login failed.");
       }

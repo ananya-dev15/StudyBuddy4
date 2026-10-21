@@ -1,0 +1,179 @@
+/* ==========================================================================
+   StudyBuddy Cinematic Opening Animation Styles
+   Studio White & Warm Cream (#fbfaf6), Seamless Video Viewport
+   ========================================================================== */
+
+.studybuddy-intro-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 99999;
+  overflow: hidden;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  font-family: 'Outfit', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  transition: opacity 0.55s cubic-bezier(0.16, 1, 0.3, 1), transform 0.55s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.studybuddy-intro-overlay.fade-out {
+  opacity: 0;
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+/* Video viewport container (Centered, Full Window, Zero Edge Cropping) */
+.studybuddy-intro-video-container {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.studybuddy-intro-video {
+  width: 100%;
+  height: 100%;
+  max-width: 100vw;
+  max-height: 100vh;
+  object-fit: contain; /* Ensures complete ribbon trajectory and rope are 100% visible */
+  display: block;
+  background: transparent;
+}
+
+/* Subtle studio vignette overlay */
+.studybuddy-intro-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, transparent 60%, rgba(40, 30, 20, 0.04) 85%, rgba(20, 15, 10, 0.10) 100%);
+}
+
+/* Top control bar: skip button */
+.studybuddy-intro-controls {
+  position: absolute;
+  top: 24px;
+  right: 28px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 100000;
+  animation: introControlsFadeIn 0.8s ease-out 0.3s backwards;
+}
+
+@keyframes introControlsFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.studybuddy-intro-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(212, 175, 55, 0.45);
+  border-radius: 9999px;
+  color: #1b3f30;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.07), 0 1px 3px rgba(0, 0, 0, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  outline: none;
+}
+
+.studybuddy-intro-btn:hover {
+  background: #ffffff;
+  border-color: #d4af37;
+  color: #0f271d;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 22px rgba(212, 175, 55, 0.25), 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+.studybuddy-intro-btn.sound-btn {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(46, 125, 50, 0.35);
+  color: #1b5e20;
+}
+
+.studybuddy-intro-btn.sound-btn.pulse-highlight {
+  animation: soundPulse 1.6s infinite ease-in-out;
+  border-color: #2e7d32;
+  box-shadow: 0 0 16px rgba(46, 125, 50, 0.35);
+}
+
+@keyframes soundPulse {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 14px rgba(46, 125, 50, 0.3);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 22px rgba(46, 125, 50, 0.6);
+  }
+}
+
+/* Subtle Unmute Hint Pill at bottom center */
+.studybuddy-intro-unmute-hint {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 30, 22, 0.85);
+  color: #ffffff;
+  padding: 8px 20px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  pointer-events: none;
+  z-index: 100000;
+  animation: hintFloat 2s infinite ease-in-out;
+}
+
+@keyframes hintFloat {
+  0%, 100% {
+    transform: translate(-50%, 0);
+  }
+  50% {
+    transform: translate(-50%, -4px);
+  }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .studybuddy-intro-controls {
+    top: 16px;
+    right: 16px;
+    gap: 8px;
+  }
+  .studybuddy-intro-btn {
+    padding: 7px 14px;
+    font-size: 12px;
+  }
+  .studybuddy-intro-unmute-hint {
+    bottom: 20px;
+    font-size: 11px;
+    padding: 6px 14px;
+  }
+}
+

@@ -48,7 +48,7 @@ def play_alert():
     except:
         pass
     try:
-        os.system('say "Stay Focused" >/dev/null 2>&1 &')
+        os.system('say -v Samantha "Stay Focused" >/dev/null 2>&1 &')
         return
     except:
         pass

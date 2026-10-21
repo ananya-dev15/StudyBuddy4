@@ -52,6 +52,17 @@ const userSchema = new mongoose.Schema(
     videosSwitched: { type: Number, default: 0 },
     streak: { type: Number, default: 0 },
     lastDayWatched: { type: String, default: null },
+    focusScore: { type: Number, default: 100 },
+    monitoringStats: {
+      type: Object,
+      default: {
+        phoneDetections: 0,
+        lookAwayEvents: 0,
+        faceAnomalyEvents: 0,
+        totalRecords: 0,
+        focusedRecords: 0,
+      },
+    },
 
     // --- Assignments, Hackathons, Reminders ---
     assignments: [assignmentSchema],
