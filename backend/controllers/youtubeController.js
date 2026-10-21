@@ -1,7 +1,7 @@
 // backend/controllers/youtubeController.js
 // Handles YouTube related API endpoints.
 
-import { fetchVideoDetails, fetchPlaylistItems, evaluateStudyVideo } from "../utils/youtube.js";
+import { fetchVideoDetails, fetchPlaylistItems, evaluateStudyVideo, searchYouTubeVideos } from "../utils/youtube.js";
 import User from "../models/User.js";
 
 function cleanVideoId(str) {
@@ -150,6 +150,39 @@ export async function saveProgress(req, res) {
   } catch (err) {
     console.error("Error in saveProgress:", err);
     return res.status(500).json({ success: false, message: err.message });
+  }
+}
+
+// GET /api/youtube/search?q=...&pageToken=...&maxResults=...
+export async function searchYouTube(req, res) {
+  try {
+    const { q, pageToken, maxResults } = req.query;
+    if (!q || !String(q).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Search query 'q' is required and cannot be empty.",
+      });
+    }
+
+    const result = await searchYouTubeVideos({
+      query: q,
+      pageToken,
+      maxResults,
+    });
+
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (err) {
+    console.error("Error in searchYouTube:", err.message);
+    const statusCode = err.status || 500;
+    return res.status(statusCode).json({
+      success: false,
+      quotaExceeded: Boolean(err.quotaExceeded),
+      configured: err.code !== "NO_API_KEY",
+      message: err.message || "Failed to search YouTube videos.",
+    });
   }
 }
 

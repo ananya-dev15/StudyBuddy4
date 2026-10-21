@@ -41,6 +41,15 @@ const TAB_SWITCH_COST = 5;
 const DAILY_BONUS = 1;
 const STREAK_BONUS = 5;
 
+// Popular educational search topics for fast 1-click discovery
+const POPULAR_SEARCH_TOPICS = [
+  "Data Structures",
+  "Python",
+  "React JS",
+  "Machine Learning",
+  "Calculus",
+];
+
 // ✅ Helper: Get local date string in YYYY-MM-DD format (respects timezone)
 const getLocalDateString = (date = new Date()) => {
   const d = new Date(date);
@@ -362,6 +371,18 @@ export default function VideoTracker() {
   const [showTimerPopup, setShowTimerPopup] = useState(false);
   const [focusMinutes, setFocusMinutes] = useState(25);
   const [focusRemaining, setFocusRemaining] = useState(null);
+
+  // 🔍 YouTube In-App Search States
+  const [searchMode, setSearchMode] = useState("search"); // "search" | "url"
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchLoadingMore, setSearchLoadingMore] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [searchQuotaExceeded, setSearchQuotaExceeded] = useState(false);
+  const [searchNextPageToken, setSearchNextPageToken] = useState(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [playerError, setPlayerError] = useState(null);
 
   // 🔔 Custom Notification Popup Modal (same style as Focus Timer popup)
   const [notificationPopup, setNotificationPopup] = useState({
@@ -792,6 +813,202 @@ export default function VideoTracker() {
 
     return act;
   }, [appState.history, userId]);
+
+  // ─── 5 TOP STAT CARDS COMPUTATIONS ───
+  // Card 1: Total tab switches throughout
+  const totalTabSwitchesAllTime = useMemo(() => {
+    const historyList = (appState.history && appState.history.length > 0)
+      ? appState.history
+      : JSON.parse(localStorage.getItem(`userHistory_${userId}`)) || [];
+
+    let sum = 0;
+    historyList.forEach((h) => {
+      sum += Number(h.tabSwitches || h.totalTabSwitches || 0);
+    });
+    const userSwitches = Number(appState.videosSwitched ?? appState.user?.videosSwitched ?? 0);
+    return Math.max(sum + (tabSwitches || 0), userSwitches);
+  }, [appState.history, appState.videosSwitched, appState.user?.videosSwitched, userId, tabSwitches]);
+
+  // Card 2: Total tab switches today
+  const totalTabSwitchesToday = useMemo(() => {
+    const todayStr = getLocalDateString(new Date());
+    const historyList = (appState.history && appState.history.length > 0)
+      ? appState.history
+      : JSON.parse(localStorage.getItem(`userHistory_${userId}`)) || [];
+
+    let todaySum = 0;
+    historyList.forEach((h) => {
+      let itemDate = "";
+      if (h.watchedAt) {
+        if (typeof h.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.watchedAt.trim())) {
+          itemDate = h.watchedAt.trim();
+        } else if (typeof h.watchedAt === "string" && h.watchedAt.includes("T")) {
+          itemDate = h.watchedAt.split("T")[0];
+        } else {
+          itemDate = getLocalDateString(h.watchedAt);
+        }
+      }
+      if (itemDate === todayStr) {
+        todaySum += Number(h.tabSwitches || h.totalTabSwitches || 0);
+      }
+    });
+    return todaySum + (tabSwitches || 0);
+  }, [appState.history, userId, tabSwitches]);
+
+  // Card 3: Total videos watched
+  const totalVideosWatchedCount = useMemo(() => {
+    const historyList = (appState.history && appState.history.length > 0)
+      ? appState.history
+      : JSON.parse(localStorage.getItem(`userHistory_${userId}`)) || [];
+
+    const uniqueIds = new Set();
+    historyList.forEach((h) => {
+      if (h.videoId || h.url) {
+        uniqueIds.add(h.videoId || h.url);
+      }
+    });
+    const userVideos = Number(appState.videosWatched ?? appState.user?.videosWatched ?? 0);
+    return Math.max(uniqueIds.size, historyList.length, userVideos);
+  }, [appState.history, appState.videosWatched, appState.user?.videosWatched, userId]);
+
+  // Card 4: Maximum streak achieved so far
+  const maxStreakAchieved = useMemo(() => {
+    const currentStreak = Number(appState.streak ?? appState.user?.streak ?? 0);
+    const historyList = (appState.history && appState.history.length > 0)
+      ? appState.history
+      : JSON.parse(localStorage.getItem(`userHistory_${userId}`)) || [];
+
+    const uniqueDates = Array.from(new Set(
+      historyList.map((h) => {
+        if (!h.watchedAt) return "";
+        if (typeof h.watchedAt === "string" && /^\d{4}-\d{2}-\d{2}$/.test(h.watchedAt.trim())) {
+          return h.watchedAt.trim();
+        }
+        if (typeof h.watchedAt === "string" && h.watchedAt.includes("T")) {
+          return h.watchedAt.split("T")[0];
+        }
+        return getLocalDateString(h.watchedAt);
+      }).filter(Boolean)
+    )).sort();
+
+    let longestRun = 0;
+    let currentRun = 0;
+    let prevDate = null;
+
+    uniqueDates.forEach((dStr) => {
+      const curDate = new Date(dStr + "T00:00:00");
+      if (prevDate) {
+        const diffDays = Math.round((curDate - prevDate) / (1000 * 60 * 60 * 24));
+        if (diffDays === 1) {
+          currentRun += 1;
+        } else if (diffDays > 1) {
+          currentRun = 1;
+        }
+      } else {
+        currentRun = 1;
+      }
+      if (currentRun > longestRun) longestRun = currentRun;
+      prevDate = curDate;
+    });
+
+    const storedMax = Number(localStorage.getItem(`maxStreak_${userId}`)) || 0;
+    const finalMax = Math.max(currentStreak, longestRun, storedMax, 1);
+    if (finalMax > storedMax && userId) {
+      localStorage.setItem(`maxStreak_${userId}`, finalMax);
+    }
+    return finalMax;
+  }, [appState.streak, appState.user?.streak, appState.history, userId]);
+
+  // Card 5: Weekly watch duration state & computations
+  const [weeklySelectedMonth, setWeeklySelectedMonth] = useState(new Date().getMonth());
+  const [weeklySelectedYear, setWeeklySelectedYear] = useState(new Date().getFullYear());
+
+  // Current running week duration (Monday to Sunday)
+  const currentWeekInfo = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay(); // 0 is Sun, 1 is Mon...
+    const diffToMon = (day === 0 ? -6 : 1) - day;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMon);
+    monday.setHours(0, 0, 0, 0);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+
+    let totalSec = 0;
+    for (let d = new Date(monday); d <= sunday; d.setDate(d.getDate() + 1)) {
+      const dKey = getLocalDateString(d);
+      totalSec += heatmapActivity[dKey]?.totalSeconds || 0;
+    }
+
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const label = totalSec > 0 ? `${h > 0 ? `${h}h ` : ""}${m}m` : "0m";
+
+    const monStr = monday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const sunStr = sunday.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+    return { totalSec, label, rangeStr: `${monStr} – ${sunStr}` };
+  }, [heatmapActivity]);
+
+  // Weeks for the selected month in dropdown (Monday to Sunday)
+  const weeksInSelectedMonth = useMemo(() => {
+    const year = Number(weeklySelectedYear);
+    const month = Number(weeklySelectedMonth);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const weeks = [];
+    let currentDays = [];
+    let weekIndex = 1;
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateObj = new Date(year, month, day);
+      const dayOfWeek = dateObj.getDay(); // 0 is Sunday, 1 is Monday...
+      currentDays.push(day);
+
+      // Sunday (0) ends a week, or the last day of the month ends the week
+      if (dayOfWeek === 0 || day === daysInMonth) {
+        let weekTotalSec = 0;
+        currentDays.forEach((d) => {
+          const dKey = getLocalDateString(new Date(year, month, d));
+          weekTotalSec += heatmapActivity[dKey]?.totalSeconds || 0;
+        });
+
+        const startD = currentDays[0];
+        const endD = currentDays[currentDays.length - 1];
+        const monthShort = MONTHS[month].slice(0, 3);
+        const rangeStr = `${monthShort} ${startD} – ${monthShort} ${endD}`;
+
+        const h = Math.floor(weekTotalSec / 3600);
+        const m = Math.floor((weekTotalSec % 3600) / 60);
+        const durationLabel = weekTotalSec > 0 ? `${h > 0 ? `${h}h ` : ""}${m}m` : "0m";
+
+        weeks.push({
+          weekNumber: weekIndex++,
+          startDay: startD,
+          endDay: endD,
+          rangeStr,
+          totalSeconds: weekTotalSec,
+          durationLabel,
+        });
+
+        currentDays = [];
+      }
+    }
+
+    return weeks;
+  }, [weeklySelectedYear, weeklySelectedMonth, heatmapActivity, MONTHS]);
+
+  // Total duration for the selected month
+  const selectedMonthTotalDuration = useMemo(() => {
+    let totalSec = 0;
+    weeksInSelectedMonth.forEach((w) => {
+      totalSec += w.totalSeconds;
+    });
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    return totalSec > 0 ? `${h > 0 ? `${h}h ` : ""}${m}m` : "0m";
+  }, [weeksInSelectedMonth]);
 
   const loadState = async () => {
     const storedUser = JSON.parse(localStorage.getItem("user"));
@@ -1336,6 +1553,21 @@ export default function VideoTracker() {
                   }, 3000);
                 }
               }
+            },
+            onError: (e) => {
+              console.warn("YouTube Player error:", e.data);
+              let msg = "This video cannot be played.";
+              if (e.data === 101 || e.data === 150) {
+                msg =
+                  "The video owner does not allow this video to be played in embedded players. Please select another video from the YouTube search or paste a different link.";
+              } else if (e.data === 100) {
+                msg = "This video was removed or marked as private on YouTube.";
+              } else if (e.data === 2) {
+                msg = "Invalid YouTube video ID or parameter.";
+              } else if (e.data === 5) {
+                msg = "HTML5 player error occurred while playing this video.";
+              }
+              setPlayerError(msg);
             },
           },
         });
@@ -2126,6 +2358,156 @@ export default function VideoTracker() {
       return () => window.removeEventListener("click", handleOutsideClick);
     }
   }, [openMenuCardId]);
+
+  // 🔍 YouTube In-App Search Handlers
+  const handleYouTubeSearch = async (e, customQuery = null, pageToken = null) => {
+    if (e && e.preventDefault) e.preventDefault();
+    const query = (customQuery !== null ? customQuery : searchQuery).trim();
+    if (!query) return;
+
+    if (customQuery !== null) {
+      setSearchQuery(customQuery);
+    }
+
+    const isLoadMore = Boolean(pageToken);
+    if (isLoadMore) {
+      setSearchLoadingMore(true);
+    } else {
+      setSearchLoading(true);
+      setSearchError(null);
+      setSearchQuotaExceeded(false);
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {};
+      if (token) headers.Authorization = `Bearer ${token}`;
+
+      const queryParams = new URLSearchParams({
+        q: query,
+        maxResults: "10",
+        ...(pageToken ? { pageToken } : {}),
+      });
+
+      const endpoint = `${API_BASE}/api/youtube/search?${queryParams.toString()}`;
+
+      const res = await fetch(endpoint, {
+        headers,
+        credentials: "include",
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (data.quotaExceeded) {
+          setSearchQuotaExceeded(true);
+          setSearchError("YouTube API daily quota exceeded. You can still paste direct video URLs in the 'Paste Link' tab!");
+        } else if (data.configured === false) {
+          setSearchError("YouTube search is not configured. Please set YOUTUBE_API_KEY in backend/.env.");
+        } else {
+          setSearchError(data.message || "Failed to search YouTube videos.");
+        }
+        return;
+      }
+
+      setHasSearched(true);
+      setSearchNextPageToken(data.nextPageToken || null);
+      if (isLoadMore) {
+        setSearchResults((prev) => {
+          const existingIds = new Set(prev.map((i) => i.videoId));
+          const newItems = (data.items || []).filter((i) => !existingIds.has(i.videoId));
+          return [...prev, ...newItems];
+        });
+      } else {
+        setSearchResults(data.items || []);
+      }
+    } catch (err) {
+      console.error("YouTube search error:", err);
+      setSearchError("Network error while searching YouTube. Please check your connection.");
+    } finally {
+      setSearchLoading(false);
+      setSearchLoadingMore(false);
+    }
+  };
+
+  const handleSelectSearchResult = async (item) => {
+    if (!item || !item.videoId) return;
+
+    if (appState.coins === 0) {
+      setShowZeroCoinsPopup(true);
+      return;
+    }
+
+    const vid = item.videoId;
+
+    // Study relevance check
+    const allowed = await isStudyVideo(vid);
+    if (!allowed) {
+      setBlockedTitle("This video is not study related!");
+      setShowBlockedPopup(true);
+      playRestrictionSound();
+      return;
+    }
+
+    // Save previous video session cleanly if user watched >= 5s
+    const playedSeconds = sessionPlayedSecondsRef.current ?? sessionPlayedSeconds;
+    if (playedSeconds >= 5 && handleStopSaveRef.current) {
+      try {
+        await handleStopSaveRef.current(false);
+      } catch (err) {
+        console.warn("Could not save previous session:", err);
+      }
+    }
+
+    setPlayerError(null);
+    setInputUrl(`https://www.youtube.com/watch?v=${vid}`);
+    setVideoId(vid);
+    setLocalVideoFile(null);
+    setLocalVideoObjectUrl(null);
+    setVideoMeta({
+      title: item.title,
+      channelTitle: item.channelTitle,
+      thumbnail: item.thumbnail,
+      duration: item.duration || 0,
+      description: item.description || "",
+      isStudyVideo: true,
+      studyScore: 100,
+    });
+    setResumePosition(0);
+    setSessionPlayedSeconds(0);
+    setTabSwitches(0);
+    hasResumedRef.current = false;
+
+    // Fetch full metadata & transcript from backend
+    loadYouTubeData(vid);
+
+    // If player is already loaded, switch video in-place
+    if (youtubePlayerRef.current && typeof youtubePlayerRef.current.loadVideoById === "function") {
+      try {
+        youtubePlayerRef.current.loadVideoById({ videoId: vid });
+      } catch (err) {
+        console.warn("Could not load video in active player:", err);
+      }
+    }
+
+    // Prompt focus timer setup modal just like handleLoadContent does
+    setShowTimerPopup(true);
+
+    // Smooth scroll up to top player container
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    triggerNotification({
+      title: "Lesson Loaded",
+      subtitle: item.title,
+      badge: "▶ Playing Now",
+      badgeColor: "#10b981",
+      icon: "🎓",
+      details: [
+        `Channel: ${item.channelTitle}`,
+        `Duration: ${item.durationFormatted || "Full Video"}`,
+      ],
+      buttonText: "Let's Study",
+    });
+  };
 
   const handleLoadContent = async () => {
 
@@ -3452,16 +3834,16 @@ export default function VideoTracker() {
         <div className="w-full grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch mb-6">
           {/* CARD 1: Bring your lesson in */}
           <div
-            className={`rounded-3xl p-6 sm:p-7 flex flex-col justify-between transition-all duration-300 border ${theme === "dark"
+            className={`rounded-3xl p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border h-[460px] lg:h-[460px] overflow-hidden ${theme === "dark"
               ? "bg-[#161a20] border-gray-800/90 shadow-[0_8px_32px_rgba(0,0,0,0.35)] text-white"
               : "bg-[#fbf9f3] border-[#eee8de] shadow-[0_8px_30px_rgba(0,0,0,0.03)] text-gray-900"
               }`}
           >
             {/* Header: Title, Icon & Step 01 badge */}
             <div className="flex items-start justify-between gap-3">
-              <div className="flex items-center gap-3.5">
+              <div className="flex items-center gap-3">
                 <div
-                  className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${theme === "dark"
+                  className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${theme === "dark"
                     ? "bg-indigo-950/70 text-indigo-400 border border-indigo-800/40"
                     : "bg-[#f2edff] text-[#6366f1]"
                     }`}
@@ -3481,159 +3863,493 @@ export default function VideoTracker() {
                 </div>
                 <div>
                   <h2
-                    className={`text-xl sm:text-2xl font-black tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"
+                    className={`text-xl font-black tracking-tight ${theme === "dark" ? "text-white" : "text-gray-900"
                       }`}
                   >
                     Bring your lesson in
                   </h2>
                   <p
-                    className={`text-xs sm:text-sm font-medium mt-0.5 ${theme === "dark" ? "text-gray-400" : "text-gray-500"
+                    className={`text-xs font-medium mt-0.5 ${theme === "dark" ? "text-gray-400" : "text-gray-500"
                       }`}
                   >
-                    Paste a YouTube link or open a video from your device.
+                    Search YouTube educational videos or paste a direct link.
                   </p>
                 </div>
               </div>
 
-              <span className="px-3 py-1 rounded-full text-[11px] font-extrabold tracking-wider uppercase bg-[#eaf7d7] text-[#4d7c0f] border border-[#d3efa9] flex-shrink-0">
-                STEP 01
-              </span>
+              {/* Top-Right Action: Generate Quiz replaces STEP 01 badge permanently */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (!videoId) {
+                    triggerNotification({
+                      title: "Load a Video First",
+                      subtitle: "Please search or paste a YouTube video before generating an AI Quiz.",
+                      badge: "ℹ️ Step Required",
+                      badgeColor: "#6366f1",
+                      icon: "💡",
+                      buttonText: "Got it",
+                    });
+                    return;
+                  }
+                  setShowQuizConfigModal(true);
+                }}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-bold text-white shadow-sm flex items-center gap-1.5 transition active:scale-95 flex-shrink-0 cursor-pointer ${
+                  isDark
+                    ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                    : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                }`}
+                title={videoId ? "Generate AI Quiz from current lesson" : "Load a video first to generate quiz"}
+              >
+                <span>✨ Generate Quiz</span>
+              </button>
             </div>
 
-            {/* Input Bar: Red YouTube Icon, Input field & Load lesson button */}
-            <div className="my-5">
-              <div
-                className={`rounded-2xl p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${theme === "dark"
-                  ? "bg-[#0f1318] border-gray-800 focus-within:border-indigo-500/70"
-                  : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
-                  }`}
+            {/* Mode Switcher Tabs: Search YouTube vs Direct Link */}
+            <div className="flex items-center gap-2 mt-3 p-1 rounded-2xl bg-black/5 dark:bg-[#0d1014] border border-gray-200/70 dark:border-gray-800/80 w-fit select-none">
+              <button
+                type="button"
+                onClick={() => setSearchMode("search")}
+                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all duration-200 ${
+                  searchMode === "search"
+                    ? isDark
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-[#1b3f30] text-white shadow-md shadow-emerald-950/20"
+                    : isDark
+                      ? "text-gray-400 hover:text-gray-200"
+                      : "text-gray-600 hover:text-gray-900"
+                }`}
               >
-                {/* Red YouTube Play Icon */}
-                <div className="pl-2 flex-shrink-0 text-red-500">
-                  <svg
-                    className="w-5 h-5 sm:w-6 sm:h-6"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                  >
-                    <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
-                  </svg>
-                </div>
+                <svg className="w-4 h-4 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
+                </svg>
+                <span>Search YouTube</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSearchMode("url")}
+                className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition-all duration-200 ${
+                  searchMode === "url"
+                    ? isDark
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                      : "bg-[#1b3f30] text-white shadow-md shadow-emerald-950/20"
+                    : isDark
+                      ? "text-gray-400 hover:text-gray-200"
+                      : "text-gray-600 hover:text-gray-900"
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+                <span>Paste Link</span>
+              </button>
+            </div>
 
-                {/* Input text */}
-                <input
-                  type="text"
-                  placeholder="Paste a YouTube URL..."
-                  value={inputUrl}
-                  onChange={(e) => {
-                    setInputUrl(e.target.value);
-                    setLocalVideoFile(null);
-                  }}
-                  disabled={appState.coins <= 0}
-                  className="flex-1 bg-transparent text-white placeholder-gray-400 text-sm sm:text-base outline-none min-w-0"
-                />
-
-                {/* Load video button */}
-                <button
-                  onClick={handleLoadContent}
-                  disabled={
-                    appState.coins <= 0 || (!inputUrl.trim() && !localVideoFile)
-                  }
-                  className={`px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap flex-shrink-0 ${
-                    isDark
-                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
-                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
-                  }`}
-                >
-                  <span>
-                    {appState.coins <= 0
-                      ? "Locked"
-                      : videoId || localVideoFile
-                        ? "Load New"
-                        : "Load video"}
-                  </span>
-                  <span className="font-extrabold text-sm">↗</span>
-                </button>
-              </div>
-
-              {/* Quiz Generation Quick Action if video loaded */}
-              {videoId && (
-                <div className="mt-2.5 flex justify-end">
-                  <button
-                    onClick={() => setShowQuizConfigModal(true)}
-                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold text-white shadow-sm flex items-center gap-1.5 transition active:scale-95 ${
+            {/* Middle Content Area */}
+            <div className="flex-1 min-h-0 flex flex-col justify-start mt-2.5">
+              {/* TAB 1: Search YouTube */}
+              {searchMode === "search" && (
+                <div className="space-y-2 flex-1 min-h-0 flex flex-col">
+                  {/* Search Bar Form */}
+                  <form onSubmit={handleYouTubeSearch} className="relative flex-shrink-0">
+                  <div
+                    className={`rounded-2xl p-1.5 sm:p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${
                       isDark
-                        ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
-                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                        ? "bg-[#0f1318] border-gray-800 focus-within:border-indigo-500/70"
+                        : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
                     }`}
                   >
-                    <span>✨ Generate Quiz</span>
-                  </button>
+                    <div className="pl-2 flex-shrink-0 text-red-500">
+                      <svg className="w-5 h-5 sm:w-6 sm:h-6" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
+                      </svg>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Search topics (e.g. Data Structures, React, Calculus)..."
+                      value={searchQuery}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSearchQuery(val);
+                        if (!val.trim()) {
+                          setSearchResults([]);
+                          setHasSearched(false);
+                          setSearchError(null);
+                        }
+                      }}
+                      disabled={searchLoading}
+                      className="flex-1 bg-transparent text-white placeholder-gray-400 text-xs sm:text-sm outline-none min-w-0"
+                    />
+
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery("");
+                          setSearchResults([]);
+                          setHasSearched(false);
+                          setSearchError(null);
+                        }}
+                        className="text-gray-400 hover:text-white px-1.5 text-xs font-bold"
+                        title="Clear query"
+                      >
+                        ✕
+                      </button>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={searchLoading || !searchQuery.trim()}
+                      className={`px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap flex-shrink-0 ${
+                        isDark
+                          ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                          : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                      }`}
+                    >
+                      {searchLoading ? (
+                        <>
+                          <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                          <span>Searching...</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <span>Search</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Quick Topic Chips: ONLY visible when idle (not searched, not loading, no results) */}
+                {!hasSearched && !searchLoading && searchResults.length === 0 && (
+                  <div className="flex items-center gap-1.5 flex-wrap pt-0.5 flex-shrink-0">
+                    <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mr-1 select-none">
+                      Try:
+                    </span>
+                    {POPULAR_SEARCH_TOPICS.map((topic) => (
+                      <button
+                        key={topic}
+                        type="button"
+                        onClick={(e) => handleYouTubeSearch(e, topic)}
+                        className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all active:scale-95 whitespace-nowrap ${
+                          isDark
+                            ? "bg-[#0f1318] border-gray-800 text-gray-300 hover:bg-gray-800 hover:text-white hover:border-gray-700"
+                            : "bg-white border-gray-200 text-gray-700 hover:bg-gray-100 hover:border-gray-300 shadow-sm"
+                        }`}
+                      >
+                        {topic}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Error / Quota Notice */}
+                {searchError && (
+                  <div
+                    className={`p-3 rounded-2xl border text-xs sm:text-sm flex items-start gap-2.5 ${
+                      searchQuotaExceeded
+                        ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
+                        : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                    }`}
+                  >
+                    <span className="text-base flex-shrink-0">⚠️</span>
+                    <div className="flex-1">
+                      <p className="font-semibold">{searchError}</p>
+                      {searchQuotaExceeded && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchMode("url")}
+                          className="mt-1.5 underline font-bold text-amber-200 hover:text-white block"
+                        >
+                          Switch to Paste Link mode →
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Skeleton Loading */}
+                {searchLoading && (
+                  <div className="space-y-2 py-1">
+                    {[1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className={`p-2.5 rounded-2xl border animate-pulse flex items-center gap-3 ${
+                          isDark ? "bg-[#0f1318] border-gray-800" : "bg-gray-100 border-gray-200"
+                        }`}
+                      >
+                        <div className="w-24 h-16 rounded-xl bg-gray-700/40 flex-shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <div className="h-4 bg-gray-700/40 rounded w-3/4" />
+                          <div className="h-3 bg-gray-700/30 rounded w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Empty State */}
+                {!searchLoading && hasSearched && searchResults.length === 0 && !searchError && (
+                  <div
+                    className={`p-5 rounded-2xl border text-center ${
+                      isDark ? "bg-[#0f1318] border-gray-800 text-gray-400" : "bg-gray-50 border-gray-200 text-gray-600"
+                    }`}
+                  >
+                    <p className="font-semibold text-sm">No educational videos found for "{searchQuery}"</p>
+                    <p className="text-xs mt-1 text-gray-500">
+                      Try a different keyword or paste a direct YouTube link in the Paste Link tab.
+                    </p>
+                  </div>
+                )}
+
+                {/* Results List */}
+                {!searchLoading && searchResults.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold px-1 select-none">
+                      <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                        Search Results ({searchResults.length}{searchNextPageToken ? "+" : ""})
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchResults([]);
+                          setHasSearched(false);
+                        }}
+                        className="text-gray-400 hover:text-red-400 transition"
+                      >
+                        Clear results
+                      </button>
+                    </div>
+
+                    <div className="max-h-[250px] overflow-y-auto space-y-2 pr-1 custom-scrollbar flex-1 min-h-0">
+                      {searchResults.map((item) => {
+                        const isCurrent = videoId === item.videoId;
+                        return (
+                          <div
+                            key={item.videoId}
+                            onClick={() => handleSelectSearchResult(item)}
+                            className={`p-2.5 rounded-2xl border transition-all duration-200 flex items-center gap-3 cursor-pointer group ${
+                              isCurrent
+                                ? isDark
+                                  ? "bg-indigo-950/60 border-indigo-500/70 shadow-lg shadow-indigo-900/30 ring-1 ring-indigo-500/40"
+                                  : "bg-emerald-50 border-emerald-500 shadow-md ring-1 ring-emerald-500/30"
+                                : isDark
+                                  ? "bg-[#0f1318] border-gray-800/90 hover:bg-[#181d24] hover:border-gray-700"
+                                  : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+                            }`}
+                          >
+                            <div className="relative w-24 sm:w-28 h-16 sm:h-18 rounded-xl overflow-hidden flex-shrink-0 bg-black/40">
+                              <img
+                                src={item.thumbnail}
+                                alt={item.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                loading="lazy"
+                              />
+                              {item.durationFormatted && (
+                                <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-black/80 text-white tracking-wide">
+                                  {item.durationFormatted}
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex-1 min-w-0 pr-1">
+                              <h4
+                                className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug group-hover:text-indigo-400 transition-colors ${
+                                  isDark ? "text-white" : "text-gray-900"
+                                }`}
+                              >
+                                {item.title}
+                              </h4>
+                              <p
+                                className={`text-[11px] sm:text-xs mt-1 truncate flex items-center gap-1.5 ${
+                                  isDark ? "text-gray-400" : "text-gray-500"
+                                }`}
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                                <span>{item.channelTitle}</span>
+                              </p>
+                            </div>
+
+                            <div className="flex-shrink-0 pr-1">
+                              {isCurrent ? (
+                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-emerald-500 text-white flex items-center gap-1 shadow-sm">
+                                  <span>▶</span> Playing
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleSelectSearchResult(item);
+                                  }}
+                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 ${
+                                    isDark
+                                      ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm"
+                                      : "bg-[#1b3f30] hover:bg-[#143024] text-white shadow-sm"
+                                  }`}
+                                >
+                                  <span>Play</span>
+                                  <span className="text-[10px]">▶</span>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {searchNextPageToken && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleYouTubeSearch(e, null, searchNextPageToken)}
+                          disabled={searchLoadingMore}
+                          className={`w-full py-2.5 rounded-xl text-xs font-bold border transition-all active:scale-98 flex items-center justify-center gap-2 ${
+                            isDark
+                              ? "bg-[#0f1318] hover:bg-gray-800 border-gray-800 text-gray-300"
+                              : "bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-700"
+                          }`}
+                        >
+                          {searchLoadingMore ? (
+                            <>
+                              <span className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                              <span>Loading more...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>Load More Results</span>
+                              <span>↓</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                </div>
+              )}
+
+              {/* TAB 2: Direct URL Input (Original input preserved) */}
+              {searchMode === "url" && (
+                <div className="pt-1">
+                  <div
+                    className={`rounded-2xl p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${theme === "dark"
+                      ? "bg-[#0f1318] border-gray-800 focus-within:border-indigo-500/70"
+                      : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
+                      }`}
+                  >
+                    <div className="pl-2 flex-shrink-0 text-red-500">
+                      <svg
+                        className="w-5 h-5 sm:w-6 sm:h-6"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z" />
+                      </svg>
+                    </div>
+
+                    <input
+                      type="text"
+                      placeholder="Paste a YouTube URL..."
+                      value={inputUrl}
+                      onChange={(e) => {
+                        setInputUrl(e.target.value);
+                        setLocalVideoFile(null);
+                      }}
+                      disabled={appState.coins <= 0}
+                      className="flex-1 bg-transparent text-white placeholder-gray-400 text-sm sm:text-base outline-none min-w-0"
+                    />
+
+                    <button
+                      onClick={handleLoadContent}
+                      disabled={
+                        appState.coins <= 0 || (!inputUrl.trim() && !localVideoFile)
+                      }
+                      className={`px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm text-white disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex items-center gap-1.5 transition-all active:scale-95 whitespace-nowrap flex-shrink-0 ${
+                        isDark
+                          ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                          : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                      }`}
+                    >
+                      <span>
+                        {appState.coins <= 0
+                          ? "Locked"
+                          : videoId || localVideoFile
+                            ? "Load New"
+                            : "Load video"}
+                      </span>
+                      <span className="font-extrabold text-sm">↗</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
-            {/* Divider */}
-            <div className="flex items-center my-3 select-none">
-              <div
-                className={`flex-1 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-200"
-                  }`}
-              ></div>
-              <span className="px-4 text-[10px] sm:text-[11px] font-extrabold tracking-wider text-gray-400 uppercase">
-                OR OPEN A LOCAL FILE
-              </span>
-              <div
-                className={`flex-1 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-200"
-                  }`}
-              ></div>
-            </div>
+            {/* Bottom Local File & Reset Actions:
+                Visible in 'url' mode, AND in 'search' mode when nothing is being searched/loaded */}
+            {(searchMode === "url" || (!searchLoading && !hasSearched && searchResults.length === 0)) && (
+              <div className="flex-shrink-0 pt-2 sm:pt-3 mt-auto">
+                {/* Divider */}
+                <div className="flex items-center mb-2.5 sm:mb-3 select-none">
+                  <div
+                    className={`flex-1 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-200"
+                      }`}
+                  ></div>
+                  <span className="px-4 text-[10px] sm:text-[11px] font-extrabold tracking-wider text-gray-400 uppercase">
+                    OR OPEN A LOCAL FILE
+                  </span>
+                  <div
+                    className={`flex-1 border-t ${theme === "dark" ? "border-gray-800" : "border-gray-200"
+                      }`}
+                  ></div>
+                </div>
 
-            {/* Local Video & Reset Actions */}
-            <div className="flex items-center flex-wrap gap-3 mt-1">
-              <label
-                htmlFor="local-video-upload"
-                className={`px-4 sm:px-5 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95 border ${isDark
-                  ? "bg-indigo-950/40 hover:bg-indigo-950/70 text-indigo-300 border-indigo-800/60"
-                  : "bg-white hover:bg-emerald-50/50 text-[#1b3f30] border-[#1b3f30]/30 shadow-sm"
-                  }`}
-              >
-                <span className="text-base leading-none font-black">+</span>
-                <span>Choose video</span>
-              </label>
-              <input
-                id="local-video-upload"
-                type="file"
-                accept="video/*"
-                onChange={handleFileChange}
-                style={{ display: "none" }}
-                disabled={appState.coins <= 0}
-              />
+                {/* Local Video & Reset Actions */}
+                <div className="flex items-center flex-wrap gap-2.5 sm:gap-3">
+                  <label
+                    htmlFor="local-video-upload"
+                    className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95 border ${isDark
+                      ? "bg-indigo-950/40 hover:bg-indigo-950/70 text-indigo-300 border-indigo-800/60"
+                      : "bg-white hover:bg-emerald-50/50 text-[#1b3f30] border-[#1b3f30]/30 shadow-sm"
+                      }`}
+                  >
+                    <span className="text-base leading-none font-black">+</span>
+                    <span>Choose video</span>
+                  </label>
+                  <input
+                    id="local-video-upload"
+                    type="file"
+                    accept="video/*"
+                    onChange={handleFileChange}
+                    style={{ display: "none" }}
+                    disabled={appState.coins <= 0}
+                  />
 
-              <button
-                onClick={clearHistory}
-                className={`px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all active:scale-95 ${theme === "dark"
-                  ? "bg-gray-800 hover:bg-gray-700 text-gray-300"
-                  : "bg-[#f0f2ef] hover:bg-gray-200 text-gray-700"
-                  }`}
-              >
-                <span className="text-sm">⟲</span>
-                <span>Reset player</span>
-              </button>
+                  <button
+                    onClick={clearHistory}
+                    className={`px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all active:scale-95 ${theme === "dark"
+                      ? "bg-gray-800 hover:bg-gray-700 text-gray-300"
+                      : "bg-[#f0f2ef] hover:bg-gray-200 text-gray-700"
+                      }`}
+                  >
+                    <span className="text-sm">⟲</span>
+                    <span>Reset player</span>
+                  </button>
 
-              {localVideoFile && (
-                <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 truncate max-w-xs">
-                  Selected: {localVideoFile.name}
-                </span>
-              )}
-            </div>
-
-            {/* Bottom note */}
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-5 select-none">
-              A focused workspace starts with fewer distractions.
-            </p>
+                  {localVideoFile && (
+                    <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 truncate max-w-xs">
+                      Selected: {localVideoFile.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* CARD 2: Focus companion */}
-          <div className="rounded-3xl p-6 sm:p-7 flex flex-col justify-between bg-[#15191e] border border-gray-800/90 shadow-[0_8px_32px_rgba(0,0,0,0.35)] text-white transition-all duration-300">
+          <div className="rounded-3xl p-5 sm:p-6 flex flex-col justify-between bg-[#15191e] border border-gray-800/90 shadow-[0_8px_32px_rgba(0,0,0,0.35)] text-white transition-all duration-300 h-[460px] lg:h-[460px] overflow-hidden">
             {/* Header: Title, Icon & Badge */}
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3.5">
@@ -3669,7 +4385,7 @@ export default function VideoTracker() {
             </div>
 
             {/* Inner Content: Left preview box + Right 3 status cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 my-5 items-stretch">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 my-auto items-stretch">
               {/* Left Sub-Box: Camera Radar / Active Video Feed */}
               <div className="sm:col-span-7 rounded-2xl p-4 bg-[#0d1014] border border-gray-800/90 min-h-[220px] relative overflow-hidden flex flex-col items-center justify-center text-center">
                 {/* Video element - kept rendered for seamless stream attachment */}
@@ -4428,60 +5144,14 @@ export default function VideoTracker() {
 
               </div>
 
-              {/* 3. Action Buttons */}
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <button
-                  onClick={() => setShowTimerPopup(true)}
-                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
-                    isDark
-                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
-                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
-                  }`}
-                  title="Set or adjust focus timer"
-                >
-                  ⏱️ Focus Timer
-                </button>
-
+              {/* 3. Action Buttons: Only Stop & Save at bottom-left */}
+              <div className="flex items-center justify-start pt-1">
                 <button
                   onClick={handleStopSave}
-                  className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
-                  Stop & Save
-                </button>
-
-                <button
-                  onClick={handleVoiceDoubtInTracker}
-                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
-                    isVoiceListening
-                      ? "bg-red-600 animate-pulse"
-                      : isDark
-                        ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
-                        : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
-                  }`}
-                  title="Speak your doubt out loud to StudyBuddy AI"
-                >
-                  {isVoiceListening ? "🎙️ Listening..." : "🎙️ Voice Doubt"}
-                </button>
-
-                {isSpeaking && (
-                  <button
-                    onClick={stopSpeakingText}
-                    className="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
-                    title="Stop AI Assistant Voice Speech"
-                  >
-                    ⏹️ Stop Voice
-                  </button>
-                )}
-
-                <button
-                  onClick={() => setIsChatOpen((s) => !s)}
-                  className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold text-white shadow-md transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer ${
-                    isDark
-                      ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
-                      : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
-                  }`}
-                >
-                  💬 AI Chat
+                  <span>⏹</span>
+                  <span>Stop & Save</span>
                 </button>
               </div>
 
@@ -4589,11 +5259,44 @@ export default function VideoTracker() {
 
                 {/* Video Elements */}
                 {videoId ? (
-                  <div style={{ width: "100%", height: "100%" }}>
+                  <div style={{ width: "100%", height: "100%", position: "relative" }}>
                     <div
                       id="vt-youtube-player"
                       style={{ width: "100%", height: "100%" }}
                     />
+                    {playerError && (
+                      <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 text-center bg-black/90 backdrop-blur-md rounded-2xl">
+                        <div className="w-12 h-12 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center text-2xl mb-3">
+                          ⚠️
+                        </div>
+                        <h4 className="text-white font-bold text-base sm:text-lg mb-1">
+                          Video Playback Restricted
+                        </h4>
+                        <p className="text-gray-300 text-xs sm:text-sm max-w-md mb-4 leading-relaxed">
+                          {playerError}
+                        </p>
+                        <div className="flex gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPlayerError(null);
+                              setSearchMode("search");
+                              window.scrollTo({ top: 300, behavior: "smooth" });
+                            }}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl transition shadow-lg active:scale-95"
+                          >
+                            🔍 Search Another Video
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPlayerError(null)}
+                            className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-bold rounded-xl transition active:scale-95"
+                          >
+                            Dismiss
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : localVideoObjectUrl ? (
                   <video
@@ -5713,105 +6416,6 @@ export default function VideoTracker() {
         {/* ─── YouTube Enhancement Panels ─── */}
         {renderPlaylistPanel()}
         {renderQuizSection()}
-
-        {/* ─── Study Activity Heat Map (Shifted from Student Dashboard) ─── */}
-        <div
-          className={`p-6 rounded-3xl backdrop-blur-2xl shadow-xl border transition-all duration-300 ${
-            isDark
-              ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
-              : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
-          }`}
-          style={{ marginTop: "16px", marginBottom: "8px" }}
-        >
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
-            <h2 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-300" : "text-slate-900"}`}>
-              <span>🗓️</span> Study Activity — {MONTHS[heatmapMonth]} {heatmapYear}
-            </h2>
-
-            {/* Month & Year Selectors */}
-            <div className="flex items-center gap-2">
-              <select
-                value={heatmapMonth}
-                onChange={(e) => setHeatmapMonth(Number(e.target.value))}
-                className={`px-3 py-1.5 rounded-xl text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer border transition-colors ${
-                  isDark
-                    ? "bg-slate-800/90 text-purple-200 border-purple-500/40"
-                    : "bg-white/90 text-slate-800 border-slate-300"
-                }`}
-              >
-                {MONTHS.map((m, i) => (
-                  <option key={m} value={i} className={isDark ? "bg-slate-900 text-white" : "bg-white text-slate-800"}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                type="number"
-                value={heatmapYear}
-                onChange={(e) => setHeatmapYear(Number(e.target.value))}
-                className={`w-20 px-3 py-1.5 rounded-xl text-sm font-semibold shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-500 border transition-colors ${
-                  isDark
-                    ? "bg-slate-800/90 text-purple-200 border-purple-500/40"
-                    : "bg-white/90 text-slate-800 border-slate-300"
-                }`}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-7 gap-2 text-center">
-            {eachDayOfInterval({
-              start: startOfMonth(new Date(heatmapYear, heatmapMonth, 1)),
-              end: endOfMonth(new Date(heatmapYear, heatmapMonth, 1)),
-            }).map((day, i) => {
-              const dateKey = format(day, "yyyy-MM-dd");
-              const totalSeconds = heatmapActivity[dateKey]?.totalSeconds || 0;
-              const totalMins = totalSeconds / 60;
-              const totalHours = totalMins / 60;
-
-              let bgClass = isDark
-                ? "bg-slate-800/60 text-slate-400 border border-white/5"
-                : "bg-slate-100 text-slate-500 border border-slate-200/50";
-              if (totalHours >= 9) bgClass = "bg-green-500 text-white font-bold shadow-md shadow-green-500/30";
-              else if (totalHours >= 5) bgClass = "bg-yellow-400 text-slate-900 font-bold shadow-md shadow-yellow-400/30";
-              else if (totalHours >= 2) bgClass = "bg-orange-500 text-white font-bold shadow-md shadow-orange-500/30";
-              else if (totalMins >= 1) bgClass = "bg-rose-500 text-white font-bold shadow-md shadow-rose-500/30";
-
-              const hrs = Math.floor(totalHours);
-              const mins = Math.floor(totalMins % 60);
-              const timeLabel =
-                totalMins >= 1 ? `${hrs ? `${hrs}h ` : ""}${mins}m` : "";
-
-              return (
-                <div
-                  key={i}
-                  className={`p-2.5 rounded-xl text-sm font-semibold cursor-pointer transition-transform hover:scale-105 ${bgClass}`}
-                  title={`${timeLabel || "No activity"} on ${format(day, "MMM d")}`}
-                >
-                  <div>{format(day, "d")}</div>
-                  {timeLabel && (
-                    <div className="text-[10px] opacity-90 mt-0.5">{timeLabel}</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          <div className={`flex justify-around mt-6 text-sm font-medium flex-wrap gap-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 rounded-full bg-rose-500 shadow-sm" /> <span>0–2 hrs</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 rounded-full bg-orange-500 shadow-sm" /> <span>2–5 hrs</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 rounded-full bg-yellow-400 shadow-sm" /> <span>5–9 hrs</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-3.5 h-3.5 rounded-full bg-green-500 shadow-sm" /> <span>9+ hrs</span>
-            </div>
-          </div>
-        </div>
 
       </div>
 

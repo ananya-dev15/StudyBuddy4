@@ -3,11 +3,60 @@
 
 import axios from "axios";
 
-const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY;
 const YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3";
+const getApiKey = () => process.env.YOUTUBE_API_KEY;
+
+// In-memory cache for search results to respect YouTube quota limits
+const searchCache = new Map();
+const SEARCH_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes TTL
+const MAX_CACHE_ENTRIES = 200;
+
+function getCachedSearchResults(key) {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > SEARCH_CACHE_TTL_MS) {
+    searchCache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setCachedSearchResults(key, data) {
+  if (searchCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey) searchCache.delete(oldestKey);
+  }
+  searchCache.set(key, { timestamp: Date.now(), data });
+}
+
+// Decode common HTML entities in titles and descriptions returned by YouTube
+export function decodeHtmlEntities(str = "") {
+  if (!str) return "";
+  return String(str)
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+// Format seconds to hh:mm:ss or mm:ss
+export function formatSecondsToDuration(seconds) {
+  const total = Math.max(0, parseInt(seconds, 10) || 0);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const sStr = String(secs).padStart(2, "0");
+  if (hours > 0) {
+    const mStr = String(minutes).padStart(2, "0");
+    return `${hours}:${mStr}:${sStr}`;
+  }
+  return `${minutes}:${sStr}`;
+}
 
 // Helper to convert ISO 8601 duration (PT1H2M30S) to seconds
-function isoDurationToSeconds(iso) {
+export function isoDurationToSeconds(iso) {
+  if (!iso) return 0;
   const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
   const matches = iso.match(regex);
   if (!matches) return 0;
@@ -20,14 +69,15 @@ function isoDurationToSeconds(iso) {
 export async function fetchVideoDetails(videoId) {
   if (!videoId) throw new Error("Missing videoId");
 
+  const apiKey = getApiKey();
   // Attempt YouTube Data API if key is available
-  if (YOUTUBE_API_KEY) {
+  if (apiKey) {
     try {
       const url = `${YOUTUBE_API_BASE}/videos`;
       const params = {
         part: "snippet,contentDetails,statistics",
         id: videoId,
-        key: YOUTUBE_API_KEY,
+        key: apiKey,
       };
       const { data } = await axios.get(url, { params });
       if (data.items && data.items.length > 0) {
@@ -84,7 +134,8 @@ export async function fetchVideoDetails(videoId) {
 export async function fetchPlaylistItems(playlistId) {
   if (!playlistId) return { playlistId, playlistTitle: "", items: [] };
 
-  if (YOUTUBE_API_KEY) {
+  const apiKey = getApiKey();
+  if (apiKey) {
     try {
       const items = [];
       let nextPageToken = "";
@@ -95,7 +146,7 @@ export async function fetchPlaylistItems(playlistId) {
             playlistId,
             maxResults: 50,
             pageToken: nextPageToken,
-            key: YOUTUBE_API_KEY,
+            key: apiKey,
           },
         });
         data.items.forEach((it) => {
@@ -108,7 +159,7 @@ export async function fetchPlaylistItems(playlistId) {
 
       // Fetch playlist title
       const { data: plData } = await axios.get(`${YOUTUBE_API_BASE}/playlists`, {
-        params: { part: "snippet", id: playlistId, key: YOUTUBE_API_KEY },
+        params: { part: "snippet", id: playlistId, key: apiKey },
       });
       const playlistTitle = plData.items?.[0]?.snippet?.title || "";
       return { playlistId, playlistTitle, items };
@@ -309,3 +360,132 @@ export function evaluateStudyVideo({ title = "", description = "", tags = [], ca
 
   return { isStudyVideo, studyScore };
 }
+
+/**
+ * Search YouTube videos using YouTube Data API v3 search.list endpoint.
+ * Includes caching, batch duration lookup, and graceful error handling.
+ */
+export async function searchYouTubeVideos({ query, pageToken = "", maxResults = 10 }) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    const err = new Error(
+      "YouTube API key is not configured on the server. Please set YOUTUBE_API_KEY in backend/.env"
+    );
+    err.code = "NO_API_KEY";
+    err.status = 500;
+    throw err;
+  }
+
+  const cleanQuery = String(query || "").trim();
+  if (!cleanQuery) {
+    const err = new Error("Search query cannot be empty.");
+    err.status = 400;
+    throw err;
+  }
+
+  const limit = Math.min(Math.max(parseInt(maxResults, 10) || 10, 1), 25);
+  const cacheKey = `${cleanQuery.toLowerCase()}::${pageToken || ""}::${limit}`;
+  const cached = getCachedSearchResults(cacheKey);
+  if (cached) {
+    return { ...cached, cached: true };
+  }
+
+  try {
+    const searchRes = await axios.get(`${YOUTUBE_API_BASE}/search`, {
+      params: {
+        part: "snippet",
+        type: "video",
+        q: cleanQuery,
+        maxResults: limit,
+        videoEmbeddable: "true",
+        videoSyndicated: "true",
+        pageToken: pageToken || undefined,
+        key: apiKey,
+      },
+    });
+
+    const searchData = searchRes.data || {};
+    const rawItems = searchData.items || [];
+    const videoIds = rawItems
+      .map((it) => it.id?.videoId)
+      .filter(Boolean);
+
+    // Fetch video durations in a single batch request
+    const durationMap = {};
+    if (videoIds.length > 0) {
+      try {
+        const vidRes = await axios.get(`${YOUTUBE_API_BASE}/videos`, {
+          params: {
+            part: "contentDetails",
+            id: videoIds.join(","),
+            key: apiKey,
+          },
+        });
+        if (vidRes.data?.items) {
+          vidRes.data.items.forEach((v) => {
+            const sec = isoDurationToSeconds(v.contentDetails?.duration || "");
+            durationMap[v.id] = {
+              seconds: sec,
+              formatted: formatSecondsToDuration(sec),
+            };
+          });
+        }
+      } catch (vidErr) {
+        console.warn("Could not fetch video durations:", vidErr.message);
+      }
+    }
+
+    const items = rawItems.map((it) => {
+      const vid = it.id?.videoId;
+      const snippet = it.snippet || {};
+      const dur = durationMap[vid] || { seconds: 0, formatted: "" };
+      return {
+        videoId: vid,
+        title: decodeHtmlEntities(snippet.title || ""),
+        description: decodeHtmlEntities(snippet.description || ""),
+        channelTitle: decodeHtmlEntities(snippet.channelTitle || ""),
+        thumbnail:
+          snippet.thumbnails?.high?.url ||
+          snippet.thumbnails?.medium?.url ||
+          snippet.thumbnails?.default?.url ||
+          `https://img.youtube.com/vi/${vid}/hqdefault.jpg`,
+        duration: dur.seconds,
+        durationFormatted: dur.formatted,
+        publishedAt: snippet.publishedAt,
+      };
+    });
+
+    const result = {
+      query: cleanQuery,
+      nextPageToken: searchData.nextPageToken || null,
+      prevPageToken: searchData.prevPageToken || null,
+      totalResults: searchData.pageInfo?.totalResults || items.length,
+      items,
+    };
+
+    setCachedSearchResults(cacheKey, result);
+    return result;
+  } catch (err) {
+    if (err.response) {
+      const status = err.response.status;
+      const ytErrors = err.response.data?.error?.errors || [];
+      const isQuota =
+        status === 403 &&
+        (ytErrors.some(
+          (e) => e.reason === "quotaExceeded" || e.reason === "dailyLimitExceeded"
+        ) ||
+          JSON.stringify(err.response.data || "").includes("quotaExceeded"));
+
+      const customErr = new Error(
+        isQuota
+          ? "YouTube API daily quota exceeded. You can still paste direct video URLs manually."
+          : err.response.data?.error?.message || "YouTube API search failed."
+      );
+      customErr.status = status;
+      customErr.quotaExceeded = isQuota;
+      throw customErr;
+    }
+    throw err;
+  }
+}
+
