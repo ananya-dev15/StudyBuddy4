@@ -13,13 +13,28 @@ import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
 import API_BASE from "../services/apiBase";
 import { getAllMonitoringLogs } from "../services/monitoringDB";
+import {
+  calculateLeaderboardScore,
+  LEADERBOARD_CONFIG,
+} from "../services/leaderboardScore";
 
 // Register Chart.js components
 ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
+const getTodayDateStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const Leaderboard = () => {
+  const todayStr = getTodayDateStr();
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [availableDates, setAvailableDates] = useState([todayStr]);
   const { theme, appState } = useAppContext();
   const isDark = theme === "dark";
 
@@ -33,71 +48,79 @@ const Leaderboard = () => {
         const token = localStorage.getItem("token");
 
         // 1. Read local monitoring analytics data (IndexedDB)
-        let localComputedScore = null;
+        // AFS_all_time = user's Average Focus Score calculated from all focus records up to current date
+        let localAfsAllTime = null;
         try {
           const logs = await getAllMonitoringLogs();
           if (logs && logs.length > 0) {
-            const total = logs.length;
-            const focused = logs.filter((l) => l.status && l.status.startsWith("Focused")).length;
-            const phoneCount = logs.filter(
-              (l) => Number(l.phone_detected) === 1 || (l.status && l.status.includes("Phone Detected"))
-            ).length;
-            const lookAwayCount = logs.filter(
-              (l) => l.status && l.status.includes("Looking Away")
-            ).length;
-            const faceCount = logs.filter(
-              (l) => (l.status && l.status.includes("Multiple/No Face")) || Number(l.faces_detected) !== 1
-            ).length;
-
-            const totalScore = logs.reduce((sum, l) => sum + (Number(l.focus_score) || 0), 0);
-            const avgScore = total > 0 ? Math.round(totalScore / total) : 100;
-            const focusPct = total > 0 ? Math.round((focused / total) * 100) : 100;
-            const penalty = (phoneCount * 20) + (lookAwayCount * 10) + (faceCount * 10);
-            localComputedScore = Math.max(0, Math.min(100, Math.min(avgScore, focusPct, 100 - penalty)));
-
-            // Sync to backend so MongoDB is updated for this user
-            if (token) {
-              await fetch(`${API_BASE}/api/tracking/sync-monitoring`, {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-                credentials: "include",
-                body: JSON.stringify({
-                  focusScore: localComputedScore,
-                  phoneDetections: phoneCount,
-                  lookAwayEvents: lookAwayCount,
-                  faceAnomalies: faceCount,
-                  totalRecords: total,
-                  focusedRecords: focused,
-                }),
-              });
+            const validLogs = logs.filter(
+              (l) => l.focus_score !== undefined && l.focus_score !== null && !isNaN(Number(l.focus_score))
+            );
+            if (validLogs.length > 0) {
+              const totalScore = validLogs.reduce((sum, l) => sum + Number(l.focus_score), 0);
+              localAfsAllTime = Number((totalScore / validLogs.length).toFixed(2));
             }
+          }
+
+          // Sync to backend so MongoDB is updated with user's all-time focus score
+          if (token && localAfsAllTime !== null) {
+            await fetch(`${API_BASE}/api/tracking/sync-monitoring`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: "include",
+              body: JSON.stringify({
+                allTimeFocusScore: localAfsAllTime,
+                focusScore: localAfsAllTime,
+              }),
+            });
           }
         } catch (e) {
           console.warn("Local monitoring read note:", e);
         }
 
-        // 2. Fetch all real users from backend
-        const res = await fetch(`${API_BASE}/api/tracking/leaderboard`, {
+        // 2. Fetch all real users from backend for selectedDate
+        const queryDate = selectedDate || todayStr;
+        const res = await fetch(`${API_BASE}/api/tracking/leaderboard?date=${encodeURIComponent(queryDate)}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
           credentials: "include",
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.students)) {
+          if (Array.isArray(data.availableDates) && data.availableDates.length > 0) {
+            setAvailableDates(data.availableDates);
+          }
           let list = [...data.students];
-          if (localComputedScore !== null) {
+
+          // If local user has computed AFS from analytics dashboard, update their score with the exact formula
+          if (localAfsAllTime !== null) {
             const idx = list.findIndex(
               (s) =>
                 (currentUserId && String(s._id) === String(currentUserId)) ||
                 (currentUserEmail && s.email === currentUserEmail)
             );
             if (idx !== -1) {
-              list[idx].focusScore = localComputedScore;
+              const currentUserEntry = list[idx];
+              const recalculated = calculateLeaderboardScore(
+                localAfsAllTime,
+                currentUserEntry.tabs || 0, // TS_day: only selected day's tab switches
+                currentUserEntry.videos || 0, // VW_day: only selected day's videos
+                LEADERBOARD_CONFIG.K
+              );
+              list[idx] = {
+                ...currentUserEntry,
+                afsAllTime: recalculated.afsAllTime,
+                focusScore: recalculated.score,
+                scoreString: recalculated.scoreString,
+                focusComponent: recalculated.focusComponent,
+                videoBonus: recalculated.videoBonus,
+              };
             }
           }
-          // Re-sort descending by focusScore, then coins, then videos
+
+          // Re-sort descending by Leaderboard Score, then coins, then daily videos
           list.sort((a, b) => {
             if (b.focusScore !== a.focusScore) return b.focusScore - a.focusScore;
             if (b.coins !== a.coins) return b.coins - a.coins;
@@ -113,7 +136,7 @@ const Leaderboard = () => {
     };
 
     fetchLeaderboard();
-  }, [currentUserId, currentUserEmail]);
+  }, [selectedDate, currentUserId, currentUserEmail, todayStr]);
 
   const top10 = students.slice(0, 10);
 
@@ -121,7 +144,7 @@ const Leaderboard = () => {
     labels: top10.map((s) => s.name),
     datasets: [
       {
-        label: "Focus Score (%)",
+        label: "Leaderboard Score",
         data: top10.map((s) => s.focusScore),
         backgroundColor: isDark ? "rgba(168, 85, 247, 0.75)" : "#1b3f30",
         borderRadius: 8,
@@ -136,7 +159,7 @@ const Leaderboard = () => {
       legend: { display: false },
       title: {
         display: true,
-        text: "Top 10 Focused Students",
+        text: `Top 10 Students (${selectedDate === todayStr ? "Today" : selectedDate})`,
         color: isDark ? "#e2e8f0" : "#1e293b",
         font: { size: 16, weight: "bold" },
       },
@@ -146,6 +169,16 @@ const Leaderboard = () => {
         bodyColor: isDark ? "#cbd5e1" : "#334155",
         borderColor: isDark ? "rgba(168,85,247,0.3)" : "rgba(0,0,0,0.1)",
         borderWidth: 1,
+        callbacks: {
+          label: (ctx) => {
+            const student = top10[ctx.dataIndex];
+            return [
+              `Score: ${student.scoreString || Number(student.focusScore).toFixed(2)}`,
+              `All-Time AFS: ${Number(student.afsAllTime ?? student.focusScore).toFixed(2)}`,
+              `Focus Comp: ${student.focusComponent ?? "-"} | Video Bonus: ${student.videoBonus ?? "-"}`,
+            ];
+          },
+        },
       },
     },
     scales: {
@@ -171,9 +204,41 @@ const Leaderboard = () => {
         <h1 className="text-4xl md:text-5xl font-black text-center mb-3 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent tracking-tight">
           🏆 Focus & Study Leaderboard
         </h1>
-        <p className={`text-center text-sm md:text-base font-medium mb-10 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-          Real-time top learners ranked by study consistency, focus score, and earned coins from the database.
+        <p className={`text-center text-sm md:text-base font-medium mb-8 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+          Real-time ranking powered by All-Time Average Focus Score, isolated daily tab-switch penalty, and daily video productivity bonus.
         </p>
+
+        {/* Date Selector & Formula Badge Bar */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-10 p-4 rounded-2xl border backdrop-blur-xl transition-all duration-300 shadow-md ${
+          isDark ? 'bg-slate-900/60 border-purple-500/20' : 'bg-[#fbf9f3] border-[#eee8de]'
+        }">
+          <div className="flex items-center gap-3">
+            <span className={`text-xs sm:text-sm font-bold uppercase tracking-wider ${isDark ? "text-purple-300" : "text-slate-700"}`}>
+              📅 Evaluation Date:
+            </span>
+            <select
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold border cursor-pointer transition ${
+                isDark
+                  ? "bg-slate-800 border-purple-500/40 text-purple-200 focus:outline-none focus:border-purple-400"
+                  : "bg-white border-slate-300 text-slate-800 shadow-sm focus:outline-none focus:border-emerald-600"
+              }`}
+            >
+              {availableDates.map((d) => (
+                <option key={d} value={d} className={isDark ? "bg-slate-900 text-white" : "bg-white text-slate-900"}>
+                  {d} {d === todayStr ? "(Today)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className={`text-[11px] sm:text-xs px-3.5 py-1.5 rounded-xl border font-mono font-medium ${
+            isDark ? "bg-slate-800/80 border-purple-500/30 text-purple-300" : "bg-white border-slate-200 text-slate-700 shadow-sm"
+          }`}>
+            Score = AFS_all_time × (1 - TS / (TS + {LEADERBOARD_CONFIG.K})) + 10 × min(VW / 20, 1)
+          </div>
+        </div>
 
         {/* Loading Spinner */}
         {loading && (
@@ -241,8 +306,13 @@ const Leaderboard = () => {
                       <div className="text-base font-black">🎬 {s.videos}</div>
                     </div>
                     <div className="text-center">
-                      <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Focus</div>
-                      <div className={`text-base font-black ${isDark ? "text-purple-400" : "text-[#1b3f30]"}`}>{s.focusScore}%</div>
+                      <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Score</div>
+                      <div className={`text-base font-black ${isDark ? "text-purple-400" : "text-[#1b3f30]"}`}>
+                        {s.scoreString || Number(s.focusScore).toFixed(2)}
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-medium">
+                        AFS: {Number(s.afsAllTime ?? s.focusScore).toFixed(2)}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -300,15 +370,29 @@ const Leaderboard = () => {
                       </td>
                       <td className={`py-4 px-6 font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{s.name}</td>
                       <td className="py-4 px-6 text-amber-500 font-bold">🪙 {s.coins}</td>
-                      <td className="py-4 px-6">{s.videos}</td>
-                      <td className="py-4 px-6 text-rose-500">{s.tabs}</td>
+                      <td className="py-4 px-6 font-semibold">{s.videos}</td>
+                      <td className="py-4 px-6 text-rose-500 font-semibold">{s.tabs}</td>
                       <td className="py-4 px-6">
-                        <div className="flex items-center gap-4">
-                          <span className={`font-extrabold text-base w-14 ${isDark ? "text-purple-400" : "text-[#1b3f30]"}`}>{s.focusScore}%</span>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`font-extrabold text-base min-w-[55px] ${isDark ? "text-purple-400" : "text-[#1b3f30]"}`}>
+                              {s.scoreString || Number(s.focusScore).toFixed(2)}
+                            </span>
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                                isDark
+                                  ? "bg-purple-950/40 text-purple-300 border-purple-500/30"
+                                  : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                              }`}
+                              title="User's All-Time Focus Score (Analytics Dashboard)"
+                            >
+                              AFS: {Number(s.afsAllTime ?? s.focusScore).toFixed(2)}
+                            </span>
+                          </div>
                           <div className={`h-2.5 flex-1 max-w-[130px] rounded-full overflow-hidden ${isDark ? "bg-slate-700" : "bg-[#ded6c5]"}`}>
                             <div
                               className={`h-full rounded-full transition-all duration-500 ${isDark ? "bg-gradient-to-r from-purple-500 to-pink-500" : "bg-[#1b3f30]"}`}
-                              style={{ width: `${s.focusScore}%` }}
+                              style={{ width: `${Math.min(100, Math.max(0, s.focusScore))}%` }}
                             />
                           </div>
                         </div>

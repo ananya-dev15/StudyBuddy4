@@ -12,6 +12,10 @@ import {
   updateUserStreak,
   saveUserWithRetry,
 } from "../utils/streakUtils.js";
+import {
+  calculateLeaderboardScore,
+  LEADERBOARD_CONFIG,
+} from "../services/leaderboardScoreService.js";
 
 const router = express.Router();
 
@@ -506,6 +510,7 @@ router.post("/sync-monitoring", protect, async (req, res) => {
   try {
     const {
       focusScore,
+      allTimeFocusScore,
       phoneDetections = 0,
       lookAwayEvents = 0,
       faceAnomalies = 0,
@@ -516,9 +521,11 @@ router.post("/sync-monitoring", protect, async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-    // Derive score exactly as the monitoring analytics dashboard computes it:
+    // Derive score: prioritize all-time overall score from analytics dashboard if provided
     let calculatedScore = 100;
-    if (typeof focusScore === "number" && !isNaN(focusScore)) {
+    if (allTimeFocusScore !== undefined && allTimeFocusScore !== null && !isNaN(Number(allTimeFocusScore))) {
+      calculatedScore = Math.max(0, Math.min(100, Number(allTimeFocusScore)));
+    } else if (typeof focusScore === "number" && !isNaN(focusScore)) {
       calculatedScore = Math.max(0, Math.min(100, Math.round(focusScore)));
     } else if (totalRecords > 0) {
       calculatedScore = Math.round((focusedRecords / totalRecords) * 100);
@@ -526,7 +533,7 @@ router.post("/sync-monitoring", protect, async (req, res) => {
 
     // Distraction penalties: phone detection, look away, no/multiple face
     const penalties = (Number(phoneDetections) * 20) + (Number(lookAwayEvents) * 10) + (Number(faceAnomalies) * 10);
-    if (penalties > 0) {
+    if (penalties > 0 && (allTimeFocusScore === undefined || allTimeFocusScore === null)) {
       calculatedScore = Math.min(calculatedScore, Math.max(0, 100 - penalties));
     }
 
@@ -537,6 +544,7 @@ router.post("/sync-monitoring", protect, async (req, res) => {
       faceAnomalyEvents: Number(faceAnomalies),
       totalRecords: Number(totalRecords),
       focusedRecords: Number(focusedRecords),
+      allTimeFocusScore: calculatedScore,
       lastSyncedAt: new Date(),
     };
 
@@ -597,111 +605,77 @@ router.post("/focus-score", protect, async (req, res) => {
   }
 });
 
-// ✅ GET Leaderboard - Real users ranked by monitoring-based focus score
-// Base = 100%, calculated from monitoring analytics data (phone detection, look-away, multiple/no-face)
+// ✅ GET Leaderboard - Real users ranked by Leaderboard Score:
+// Formula: Leaderboard Score = AFS_all_time × (1 - TS_day / (TS_day + K)) + 10 × min(VW_day / 20, 1)
 router.get("/leaderboard", async (req, res) => {
   try {
+    const targetDate = req.query.date ? String(req.query.date).trim() : getLocalDateString();
+
     const users = await User.find(
       {},
       "name email coins videosWatched videosSwitched streak history focusScore monitoringStats createdAt"
     ).lean();
 
-    const csvStats = getLatestCsvStats();
+    // Extract all unique dates from users' history for the date selector
+    const dateSet = new Set();
+    dateSet.add(getLocalDateString()); // always include today
 
-    // Group detection events by userId
-    const detectionsByUser = {};
-    try {
-      const detections = await Detection.find({}).lean();
-      detections.forEach((d) => {
-        const uid = String(d.userId);
-        if (!detectionsByUser[uid]) {
-          detectionsByUser[uid] = { phoneEvents: 0, lookAwayEvents: 0, faceAnomalyEvents: 0 };
-        }
-        if (d.phone_detected) detectionsByUser[uid].phoneEvents += 1;
-        if (d.direction && d.direction !== "center" && d.direction !== "unknown") {
-          detectionsByUser[uid].lookAwayEvents += 1;
-        }
-        if (d.faces_count !== 1) {
-          detectionsByUser[uid].faceAnomalyEvents += 1;
-        }
-      });
-    } catch (e) {
-      console.warn("Detection query error in leaderboard:", e);
-    }
+    users.forEach((u) => {
+      if (Array.isArray(u.history)) {
+        u.history.forEach((h) => {
+          const dKey = getLocalDateKey(h.watchedAt);
+          if (dKey) dateSet.add(dKey);
+        });
+      }
+    });
+    const availableDates = Array.from(dateSet).sort().reverse();
 
     const leaderboard = users.map((u) => {
-      const historyVideosCount = Array.isArray(u.history) ? u.history.length : 0;
-      const videos = Math.max(u.videosWatched || 0, historyVideosCount);
-
-      let historyTabs = 0;
-      if (Array.isArray(u.history)) {
-        historyTabs = u.history.reduce((sum, h) => sum + (h.tabSwitches || 0), 0);
-      }
-      const tabs = Math.max(u.videosSwitched || 0, historyTabs);
-      const coins = u.coins ?? 50;
-
-      // ─── MONITORING FOCUS SCORE LOGIC ───
-      // Starts at base 100%
-      let monitoringScore = 100;
-
-      // 1. User's saved focusScore
+      // 1. AFS_all_time: user's all-time historical focus score up to evaluated date
+      let afs = 100;
       if (typeof u.focusScore === "number" && !isNaN(u.focusScore)) {
-        monitoringScore = u.focusScore;
+        afs = u.focusScore;
+      } else if (u.monitoringStats && typeof u.monitoringStats.allTimeFocusScore === "number") {
+        afs = u.monitoringStats.allTimeFocusScore;
       }
 
-      // 2. Monitoring stats from analytics dashboard (phone detection, look away, no/multiple face)
-      if (u.monitoringStats) {
-        const {
-          phoneDetections = 0,
-          lookAwayEvents = 0,
-          faceAnomalyEvents = 0,
-          totalRecords = 0,
-          focusedRecords = 0,
-        } = u.monitoringStats;
+      // 2. Daily Isolation: Query/retrieve ONLY targetDate's data for TS_day and VW_day
+      let TS_day = 0;
+      let VW_day = 0;
 
-        if (totalRecords > 0) {
-          const focusPct = Math.round((focusedRecords / totalRecords) * 100);
-          monitoringScore = Math.min(monitoringScore, focusPct);
-        }
-
-        const penalties = (Number(phoneDetections) * 20) + (Number(lookAwayEvents) * 10) + (Number(faceAnomalyEvents) * 10);
-        if (penalties > 0) {
-          monitoringScore = Math.min(monitoringScore, Math.max(0, 100 - penalties));
-        }
+      if (Array.isArray(u.history)) {
+        u.history.forEach((h) => {
+          const entryDate = getLocalDateKey(h.watchedAt);
+          if (entryDate === targetDate) {
+            VW_day += 1;
+            TS_day += Number(h.tabSwitches || 0);
+          }
+        });
       }
 
-      // 3. Fallback CSV stats for local user if CSV logs present
-      if (csvStats && (csvStats.phoneEvents > 0 || csvStats.lookAwayEvents > 0 || csvStats.faceAnomalies > 0)) {
-        const isAnanya = (u.email && u.email.includes("ananya")) || (u.name && u.name.toLowerCase().includes("ananya"));
-        if (isAnanya) {
-          monitoringScore = Math.min(monitoringScore, csvStats.calculated);
-        }
-      }
+      // 3. Compute score via separate reusable formula service
+      const scoreResult = calculateLeaderboardScore(afs, TS_day, VW_day, LEADERBOARD_CONFIG.K);
 
-      // 4. Detection collection penalties
-      const uDetections = detectionsByUser[String(u._id)];
-      if (uDetections) {
-        const phonePenalty = uDetections.phoneEvents * 25;
-        const lookAwayPenalty = uDetections.lookAwayEvents * 15;
-        const facePenalty = uDetections.faceAnomalyEvents * 15;
-        monitoringScore = Math.max(0, monitoringScore - phonePenalty - lookAwayPenalty - facePenalty);
-      }
-
-      const focusScore = Math.min(100, Math.max(0, Math.round(monitoringScore)));
+      const coins = u.coins ?? 50;
 
       return {
         _id: u._id,
         name: u.name || "Student",
         email: u.email,
         coins,
-        videos,
-        tabs,
+        videos: VW_day, // daily videos watched (VW_day)
+        tabs: TS_day,   // daily tab switches (TS_day)
         streak: u.streak || 0,
-        focusScore,
+        focusScore: scoreResult.score, // Leaderboard Score (e.g. 64.17)
+        scoreString: scoreResult.scoreString,
+        afsAllTime: scoreResult.afsAllTime, // All-Time Focus Score rounded to 2 decimal places
+        focusComponent: scoreResult.focusComponent,
+        videoBonus: scoreResult.videoBonus,
+        k: scoreResult.k,
       };
     });
 
-    // Sort descending by focus score, then coins, then videos
+    // Sort descending by Leaderboard Score, then coins, then daily videos
     leaderboard.sort((a, b) => {
       if (b.focusScore !== a.focusScore) {
         return b.focusScore - a.focusScore;
@@ -714,6 +688,8 @@ router.get("/leaderboard", async (req, res) => {
 
     res.json({
       success: true,
+      date: targetDate,
+      availableDates,
       students: leaderboard,
     });
   } catch (err) {
@@ -723,3 +699,4 @@ router.get("/leaderboard", async (req, res) => {
 });
 
 export default router;
+

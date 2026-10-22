@@ -4,6 +4,7 @@ import Lottie from "lottie-react";
 import chatAnimation from "../assets/chatAnimation.json";
 import { useAppContext } from "../context/AppContext";
 import ThemeToggle from "./ThemeToggle";
+import Navbar from "./Navbar";
 
 export default function ChatBot({ standalone = false }) {
   const {
@@ -56,23 +57,12 @@ export default function ChatBot({ standalone = false }) {
   // If standalone page like /chatbot
   if (standalone) {
     return (
-      <div className={`min-h-screen relative z-10 p-6 md:p-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
-        {/* Top Bar with Navigation & Permanent Theme Toggle */}
-        <div className="max-w-4xl mx-auto flex items-center justify-between mb-6">
-          <Link
-            to="/dashboard"
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-              isDark
-                ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
-                : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
-            }`}
-          >
-            <span>← Back to Dashboard</span>
-          </Link>
-          <ThemeToggle />
-        </div>
+      <div className={`min-h-screen relative z-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
+        {/* Unified Navbar with ThemeToggle */}
+        <Navbar />
 
-        <div className={`max-w-4xl mx-auto backdrop-blur-2xl rounded-3xl border shadow-2xl flex flex-col h-[650px] overflow-hidden ${
+        <div className="max-w-4xl mx-auto p-6 md:p-10 pt-6">
+          <div className={`backdrop-blur-2xl rounded-3xl border shadow-2xl flex flex-col h-[650px] overflow-hidden ${
           isDark
             ? "bg-slate-900/90 border-purple-500/25 text-white"
             : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_15px_40px_rgba(0,0,0,0.04)] text-slate-800"
@@ -201,8 +191,9 @@ export default function ChatBot({ standalone = false }) {
           </div>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // Floating Chat Widget Across Application
   return (

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
 import ThemeToggle from "./ThemeToggle";
+import Navbar from "./Navbar";
 import { jsPDF } from "jspdf";
 import {
   getAvailableDates,
@@ -188,6 +189,19 @@ const Analytics = () => {
 
     return { total, focusPct, avgScore, phoneCount };
   }, [logs]);
+
+  // --- OVERALL METRICS COMPUTATION (ALL-TIME HISTORY) ---
+  const overallAvgScore = useMemo(() => {
+    if (!allLogs || allLogs.length === 0) {
+      return kpis.avgScore || "0.0";
+    }
+    const validLogs = allLogs.filter(
+      (l) => l.focus_score !== undefined && l.focus_score !== null && !isNaN(Number(l.focus_score))
+    );
+    if (validLogs.length === 0) return kpis.avgScore || "0.0";
+    const totalScore = validLogs.reduce((sum, l) => sum + Number(l.focus_score), 0);
+    return (totalScore / validLogs.length).toFixed(1);
+  }, [allLogs, kpis.avgScore]);
 
   // Status Breakdown Data
   const statusBreakdown = useMemo(() => {
@@ -455,26 +469,17 @@ const Analytics = () => {
 
   return (
     <div
-      className={`min-h-screen relative z-10 p-4 sm:p-6 md:p-10 transition-colors duration-500 ${
+      className={`min-h-screen relative z-10 transition-colors duration-500 ${
         isDark ? "text-white" : "text-slate-800"
       }`}
     >
-      {/* Top Navigation Bar */}
-      <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 mb-8">
-        <Link
-          to="/dashboard"
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-            isDark
-              ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
-              : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
-          }`}
-        >
-          <span>← Back to Dashboard</span>
-        </Link>
+      {/* Unified Navbar with ThemeToggle */}
+      <Navbar />
 
-        {/* Date Selector & Global Controls */}
-        <div className="flex flex-wrap items-center gap-3">
-          {availableDates.length > 0 && (
+      <div className="p-4 sm:p-6 md:p-10 max-w-7xl mx-auto">
+        {/* Top Controls: Date Selector */}
+        {availableDates.length > 0 && (
+          <div className="flex items-center justify-end mb-6">
             <div className="flex items-center gap-2">
               <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 Date:
@@ -495,36 +500,9 @@ const Analytics = () => {
                 ))}
               </select>
             </div>
-          )}
+          </div>
+        )}
 
-          <Link
-            to="/videos"
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm hover:scale-105 ${
-              isDark
-                ? "bg-lime-500/20 text-lime-300 border border-lime-500/40 hover:bg-lime-500/30"
-                : "bg-[#1b3f30] hover:bg-[#143024] text-white"
-            }`}
-          >
-            <span>🎥</span>
-            <span>Live Monitor</span>
-          </Link>
-
-          <Link
-            to="/"
-            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-              isDark
-                ? "bg-slate-900/70 border-purple-500/30 text-purple-200"
-                : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
-            }`}
-          >
-            Home
-          </Link>
-          <ThemeToggle />
-        </div>
-      </div>
-
-      {/* Main Container */}
-      <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-3xl md:text-5xl font-black mb-3 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent drop-shadow-md">
@@ -597,8 +575,8 @@ const Analytics = () => {
         ========================================================================= */}
         {!loading && availableDates.length > 0 && activeTab === 0 && (
           <div className="space-y-8 animate-in fade-in duration-300">
-            {/* Top 3 KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {/* Top 4 KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               <div
                 className={`p-6 rounded-3xl border backdrop-blur-xl transition hover:scale-[1.01] ${
                   isDark
@@ -643,7 +621,23 @@ const Analytics = () => {
                 <div className="text-3xl sm:text-4xl font-extrabold text-indigo-400">{kpis.avgScore} / 100</div>
                 <div className="text-xs text-slate-400 mt-1">Continuous biometric score average</div>
               </div>
+
+              <div
+                className={`p-6 rounded-3xl border backdrop-blur-xl transition hover:scale-[1.01] ${
+                  isDark
+                    ? "bg-slate-900/80 border-amber-500/30 shadow-lg"
+                    : "bg-[#fbf9f3] border-[#eee8de] text-slate-800 shadow-md"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Overall Average Focus Score</span>
+                  <span className="text-2xl">🌟</span>
+                </div>
+                <div className="text-3xl sm:text-4xl font-extrabold text-amber-400">{overallAvgScore} / 100</div>
+                <div className="text-xs text-slate-400 mt-1">All-time history biometric average</div>
+              </div>
             </div>
+
 
             {/* Status Breakdown Table & Bar Chart */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

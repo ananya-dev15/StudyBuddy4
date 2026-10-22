@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
 import ThemeToggle from "./ThemeToggle";
+import Navbar from "./Navbar";
 
 const RemindersPanel = () => {
   const {
@@ -59,23 +60,11 @@ const RemindersPanel = () => {
   };
 
   return (
-    <div className={`min-h-screen relative z-10 p-6 md:p-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
-      {/* Top Bar with Navigation & Permanent Theme Toggle */}
-      <div className="max-w-xl mx-auto flex items-center justify-between mb-8">
-        <Link
-          to="/dashboard"
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
-            isDark
-              ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
-              : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
-          }`}
-        >
-          <span>← Back to Dashboard</span>
-        </Link>
-        <ThemeToggle />
-      </div>
+    <div className={`min-h-screen relative z-10 font-sans transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
+      {/* Unified Navbar with ThemeToggle */}
+      <Navbar />
 
-      <div className="max-w-xl mx-auto">
+      <div className="max-w-xl mx-auto p-6 md:p-10 pt-8">
         <h1 className="text-4xl font-black text-center mb-2 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent">
           ⏰ Study Reminders
         </h1>
