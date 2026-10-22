@@ -52,7 +52,7 @@ const userSchema = new mongoose.Schema(
     videosSwitched: { type: Number, default: 0 },
     streak: { type: Number, default: 0 },
     lastDayWatched: { type: String, default: null },
-    focusScore: { type: Number, default: 100 },
+    focusScore: { type: Number, default: 0 },
     monitoringStats: {
       type: Object,
       default: {

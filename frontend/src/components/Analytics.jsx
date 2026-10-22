@@ -193,15 +193,16 @@ const Analytics = () => {
   // --- OVERALL METRICS COMPUTATION (ALL-TIME HISTORY) ---
   const overallAvgScore = useMemo(() => {
     if (!allLogs || allLogs.length === 0) {
-      return kpis.avgScore || "0.0";
+      return "0.0";
     }
     const validLogs = allLogs.filter(
       (l) => l.focus_score !== undefined && l.focus_score !== null && !isNaN(Number(l.focus_score))
     );
-    if (validLogs.length === 0) return kpis.avgScore || "0.0";
+    if (validLogs.length === 0) return "0.0";
     const totalScore = validLogs.reduce((sum, l) => sum + Number(l.focus_score), 0);
-    return (totalScore / validLogs.length).toFixed(1);
-  }, [allLogs, kpis.avgScore]);
+    const avg = totalScore / validLogs.length;
+    return Math.max(0, Math.min(100, avg)).toFixed(1);
+  }, [allLogs]);
 
   // Status Breakdown Data
   const statusBreakdown = useMemo(() => {

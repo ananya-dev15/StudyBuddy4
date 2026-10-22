@@ -59,7 +59,11 @@ const Leaderboard = () => {
             if (validLogs.length > 0) {
               const totalScore = validLogs.reduce((sum, l) => sum + Number(l.focus_score), 0);
               localAfsAllTime = Number((totalScore / validLogs.length).toFixed(2));
+            } else {
+              localAfsAllTime = 0;
             }
+          } else {
+            localAfsAllTime = 0;
           }
 
           // Sync to backend so MongoDB is updated with user's all-time focus score

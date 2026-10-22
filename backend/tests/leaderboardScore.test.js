@@ -122,4 +122,44 @@ console.log("🚀 Starting Leaderboard Score Test Suite...\n");
   console.log("✅ Passed Test 7: Multiple users scored deterministically\n");
 }
 
-console.log("🎉 ALL TESTS PASSED SUCCESSFULLY! 100% Deterministic and Verified.");
+// 8. Clamping strictly between 0 and 100 (Never > 100, never < 0)
+{
+  console.log("Test 8 - Clamping strictly between 0 and 100:");
+  // Case A: Score attempts to exceed 100 (AFS=98, TS=0, VW=20 => 98 + 10 = 108 => clamped to 100.00)
+  const resOverflow = calculateLeaderboardScore(98, 0, 20, 20);
+  console.log("   Overflow attempt (98 focus + 10 bonus = 108):", resOverflow.score);
+  assert.equal(resOverflow.score, 100.0);
+  assert.equal(resOverflow.scoreString, "100.00");
+
+  // Case B: AFS = 100, TS = 0, VW = 25 => 100 + 10 = 110 => clamped to 100.00
+  const resMax = calculateLeaderboardScore(100, 0, 25, 20);
+  assert.equal(resMax.score, 100.0);
+
+  // Case C: Negative inputs / underflow attempt
+  const resUnderflow = calculateLeaderboardScore(-50, 100, -5, 20);
+  console.log("   Underflow attempt:", resUnderflow.score);
+  assert.equal(resUnderflow.score, 0.0);
+  assert.equal(resUnderflow.score >= 0, true);
+  assert.equal(resUnderflow.score <= 100, true);
+  console.log("✅ Passed Test 8: Clamping strictly 0 - 100 verified!\n");
+}
+
+// 9. Zero monitoring records / new user (AFS = 0)
+{
+  console.log("Test 9 - User with NO monitoring records (AFS = 0):");
+  // User with no monitoring records who did not study (like new user or Patna Friend)
+  const resNoActivity = calculateLeaderboardScore(0, 0, 0, 20);
+  console.log("   No records, no activity:", resNoActivity.score);
+  assert.equal(resNoActivity.score, 0.0);
+  assert.equal(resNoActivity.scoreString, "0.00");
+
+  // User with no monitoring records who watched 5 videos
+  const resOnlyVideos = calculateLeaderboardScore(0, 0, 5, 20);
+  console.log("   No monitoring, 5 videos watched:", resOnlyVideos.score);
+  assert.equal(resOnlyVideos.focusComponent, 0.0);
+  assert.equal(resOnlyVideos.videoBonus, 2.5);
+  assert.equal(resOnlyVideos.score, 2.5);
+  console.log("✅ Passed Test 9: Zero monitoring records gives AFS=0, no false 100% ranks!\n");
+}
+
+console.log("🎉 ALL TESTS PASSED SUCCESSFULLY! 100% Deterministic, Clamped, and Verified.");

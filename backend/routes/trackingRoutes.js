@@ -632,11 +632,16 @@ router.get("/leaderboard", async (req, res) => {
 
     const leaderboard = users.map((u) => {
       // 1. AFS_all_time: user's all-time historical focus score up to evaluated date
-      let afs = 100;
-      if (typeof u.focusScore === "number" && !isNaN(u.focusScore)) {
-        afs = u.focusScore;
-      } else if (u.monitoringStats && typeof u.monitoringStats.allTimeFocusScore === "number") {
+      // If user has no monitoring records, new user, or never used monitoring -> AFS is 0 (NOT 100)
+      let afs = 0;
+      if (u.monitoringStats && typeof u.monitoringStats.allTimeFocusScore === "number" && !isNaN(u.monitoringStats.allTimeFocusScore)) {
         afs = u.monitoringStats.allTimeFocusScore;
+      } else if (u.monitoringStats && Number(u.monitoringStats.totalRecords) > 0) {
+        afs = Math.round((Number(u.monitoringStats.focusedRecords || 0) / Number(u.monitoringStats.totalRecords)) * 100);
+      } else if (typeof u.focusScore === "number" && !isNaN(u.focusScore) && u.focusScore > 0 && (u.monitoringStats?.lastSyncedAt || u.focusScore !== 100)) {
+        afs = u.focusScore;
+      } else {
+        afs = 0;
       }
 
       // 2. Daily Isolation: Query/retrieve ONLY targetDate's data for TS_day and VW_day

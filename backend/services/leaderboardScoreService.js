@@ -66,6 +66,9 @@ export function calculateLeaderboardScore(
     rawScore = 0;
   }
 
+  // Strictly clamp between 0 and 100 (never > 100, never < 0 / negative)
+  rawScore = Math.max(0, Math.min(100, rawScore));
+
   // 5. Round to 2 decimal places
   const roundedScore = Number(rawScore.toFixed(2));
 
