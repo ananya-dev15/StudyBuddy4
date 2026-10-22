@@ -8,12 +8,14 @@ import {
 } from "../controllers/youtubeController.js";
 
 const router = express.Router();
-router.use(protect);
 
-router.get("/video", getVideoInfo);
-router.get("/playlist", getPlaylistInfo);
-router.post("/save-progress", saveProgress);
+// Public route: search educational YouTube videos (no auth required)
 router.get("/search", searchYouTube);
+
+// Protected routes (require user login session)
+router.get("/video", protect, getVideoInfo);
+router.get("/playlist", protect, getPlaylistInfo);
+router.post("/save-progress", protect, saveProgress);
 
 export default router;
 

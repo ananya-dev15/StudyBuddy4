@@ -2391,18 +2391,28 @@ export default function VideoTracker() {
 
       const endpoint = `${API_BASE}/api/youtube/search?${queryParams.toString()}`;
 
-      const res = await fetch(endpoint, {
+      let res = await fetch(endpoint, {
         headers,
         credentials: "include",
       });
+
+      // If server rejected with 401 due to stale/expired token, retry once without Authorization header
+      if (res.status === 401 && token) {
+        try {
+          const fallbackRes = await fetch(endpoint, { credentials: "include" });
+          if (fallbackRes.ok) {
+            res = fallbackRes;
+          }
+        } catch (_) {}
+      }
 
       const data = await res.json();
       if (!res.ok || !data.success) {
         if (data.quotaExceeded) {
           setSearchQuotaExceeded(true);
           setSearchError("YouTube API daily quota exceeded. You can still paste direct video URLs in the 'Paste Link' tab!");
-        } else if (data.configured === false) {
-          setSearchError("YouTube search is not configured. Please set YOUTUBE_API_KEY in backend/.env.");
+        } else if (data.configured === false || data.message?.includes("YOUTUBE_API_KEY")) {
+          setSearchError("YouTube API key is not configured on your deployed server. Please add YOUTUBE_API_KEY in your hosting dashboard environment variables (e.g. Render / Railway).");
         } else {
           setSearchError(data.message || "Failed to search YouTube videos.");
         }
