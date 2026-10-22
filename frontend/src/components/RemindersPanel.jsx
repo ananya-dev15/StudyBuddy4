@@ -4,6 +4,7 @@ import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
 import ThemeToggle from "./ThemeToggle";
 import Navbar from "./Navbar";
+import PageIntroCard from "./PageIntroCard";
 
 const RemindersPanel = () => {
   const {
@@ -65,12 +66,8 @@ const RemindersPanel = () => {
       <Navbar />
 
       <div className="max-w-xl mx-auto p-6 md:p-10 pt-8">
-        <h1 className="text-4xl font-black text-center mb-2 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent">
-          ⏰ Study Reminders
-        </h1>
-        <p className={`text-center text-sm font-medium mb-8 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-          Set timely study alerts so you never miss a revision session.
-        </p>
+        {/* Page Introduction Card */}
+        <PageIntroCard className="mb-8" />
 
         {/* Input Section */}
         <div className={`p-6 rounded-3xl backdrop-blur-2xl border shadow-xl mb-8 transition-all duration-300 ${

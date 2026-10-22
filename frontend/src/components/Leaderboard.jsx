@@ -11,6 +11,7 @@ import {
 } from "chart.js";
 import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
+import PageIntroCard from "./PageIntroCard";
 import API_BASE from "../services/apiBase";
 import { getAllMonitoringLogs } from "../services/monitoringDB";
 import {
@@ -205,12 +206,8 @@ const Leaderboard = () => {
       <Navbar />
 
       <main className="max-w-7xl mx-auto px-4 md:px-8 py-10">
-        <h1 className="text-4xl md:text-5xl font-black text-center mb-3 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent tracking-tight">
-          🏆 Focus & Study Leaderboard
-        </h1>
-        <p className={`text-center text-sm md:text-base font-medium mb-8 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-          Real-time ranking powered by All-Time Average Focus Score, isolated daily tab-switch penalty, and daily video productivity bonus.
-        </p>
+        {/* Page Introduction Card */}
+        <PageIntroCard className="mb-8" />
 
         {/* Date Selector & Formula Badge Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-10 p-4 rounded-2xl border backdrop-blur-xl transition-all duration-300 shadow-md ${

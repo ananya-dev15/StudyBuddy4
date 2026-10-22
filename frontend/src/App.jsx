@@ -13,11 +13,13 @@ import Blog from "./components/blogs";
 import AuthModal from "./components/AuthModal";
 import Leaderboard from "./components/Leaderboard";
 import Analytics from "./components/Analytics";
+import MonitoringDashboard from "./components/MonitoringDashboard";
 import Contact from "./components/contact";
 import VerifyEmail from "./pages/VerifyEmail";
 import IntroPage from "./pages/IntroPage";
 import IntroAnimation from "./components/IntroAnimation";
 import ThemeBackground from "./components/ThemeBackground";
+import PageTransitionLoader from "./components/PageTransitionLoader";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -25,36 +27,7 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [showFreshIntro, setShowFreshIntro] = useState(() => {
-    // 1. Never show initial overlay on /intro, /login, or /register
-    if (location.pathname === "/intro" || location.pathname === "/login" || location.pathname === "/register") {
-      return false;
-    }
-
-    // 2. Refresh detection: NEVER play intro on page reload/refresh of any page
-    let isReload = false;
-    try {
-      const navEntries = performance.getEntriesByType?.("navigation");
-      if (navEntries && navEntries[0] && navEntries[0].type === "reload") {
-        isReload = true;
-      } else if (performance.navigation && performance.navigation.type === 1) {
-        isReload = true;
-      }
-    } catch (e) {
-      // ignore
-    }
-
-    if (isReload) {
-      return false;
-    }
-
-    // 3. Opening the website link: fresh entry on root path ("/")
-    if (location.pathname === "/") {
-      return true;
-    }
-
-    return false;
-  });
+  const [showFreshIntro, setShowFreshIntro] = useState(false);
 
   const handleFreshIntroComplete = () => {
     setShowFreshIntro(false);
@@ -63,6 +36,7 @@ function AppContent() {
   return (
     <>
       <ThemeBackground />
+      <PageTransitionLoader />
       {showFreshIntro && (
         <IntroAnimation
           onComplete={handleFreshIntroComplete}
@@ -82,6 +56,7 @@ function AppContent() {
         <Route path="/blogs" element={<Blog />} />
         <Route path="/authmodal" element={<AuthModal />} />
         <Route path="/leaderboard" element={<Leaderboard />} />
+        <Route path="/monitoring" element={<MonitoringDashboard />} />
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/verify-email" element={<VerifyEmail />} />

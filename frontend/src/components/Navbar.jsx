@@ -79,6 +79,15 @@ export default function Navbar({ onOpenAuthModal }) {
             Video Tracker
           </Link>
           <Link
+            to="/monitoring"
+            onClick={(e) => handleProtectedLinkClick(e, "/monitoring")}
+            className={`transition-colors duration-300 ${
+              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
+            }`}
+          >
+            Monitoring
+          </Link>
+          <Link
             to="/analytics"
             onClick={(e) => handleProtectedLinkClick(e, "/analytics")}
             className={`transition-colors duration-300 ${

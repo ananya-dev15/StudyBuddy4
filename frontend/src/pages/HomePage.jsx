@@ -255,15 +255,6 @@ const HomePage = () => {
         </Link>
 
         <div className="hidden md:flex gap-8 font-semibold">
-          <Link
-            to="/dashboard"
-            onClick={(e) => handleProtectedLinkClick(e, '/dashboard')}
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Dashboard
-          </Link>
           <button
             onClick={() => document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })}
             className={`transition-colors duration-300 cursor-pointer ${
@@ -519,11 +510,11 @@ const HomePage = () => {
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-10 text-center">
           {[
             { icon: "🎥", title: "Video Tracker", desc: "Log study videos and monitor progress effortlessly.", link: "/videos" },
-            { icon: "🎯", title: "Focus Score Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/analytics" },
-            { icon: "🤖", title: "AI Chatbot", desc: "Instant help, Q&A, and motivation while studying.", link: "/chatbot" },
-            { icon: "📊", title: "Analytics", desc: "Visualize your learning trends and stay consistent.", link: "/analytics" },
-            { icon: "📝", title: "Assignments", desc: "Organize, track, and submit assignments on time.", link: "/assignments" },
+            { icon: "🎯", title: "Monitoring Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/monitoring" },
             { icon: "🔥", title: "Leaderboard", desc: "Maintain daily study streaks and boost motivation.", link: "/leaderboard" },
+            { icon: "📈", title: "Performance Dashboard", desc: "Track your study streaks, activity heatmaps, and session metrics.", link: "/dashboard" },
+            { icon: "📊", title: "Analytics", desc: "Download and access all monitoring dashboard reports, focus logs, and learning trends.", link: "/analytics" },
+            { icon: "📝", title: "Assignments", desc: "Organize, track, and submit assignments on time.", link: "/assignments" },
           ].map((f, idx) => (
             <Link
               to={f.link}
@@ -553,15 +544,6 @@ const HomePage = () => {
               <p className={`mt-2.5 text-sm md:text-base leading-relaxed ${theme === "dark" ? "text-white/90" : "text-slate-700/90 font-medium"}`}>
                 {f.desc}
               </p>
-              {f.link === "/dashboard" && (
-                <span className={`mt-5 text-xs font-bold px-4 py-1.5 rounded-full transition-all duration-300 ${
-                  theme === "dark"
-                    ? "text-purple-200 bg-purple-950/70 border border-purple-400/40 shadow-[0_0_12px_rgba(168,85,247,0.3)] group-hover:bg-purple-900/80"
-                    : "text-indigo-700 bg-white/90 hover:bg-white border border-indigo-200/80 shadow-sm group-hover:shadow"
-                }`}>
-                  Open Dashboard Dash →
-                </span>
-              )}
             </Link>
           ))}
         </div>
@@ -808,7 +790,7 @@ const HomePage = () => {
                 </div>
                 <div>
                   <h2 className="text-lg md:text-2xl font-bold flex items-center gap-2">
-                    Focus Score Dashboard
+                    Monitoring Dashboard
                   </h2>
                   <p className="text-xs md:text-sm text-indigo-100 hidden sm:block">
                     Real-time focus analytics, session trends, and attention monitoring

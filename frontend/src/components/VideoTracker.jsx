@@ -59,6 +59,16 @@ const getLocalDateString = (date = new Date()) => {
   return `${year}-${month}-${day}`;
 };
 
+// ✅ Helper: Format seconds to clean hh:mm:ss or mm:ss string
+const formatVideoTime = (totalSeconds) => {
+  const total = Math.max(0, parseInt(totalSeconds, 10) || 0);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+};
+
 
 
 
@@ -2150,15 +2160,30 @@ export default function VideoTracker() {
   const saveResumeProgress = async (vid, position) => {
     if (!vid || position == null) return;
     try {
+      const floorPos = Math.floor(position);
+      setAppState((prev) => {
+        const updated = (prev.history || []).map((h) => {
+          const match = String(h.videoId || h.url || "").match(
+            /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+          );
+          const hId = match ? match[1] : h.videoId;
+          if (hId === vid) {
+            return { ...h, lastWatchedPosition: floorPos };
+          }
+          return h;
+        });
+        return { ...prev, history: updated };
+      });
+
       const token = localStorage.getItem("token");
       await fetch(`${API_BASE}/api/youtube/save-progress`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: token ? `Bearer ${token}` : undefined,
         },
         credentials: "include",
-        body: JSON.stringify({ videoId: vid, position: Math.floor(position) }),
+        body: JSON.stringify({ videoId: vid, position: floorPos }),
       });
       lastProgressSaveRef.current = Date.now();
     } catch (err) {
@@ -2306,6 +2331,9 @@ export default function VideoTracker() {
       const isYoutube = /^[0-9A-Za-z_-]{11}$/.test(key);
       const thumbnail = item.thumbnail || (isYoutube ? `https://img.youtube.com/vi/${key}/mqdefault.jpg` : null);
 
+      const itemDuration = Number(item.duration || item.videoDuration || 0);
+      const itemLastPos = Number(item.lastWatchedPosition || 0);
+
       if (!cardsMap.has(key)) {
         cardsMap.set(key, {
           ...item,
@@ -2316,7 +2344,8 @@ export default function VideoTracker() {
           totalSecondsWatched: secs,
           totalTabSwitches: switches,
           latestWatchedAt: item.watchedAt,
-          duration: item.duration || item.videoDuration || 0,
+          duration: itemDuration,
+          lastWatchedPosition: itemLastPos,
           note,
           tag,
         });
@@ -2331,8 +2360,11 @@ export default function VideoTracker() {
         if (item.watchedAt) existing.latestWatchedAt = item.watchedAt;
         if (item.channelTitle) existing.channelTitle = item.channelTitle;
         if (item.studyScore) existing.studyScore = item.studyScore;
-        if ((item.duration || item.videoDuration) && !existing.duration) {
-          existing.duration = item.duration || item.videoDuration;
+        if (itemDuration > 0) {
+          existing.duration = Math.max(existing.duration || 0, itemDuration);
+        }
+        if (itemLastPos > 0) {
+          existing.lastWatchedPosition = Math.max(existing.lastWatchedPosition || 0, itemLastPos);
         }
       }
     });
@@ -2340,6 +2372,53 @@ export default function VideoTracker() {
   };
 
   const uniqueCards = useMemo(() => getUniqueVideoCards(appState.history || []), [appState.history, appState.notes, appState.tags]);
+
+  const enrichedVideoIdsRef = useRef(new Set());
+
+  // Auto-enrich any YouTube cards that lack actual duration
+  useEffect(() => {
+    if (!uniqueCards || uniqueCards.length === 0) return;
+    const token = localStorage.getItem("token");
+    const missingDurationItems = uniqueCards.filter(
+      (c) =>
+        /^[0-9A-Za-z_-]{11}$/.test(c.videoId) &&
+        (!c.duration || Number(c.duration) <= 0) &&
+        !enrichedVideoIdsRef.current.has(c.videoId)
+    );
+    if (missingDurationItems.length === 0) return;
+
+    missingDurationItems.forEach((c) => enrichedVideoIdsRef.current.add(c.videoId));
+
+    missingDurationItems.slice(0, 5).forEach((item) => {
+      fetch(`${API_BASE}/api/youtube/video?videoId=${item.videoId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data && data.success && data.duration > 0) {
+            setAppState((prev) => {
+              const updated = (prev.history || []).map((h) => {
+                const match = String(h.videoId || h.url || "").match(
+                  /(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([\w-]{11})/
+                );
+                const hId = match ? match[1] : h.videoId;
+                if (hId === item.videoId) {
+                  return {
+                    ...h,
+                    duration: data.duration,
+                    videoTitle: h.videoTitle || data.title,
+                    thumbnail: h.thumbnail || data.thumbnail,
+                  };
+                }
+                return h;
+              });
+              return { ...prev, history: updated };
+            });
+          }
+        })
+        .catch(() => {});
+    });
+  }, [uniqueCards]);
 
   const scrollSlider = (direction) => {
     if (videoSliderRef.current) {
@@ -2367,6 +2446,15 @@ export default function VideoTracker() {
 
     if (customQuery !== null) {
       setSearchQuery(customQuery);
+    }
+
+    // If user entered or pasted a direct YouTube link into the search bar, directly load video!
+    const ytMatch = query.match(
+      /(?:v=|\/|youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([0-9A-Za-z_-]{11})(?:[?&]|$)/
+    );
+    if (!pageToken && ytMatch && ytMatch[1]) {
+      handleLoadContent(query);
+      return;
     }
 
     const isLoadMore = Boolean(pageToken);
@@ -2519,23 +2607,23 @@ export default function VideoTracker() {
     });
   };
 
-  const handleLoadContent = async () => {
-
+  const handleLoadContent = async (overrideUrl = null) => {
     if (appState.coins === 0) {
       setShowZeroCoinsPopup(true);
       return;
     }
 
+    const effectiveUrl = (typeof overrideUrl === "string" ? overrideUrl : inputUrl)?.trim() || "";
 
-    if (!inputUrl && !localVideoFile) {
+    if (!effectiveUrl && !localVideoFile) {
       alert("Please provide a video URL or upload a video file first!");
       return;
     }
 
     // If YouTube URL given
-    if (inputUrl) {
-      const match = inputUrl.match(
-        /(?:v=|\/)([0-9A-Za-z_-]{11})(?:[?&]|$)/
+    if (effectiveUrl) {
+      const match = effectiveUrl.match(
+        /(?:v=|\/|youtu\.be\/|youtube\.com\/(?:embed\/|v\/|watch\?v=|watch\?.+&v=))([0-9A-Za-z_-]{11})(?:[?&]|$)/
       );
 
       if (!match || !match[1]) {
@@ -2550,20 +2638,20 @@ export default function VideoTracker() {
       if (!allowed) {
         setBlockedTitle("This video is not study related!");
         setShowBlockedPopup(true);
-        playRestrictionSound();   // 🔔 ADD THIS LINE
+        playRestrictionSound();
         return;
       }
 
-
       // Set video ID and reset local file
       setVideoId(id);
+      setInputUrl(effectiveUrl);
       setLocalVideoFile(null);
       setSessionPlayedSeconds(0);
       setTabSwitches(0);
       // Fetch video metadata and transcript from backend
       loadYouTubeData(id);
       // Load playlist if URL contains a playlist parameter
-      loadPlaylistForUrl(inputUrl);
+      loadPlaylistForUrl(effectiveUrl);
       setShowTimerPopup(true);
       return;
     }
@@ -2703,6 +2791,12 @@ export default function VideoTracker() {
           (h) => (h.videoId === currentVideoKey || h.url?.includes(currentVideoKey) || currentVideoKey?.includes(h.videoId)) && (h.watchedAt ? (typeof h.watchedAt === "string" ? (h.watchedAt.split("T")[0] || h.watchedAt) : getLocalDateString(h.watchedAt)) : "") === todayStr
         );
 
+        const currentPlaybackPos = Math.round(
+          (videoId && youtubePlayerRef.current?.getCurrentTime ? youtubePlayerRef.current.getCurrentTime() : localVideoRef.current?.currentTime) ||
+          currentTime ||
+          0
+        );
+
         if (existingIdx !== -1) {
           const item = { ...updatedHistory[existingIdx] };
           item.secondsWatched = (item.secondsWatched || item.seconds || 0) + watchedSeconds;
@@ -2711,8 +2805,11 @@ export default function VideoTracker() {
           if (cumulativeNote) item.note = cumulativeNote;
           if (currentTagToSave) item.tag = currentTagToSave;
           if (!item.videoTitle || item.videoTitle === item.videoId) item.videoTitle = currentVideoTitle;
-          if (videoMeta?.duration && !item.duration) item.duration = videoMeta.duration;
+          if (videoMeta?.duration) item.duration = videoMeta.duration;
           if (videoMeta?.studyScore && !item.studyScore) item.studyScore = videoMeta.studyScore;
+          if (currentPlaybackPos > 0) {
+            item.lastWatchedPosition = Math.max(item.lastWatchedPosition || 0, currentPlaybackPos);
+          }
           updatedHistory.splice(existingIdx, 1);
           updatedHistory.unshift(item);
         } else {
@@ -2724,6 +2821,7 @@ export default function VideoTracker() {
             tabSwitches: totalTabSwitches,
             watchedAt: todayStr,
             duration: videoMeta?.duration || Math.round(localVideoRef.current?.duration || 0),
+            lastWatchedPosition: currentPlaybackPos,
             studyScore: videoMeta?.studyScore || 75,
             note: cumulativeNote,
             tag: currentTagToSave,
@@ -2749,6 +2847,12 @@ export default function VideoTracker() {
       setTabSwitches(0);
       finalizeSession(true);
 
+      const currentPlaybackPos = Math.round(
+        (videoId && youtubePlayerRef.current?.getCurrentTime ? youtubePlayerRef.current.getCurrentTime() : localVideoRef.current?.currentTime) ||
+        currentTime ||
+        0
+      );
+
       // 3. Parallel background API requests (All in 1 click)
       fetch(`${API_BASE}/api/tracking/add-history`, {
         method: "POST",
@@ -2765,6 +2869,7 @@ export default function VideoTracker() {
           secondsWatched: watchedSeconds,
           tabSwitches: totalTabSwitches,
           duration: videoMeta?.duration || Math.round(localVideoRef.current?.duration || 0),
+          lastWatchedPosition: currentPlaybackPos,
           studyScore: videoMeta?.studyScore || 0,
           note: cumulativeNote,
           tag: currentTagToSave,
@@ -3965,7 +4070,7 @@ export default function VideoTracker() {
                   <div
                     className={`rounded-2xl p-1.5 sm:p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${
                       isDark
-                        ? "bg-[#0f1318] border-gray-800 focus-within:border-indigo-500/70"
+                        ? "bg-[#fbf8f0] border-[#eee8de] shadow-sm focus-within:border-indigo-500/70"
                         : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
                     }`}
                   >
@@ -3988,8 +4093,20 @@ export default function VideoTracker() {
                           setSearchError(null);
                         }
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (!searchLoading && searchQuery.trim()) {
+                            handleYouTubeSearch(e);
+                          }
+                        }
+                      }}
                       disabled={searchLoading}
-                      className="flex-1 bg-transparent text-white placeholder-gray-400 text-xs sm:text-sm outline-none min-w-0"
+                      className={`flex-1 bg-transparent text-xs sm:text-sm outline-none min-w-0 font-medium ${
+                        isDark
+                          ? "text-slate-900 placeholder:text-slate-500"
+                          : "text-white placeholder-gray-400"
+                      }`}
                     />
 
                     {searchQuery && (
@@ -4001,7 +4118,11 @@ export default function VideoTracker() {
                           setHasSearched(false);
                           setSearchError(null);
                         }}
-                        className="text-gray-400 hover:text-white px-1.5 text-xs font-bold"
+                        className={`px-1.5 text-xs font-bold transition-colors ${
+                          isDark
+                            ? "text-slate-500 hover:text-slate-900"
+                            : "text-gray-400 hover:text-white"
+                        }`}
                         title="Clear query"
                       >
                         ✕
@@ -4243,12 +4364,21 @@ export default function VideoTracker() {
 
               {/* TAB 2: Direct URL Input (Original input preserved) */}
               {searchMode === "url" && (
-                <div className="pt-1">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (appState.coins > 0 && (inputUrl.trim() || localVideoFile)) {
+                      handleLoadContent();
+                    }
+                  }}
+                  className="pt-1"
+                >
                   <div
-                    className={`rounded-2xl p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${theme === "dark"
-                      ? "bg-[#0f1318] border-gray-800 focus-within:border-indigo-500/70"
-                      : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
-                      }`}
+                    className={`rounded-2xl p-2 flex items-center gap-2.5 sm:gap-3 border transition-all ${
+                      isDark
+                        ? "bg-[#fbf8f0] border-[#eee8de] shadow-sm focus-within:border-indigo-500/70"
+                        : "bg-[#252830] border-gray-700/80 shadow-md focus-within:border-indigo-400"
+                    }`}
                   >
                     <div className="pl-2 flex-shrink-0 text-red-500">
                       <svg
@@ -4268,12 +4398,24 @@ export default function VideoTracker() {
                         setInputUrl(e.target.value);
                         setLocalVideoFile(null);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          if (appState.coins > 0 && (inputUrl.trim() || localVideoFile)) {
+                            handleLoadContent();
+                          }
+                        }
+                      }}
                       disabled={appState.coins <= 0}
-                      className="flex-1 bg-transparent text-white placeholder-gray-400 text-sm sm:text-base outline-none min-w-0"
+                      className={`flex-1 bg-transparent text-sm sm:text-base outline-none min-w-0 font-medium ${
+                        isDark
+                          ? "text-slate-900 placeholder:text-slate-500"
+                          : "text-white placeholder-gray-400"
+                      }`}
                     />
 
                     <button
-                      onClick={handleLoadContent}
+                      type="submit"
                       disabled={
                         appState.coins <= 0 || (!inputUrl.trim() && !localVideoFile)
                       }
@@ -4293,7 +4435,7 @@ export default function VideoTracker() {
                       <span className="font-extrabold text-sm">↗</span>
                     </button>
                   </div>
-                </div>
+                </form>
               )}
             </div>
 
@@ -4388,10 +4530,6 @@ export default function VideoTracker() {
                   </p>
                 </div>
               </div>
-
-              <span className="px-3.5 py-1 rounded-full text-[10px] sm:text-[11px] font-extrabold tracking-wider uppercase bg-[#202919] text-[#ccff00] border border-[#3b4d24] flex-shrink-0">
-                READY WHEN YOU ARE
-              </span>
             </div>
 
             {/* Inner Content: Left preview box + Right 3 status cards */}
@@ -4605,28 +4743,6 @@ export default function VideoTracker() {
                   style={{ ...styles.button, fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em' }}
                 >
                   ⏱️ Set Timer ({focusMinutes} min)
-                </button>
-                <button
-                  onClick={() => {
-                    setShowTimerPopup(false);
-                    setFocusRemaining(null);
-                    setIsFocusTimerPending(false);
-                    setIsFocusTimerPopupMaximized(false);
-                    setTimeout(() => {
-                      if (localVideoRef.current) {
-                        localVideoRef.current.play().catch(() => { });
-                      } else if (youtubePlayerRef.current?.playVideo) {
-                        youtubePlayerRef.current.playVideo();
-                      }
-                    }, 300);
-                  }}
-                  style={{
-                    ...styles.button,
-                    ...styles.secondaryButton,
-                    fontSize: isFocusTimerPopupMaximized ? '1.2em' : '1em',
-                  }}
-                >
-                  ▶ Watch Without Timer
                 </button>
                 <button
                   onClick={() => {
@@ -6161,10 +6277,25 @@ export default function VideoTracker() {
           >
             {uniqueCards.length > 0 ? (
               uniqueCards.map((h, i) => {
-                const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
-                const minutes = Math.floor(seconds / 60);
-                const secs = seconds % 60;
-                const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+                const rawActualDuration = Number(
+                  h.duration ||
+                  h.videoDuration ||
+                  (videoMeta && (h.videoId === videoId || h.videoId === videoMeta?.videoId) ? videoMeta.duration : 0)
+                );
+                const actualDurationSec = rawActualDuration > 0 ? rawActualDuration : 0;
+                const watchedSeconds = Number(h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0);
+                const completedPositionSec = Number(
+                  h.lastWatchedPosition ||
+                  (h.videoId === videoId && currentTime > 0 ? Math.round(currentTime) : 0) ||
+                  watchedSeconds ||
+                  0
+                );
+
+                const cumulativeWatchTime = formatVideoTime(watchedSeconds);
+                const completedBadgeText = completedPositionSec > 0
+                  ? formatVideoTime(completedPositionSec)
+                  : (actualDurationSec > 0 ? formatVideoTime(actualDurationSec) : cumulativeWatchTime);
+
                 const switches = h.totalTabSwitches ?? h.tabSwitches ?? 0;
                 const rawDate = h.latestWatchedAt || h.watchedAt;
                 const watchDate = rawDate
@@ -6179,17 +6310,13 @@ export default function VideoTracker() {
                   (h.url && !h.url.startsWith("http"));
                 const actualNote = h.note || h.notes || appState.notes?.[h.videoId] || "";
 
-                // Calculate watch completion percentage directly from duration
-                const rawTotal = Number(
-                  h.duration ||
-                  h.videoDuration ||
-                  (videoMeta && (h.videoId === videoId || h.videoId === videoMeta?.videoId) ? videoMeta.duration : 0)
-                );
-                // If total video duration is known (> 0), use it; otherwise use 3600s (standard 60-min study lecture baseline)
-                const effectiveTotalDuration = rawTotal > 0 ? rawTotal : Math.max(3600, Math.round(seconds * 1.15));
-                const completionPct = seconds > 0
-                  ? Math.min(100, Math.max(2, Math.round((seconds / effectiveTotalDuration) * 100)))
-                  : 0;
+                // Calculate watch completion percentage directly from actual video duration
+                let completionPct = 0;
+                if (actualDurationSec > 0 && completedPositionSec > 0) {
+                  completionPct = Math.min(100, Math.max(1, Math.round((completedPositionSec / actualDurationSec) * 100)));
+                } else if (actualDurationSec > 0 && watchedSeconds > 0) {
+                  completionPct = Math.min(100, Math.max(1, Math.round((watchedSeconds / actualDurationSec) * 100)));
+                }
 
                 return (
                   <div
@@ -6229,16 +6356,16 @@ export default function VideoTracker() {
                           </div>
                         </div>
 
-                        {/* Duration Tag */}
+                        {/* Watched Portion Badge on Thumbnail */}
                         <span className="absolute bottom-2.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-semibold text-white z-20">
-                          {displayDuration}
+                          {completedBadgeText}
                         </span>
 
                         {/* YouTube-Style Red Watch Progress Bar */}
                         {completionPct > 0 && (
                           <div
                             className="absolute bottom-0 left-0 right-0 h-1 sm:h-1.5 bg-black/60 z-10 overflow-hidden pointer-events-none"
-                            title={`${completionPct}% completed`}
+                            title={`${completionPct}% completed (${formatVideoTime(completedPositionSec)} of ${formatVideoTime(actualDurationSec || completedPositionSec)})`}
                           >
                             <div
                               className="h-full bg-red-600 transition-all duration-300"
@@ -6267,7 +6394,7 @@ export default function VideoTracker() {
                             DURATION
                           </p>
                           <p className={`m-0 text-[0.92rem] font-extrabold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
-                            {displayDuration}
+                            {cumulativeWatchTime}
                           </p>
                         </div>
                         <div>
@@ -6645,10 +6772,25 @@ export default function VideoTracker() {
                 return (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {uniqueCards.map((h, i) => {
-                      const seconds = h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0;
-                      const minutes = Math.floor(seconds / 60);
-                      const secs = seconds % 60;
-                      const displayDuration = minutes > 0 ? `${minutes}m ${secs}s` : `${secs}s`;
+                      const rawActualDuration = Number(
+                        h.duration ||
+                        h.videoDuration ||
+                        (videoMeta && (h.videoId === videoId || h.videoId === videoMeta?.videoId) ? videoMeta.duration : 0)
+                      );
+                      const actualDurationSec = rawActualDuration > 0 ? rawActualDuration : 0;
+                      const watchedSeconds = Number(h.totalSecondsWatched ?? h.secondsWatched ?? h.seconds ?? 0);
+                      const completedPositionSec = Number(
+                        h.lastWatchedPosition ||
+                        (h.videoId === videoId && currentTime > 0 ? Math.round(currentTime) : 0) ||
+                        watchedSeconds ||
+                        0
+                      );
+
+                      const cumulativeWatchTime = formatVideoTime(watchedSeconds);
+                      const completedBadgeText = completedPositionSec > 0
+                        ? formatVideoTime(completedPositionSec)
+                        : (actualDurationSec > 0 ? formatVideoTime(actualDurationSec) : cumulativeWatchTime);
+
                       const switches = h.totalTabSwitches ?? h.tabSwitches ?? 0;
                       const rawDate = h.latestWatchedAt || h.watchedAt;
                       const watchDate = rawDate
@@ -6663,17 +6805,13 @@ export default function VideoTracker() {
                         (h.url && !h.url.startsWith("http"));
                       const actualNote = h.note || h.notes || appState.notes?.[h.videoId] || "";
 
-                      // Calculate watch completion percentage directly from duration
-                      const rawTotal = Number(
-                        h.duration ||
-                        h.videoDuration ||
-                        (videoMeta && (h.videoId === videoId || h.videoId === videoMeta?.videoId) ? videoMeta.duration : 0)
-                      );
-                      // If total video duration is known (> 0), use it; otherwise use 3600s (standard 60-min study lecture baseline)
-                      const effectiveTotalDuration = rawTotal > 0 ? rawTotal : Math.max(3600, Math.round(seconds * 1.15));
-                      const completionPct = seconds > 0
-                        ? Math.min(100, Math.max(2, Math.round((seconds / effectiveTotalDuration) * 100)))
-                        : 0;
+                      // Calculate watch completion percentage directly from actual video duration
+                      let completionPct = 0;
+                      if (actualDurationSec > 0 && completedPositionSec > 0) {
+                        completionPct = Math.min(100, Math.max(1, Math.round((completedPositionSec / actualDurationSec) * 100)));
+                      } else if (actualDurationSec > 0 && watchedSeconds > 0) {
+                        completionPct = Math.min(100, Math.max(1, Math.round((watchedSeconds / actualDurationSec) * 100)));
+                      }
 
                       return (
                         <div
@@ -6720,16 +6858,16 @@ export default function VideoTracker() {
                                 </div>
                               </div>
 
-                              {/* Duration Tag */}
+                              {/* Watched Portion Badge on Thumbnail */}
                               <span className="absolute bottom-2.5 right-1.5 px-1.5 py-0.5 rounded bg-black/80 text-[10px] font-semibold text-white z-20">
-                                {displayDuration}
+                                {completedBadgeText}
                               </span>
 
                               {/* YouTube-Style Red Watch Progress Bar */}
                               {completionPct > 0 && (
                                 <div
                                   className="absolute bottom-0 left-0 right-0 h-1 sm:h-1.5 bg-black/60 z-10 overflow-hidden pointer-events-none"
-                                  title={`${completionPct}% completed`}
+                                  title={`${completionPct}% completed (${formatVideoTime(completedPositionSec)} of ${formatVideoTime(actualDurationSec || completedPositionSec)})`}
                                 >
                                   <div
                                     className="h-full bg-red-600 transition-all duration-300"
@@ -6758,7 +6896,7 @@ export default function VideoTracker() {
                                   DURATION
                                 </p>
                                 <p className={`m-0 text-[0.92rem] font-extrabold ${isDark ? "text-emerald-400" : "text-emerald-600"}`}>
-                                  {displayDuration}
+                                  {cumulativeWatchTime}
                                 </p>
                               </div>
                               <div>

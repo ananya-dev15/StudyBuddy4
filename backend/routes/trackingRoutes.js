@@ -157,7 +157,7 @@ router.get("/coins/:id", async (req, res) => {
 
 router.post("/add-history", protect, async (req, res) => {
   try {
-    const { videoId, url, secondsWatched, tabSwitches, note, tag, videoTitle, isStudyVideo, duration, studyScore } = req.body;
+    const { videoId, url, secondsWatched, tabSwitches, note, tag, videoTitle, isStudyVideo, duration, studyScore, lastWatchedPosition } = req.body;
     const user = await User.findById(req.user._id);
 
     if (!user) return res.status(404).json({ success: false, message: "User not found" });
@@ -217,8 +217,11 @@ router.post("/add-history", protect, async (req, res) => {
       }
       if (persistentNote) existing.note = persistentNote;
       if (persistentTag) existing.tag = persistentTag;
-      if (duration && !existing.duration) existing.duration = duration;
+      if (duration) existing.duration = duration;
       if (studyScore && !existing.studyScore) existing.studyScore = studyScore;
+      if (lastWatchedPosition !== undefined && lastWatchedPosition !== null) {
+        existing.lastWatchedPosition = Math.max(existing.lastWatchedPosition || 0, Math.round(lastWatchedPosition));
+      }
 
       // Move updated entry to top
       user.history.splice(existingIndex, 1);
@@ -236,6 +239,7 @@ router.post("/add-history", protect, async (req, res) => {
         duration: duration || 0,
         studyScore: studyScore || 0,
         isStudyVideo: isStudyVideo !== undefined ? isStudyVideo : true,
+        lastWatchedPosition: Math.round(lastWatchedPosition || 0),
       };
       user.history.unshift(newEntry);
     }

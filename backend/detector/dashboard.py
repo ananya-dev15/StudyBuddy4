@@ -361,6 +361,9 @@ with tabs[3]:
         if st.button("🗂️ Weekly PDF"):
             pdf_file = generate_weekly_report()
             if pdf_file:
+                uploaded = upload_pdf_to_backend(pdf_file, title="Weekly Study Focus Report")
+                if uploaded:
+                    st.success("✅ PDF saved & visible in Analytics")
                 with open(pdf_file, "rb") as f:
                     st.download_button(
                         label="⬇️ Download Weekly",
@@ -375,6 +378,9 @@ with tabs[3]:
         if st.button("🗓️ Monthly PDF"):
             pdf_file = generate_monthly_report()
             if pdf_file:
+                uploaded = upload_pdf_to_backend(pdf_file, title="Monthly Study Focus Report")
+                if uploaded:
+                    st.success("✅ PDF saved & visible in Analytics")
                 with open(pdf_file, "rb") as f:
                     st.download_button(
                         label="⬇️ Download Monthly",

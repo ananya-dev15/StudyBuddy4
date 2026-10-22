@@ -5,6 +5,7 @@ import chatAnimation from "../assets/chatAnimation.json";
 import { useAppContext } from "../context/AppContext";
 import ThemeToggle from "./ThemeToggle";
 import Navbar from "./Navbar";
+import PageIntroCard from "./PageIntroCard";
 
 export default function ChatBot({ standalone = false }) {
   const {
@@ -62,6 +63,9 @@ export default function ChatBot({ standalone = false }) {
         <Navbar />
 
         <div className="max-w-4xl mx-auto p-6 md:p-10 pt-6">
+          {/* Page Introduction Card */}
+          <PageIntroCard className="mb-6" />
+
           <div className={`backdrop-blur-2xl rounded-3xl border shadow-2xl flex flex-col h-[650px] overflow-hidden ${
           isDark
             ? "bg-slate-900/90 border-purple-500/25 text-white"

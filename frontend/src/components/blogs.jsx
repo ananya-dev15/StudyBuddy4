@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
+import PageIntroCard from "./PageIntroCard";
 import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
 
@@ -124,6 +125,9 @@ const Blog = () => {
             <Navbar />
 
             <main className="container">
+                {/* Page Introduction Card */}
+                <PageIntroCard className="mb-6" />
+
                 <div className="add-blog-section">
                     <button onClick={() => setPremiumModalVisible(true)} className="add-blog-btn">Add Your Blog</button>
                     <div className={`premium-modal ${isPremiumModalVisible ? 'visible' : ''}`}>

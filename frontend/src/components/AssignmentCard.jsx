@@ -334,6 +334,7 @@ import {
 } from "recharts";
 import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
+import PageIntroCard from "./PageIntroCard";
 import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
 
@@ -625,10 +626,8 @@ const AssignmentCard = () => {
 
       {/* Main Content Wrapper */}
       <div className="px-6 md:px-10 py-10">
-
-        <div className="header">
-          <h1 className="bg-gradient-to-r from-purple-600 to-pink-500 bg-clip-text text-transparent">📚 Assignment & Hackathon Tracker</h1>
-        </div>
+        {/* Page Introduction Card */}
+        <PageIntroCard className="mb-6" />
 
         {/* <div className="status-section">
         <span className="coins">🪙 {coins} Coins</span>

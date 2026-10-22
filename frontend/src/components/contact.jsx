@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import ThemeToggle from "./ThemeToggle";
 import Navbar from "./Navbar";
+import PageIntroCard from "./PageIntroCard";
 
 const TEAM_MEMBERS = [
   {
@@ -57,12 +58,8 @@ export default function Contact() {
       <Navbar />
 
       <div className="max-w-6xl mx-auto p-6 md:p-10 pt-8">
-        <h1 className="text-4xl md:text-5xl font-black text-center mb-3 bg-gradient-to-r from-purple-500 via-pink-500 to-indigo-500 bg-clip-text text-transparent">
-          Meet Our Team — Innovatrix
-        </h1>
-        <p className={`text-center text-sm md:text-base font-medium mb-12 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-          The minds and creators crafting StudyBuddy into your ultimate learning sanctuary.
-        </p>
+        {/* Page Introduction Card */}
+        <PageIntroCard className="mb-8" />
 
         {/* Team Member Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">

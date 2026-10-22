@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
 import Navbar from "../components/Navbar";
+import PageIntroCard from "../components/PageIntroCard";
 import { eachDayOfInterval, format, startOfMonth, endOfMonth } from "date-fns";
 
 const MONTHS = [
@@ -317,6 +318,8 @@ const Dashboard = () => {
 
       {/* Main Content */}
       <div className="px-6 md:px-10 py-10">
+        {/* Page Introduction Card */}
+        <PageIntroCard className="mb-6" />
 
         {/* ================= 4 KEY METRIC CARDS (Row 1) ================= */}
         <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5 mb-5">

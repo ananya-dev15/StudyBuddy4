@@ -44,8 +44,8 @@ export async function getVideoInfo(req, res) {
     if (!rawVideoId) return res.status(400).json({ success: false, message: "Missing videoId" });
     const videoId = cleanVideoId(rawVideoId);
     const user = req.user;
-    // Check cache in user.history
-    let cached = user.history.find((h) => cleanVideoId(h.videoId || h.url) === videoId && h.videoTitle);
+    // Check cache in user.history - require duration > 0 so missing durations get populated
+    let cached = user.history.find((h) => cleanVideoId(h.videoId || h.url) === videoId && h.videoTitle && h.duration > 0);
     if (cached) {
       // Use stored metadata if present
       return res.json({
