@@ -1,17 +1,30 @@
 import React, { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import profileIcon from "../assets/profile_icon.png";
 import { useAppContext } from "../context/AppContext";
 import ThemeToggle from "./ThemeToggle";
 import UserProfileModal from "./UserProfileModal";
+
+const NAV_LINKS = [
+  { name: "Video Tracker", path: "/videos" },
+  { name: "Monitoring dashboard", path: "/monitoring" },
+  { name: "Leaderboard", path: "/leaderboard" },
+  { name: "Performance Dashboard", path: "/dashboard" },
+  { name: "Analytics", path: "/analytics" },
+  { name: "Assignment", path: "/assignments" },
+];
 
 export default function Navbar({ onOpenAuthModal }) {
   const { theme, appState, setAppState } = useAppContext();
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   const user = appState?.user || JSON.parse(localStorage.getItem("user"));
+
+  const currentPath = location.pathname.replace(/\/+$/, "") || "/";
+  const visibleNavLinks = NAV_LINKS.filter((item) => item.path !== currentPath);
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -59,76 +72,22 @@ export default function Navbar({ onOpenAuthModal }) {
           StudyBuddy
         </Link>
 
-        <div className="hidden lg:flex gap-6 xl:gap-8 font-semibold">
-          <Link
-            to="/dashboard"
-            onClick={(e) => handleProtectedLinkClick(e, "/dashboard")}
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Dashboard
-          </Link>
-          <Link
-            to="/videos"
-            onClick={(e) => handleProtectedLinkClick(e, "/videos")}
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Video Tracker
-          </Link>
-          <Link
-            to="/monitoring"
-            onClick={(e) => handleProtectedLinkClick(e, "/monitoring")}
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Monitoring
-          </Link>
-          <Link
-            to="/analytics"
-            onClick={(e) => handleProtectedLinkClick(e, "/analytics")}
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Analytics
-          </Link>
-          <Link
-            to="/assignments"
-            onClick={(e) => handleProtectedLinkClick(e, "/assignments")}
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Assignments
-          </Link>
-          <Link
-            to="/leaderboard"
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Leaderboard
-          </Link>
-          <Link
-            to="/blogs"
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Blogs
-          </Link>
-          <Link
-            to="/contact"
-            className={`transition-colors duration-300 ${
-              theme === "dark" ? "text-white/90 hover:text-white" : "text-gray-700 hover:text-indigo-600"
-            }`}
-          >
-            Contact Us
-          </Link>
+        {/* Dynamic Navigation Links (Strict order, omitting the current page) */}
+        <div className="hidden md:flex items-center gap-4 lg:gap-6 xl:gap-8 font-semibold">
+          {visibleNavLinks.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              onClick={(e) => handleProtectedLinkClick(e, item.path)}
+              className={`transition-colors duration-300 whitespace-nowrap text-sm lg:text-base ${
+                theme === "dark"
+                  ? "text-white/90 hover:text-white"
+                  : "text-gray-700 hover:text-indigo-600"
+              }`}
+            >
+              {item.name}
+            </Link>
+          ))}
         </div>
 
         {/* Right side: Theme Toggle & Auth / Profile */}
