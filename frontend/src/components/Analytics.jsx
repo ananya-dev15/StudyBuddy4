@@ -50,10 +50,10 @@ const Analytics = () => {
         <PageIntroCard className="mb-6" />
 
         <div
-          className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl transition-all duration-300 shadow-2xl ${
+          className={`p-6 sm:p-8 rounded-3xl border backdrop-blur-xl transition-all duration-300 shadow-xl ${
             isDark
-              ? "bg-[#141824]/90 border-purple-500/30 shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
-              : "bg-white/95 border-slate-200 shadow-xl text-slate-800"
+              ? "bg-slate-900/80 border-purple-500/20 text-white shadow-2xl"
+              : "bg-[#fbf9f3] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
           }`}
         >
           {/* Header */}
@@ -73,8 +73,8 @@ const Analytics = () => {
               onClick={fetchReports}
               className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-2 cursor-pointer shadow-sm hover:scale-[1.02] active:scale-95 ${
                 isDark
-                  ? "bg-purple-900/50 text-purple-200 hover:bg-purple-800/60 border border-purple-500/40"
-                  : "bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                  ? "bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60 border border-emerald-500/40"
+                  : "bg-[#eaf3ee] text-[#1b3f30] hover:bg-[#d4e7dd] border border-[#1b3f30]/30"
               }`}
             >
               <span>↻</span>
@@ -123,8 +123,8 @@ const Analytics = () => {
                     key={pdf._id}
                     className={`rounded-2xl p-5 border transition-all duration-300 hover:scale-[1.02] flex flex-col justify-between ${
                       isDark
-                        ? "bg-[#1a2030]/80 border-slate-700/60 shadow-md hover:border-purple-500/40"
-                        : "bg-slate-50/90 border-slate-200 shadow-sm hover:border-indigo-300"
+                        ? "bg-slate-800/70 border-slate-700/60 shadow-md hover:border-purple-500/40"
+                        : "bg-white border-[#eee8de] shadow-sm hover:border-indigo-300"
                     }`}
                   >
                     <div>
@@ -155,7 +155,11 @@ const Analytics = () => {
                           href={fullUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="flex-1 text-center py-2 px-3 rounded-xl text-xs font-bold text-white transition shadow bg-purple-600 hover:bg-purple-700 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-1.5"
+                          className={`flex-1 text-center py-2 px-3 rounded-xl text-xs font-bold transition-all shadow-md hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 ${
+                            isDark
+                              ? "bg-blue-950/70 text-blue-300 border border-blue-800/80 hover:bg-blue-900/80"
+                              : "bg-[#eaf3ee] text-[#1b3f30] border border-[#1b3f30]/30 hover:bg-[#d4e7dd]"
+                          }`}
                         >
                           <span>👁️</span>
                           <span>View PDF</span>
@@ -163,7 +167,11 @@ const Analytics = () => {
                         <a
                           href={fullUrl}
                           download={pdf.title ? `${pdf.title}.pdf` : "Study_Report.pdf"}
-                          className="flex-1 text-center py-2 px-3 rounded-xl text-xs font-bold text-white transition shadow bg-emerald-600 hover:bg-emerald-700 hover:scale-[1.01] active:scale-95 flex items-center justify-center gap-1.5"
+                          className={`flex-1 text-center py-2 px-3 rounded-xl text-xs font-bold text-white transition-all shadow-md hover:scale-[1.02] active:scale-95 flex items-center justify-center gap-1.5 ${
+                            isDark
+                              ? "bg-[#4f46e5] hover:bg-[#4338ca] shadow-indigo-500/25"
+                              : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
+                          }`}
                         >
                           <span>⬇️</span>
                           <span>Download</span>

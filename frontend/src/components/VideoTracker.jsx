@@ -2686,17 +2686,47 @@ export default function VideoTracker() {
     }
   };
 
-  const clearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem("videoHistory");
+  const handleResetPlayer = () => {
+    try {
+      if (youtubePlayerRef.current?.destroy) {
+        youtubePlayerRef.current.destroy();
+      } else if (youtubePlayerInstance?.stopVideo) {
+        youtubePlayerInstance.stopVideo();
+      } else if (youtubePlayerInstance?.pauseVideo) {
+        youtubePlayerInstance.pauseVideo();
+      }
+    } catch (e) {
+      console.warn("YouTube stop error:", e);
+    }
+    youtubePlayerRef.current = null;
+    setYoutubePlayerInstance(null);
+
+    try {
+      if (localVideoRef.current) {
+        localVideoRef.current.pause();
+        localVideoRef.current.src = "";
+      }
+    } catch (e) {
+      console.warn("Local video stop error:", e);
+    }
+
     setVideoId(null);
     setLocalVideoFile(null);
     setLocalVideoObjectUrl(null);
     setInputUrl("");
+    setVideoMeta(null);
     setIsPlaying(false);
+    stopPolling();
     setSessionPlayedSeconds(0);
+    if (sessionPlayedSecondsRef.current !== undefined) {
+      sessionPlayedSecondsRef.current = 0;
+    }
     setTabSwitches(0);
-    console.log("History & player reset!");
+    setFocusRemaining(null);
+    setIsFocusTimerPending(false);
+    setHasPlaybackStarted(false);
+    setPlayerError(null);
+    console.log("Player reset: loaded video removed!");
   };
 
   const confirmStartFocus = () => {
@@ -4479,17 +4509,6 @@ export default function VideoTracker() {
                     disabled={appState.coins <= 0}
                   />
 
-                  <button
-                    onClick={clearHistory}
-                    className={`px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-1.5 transition-all active:scale-95 ${theme === "dark"
-                      ? "bg-gray-800 hover:bg-gray-700 text-gray-300"
-                      : "bg-[#f0f2ef] hover:bg-gray-200 text-gray-700"
-                      }`}
-                  >
-                    <span className="text-sm">⟲</span>
-                    <span>Reset player</span>
-                  </button>
-
                   {localVideoFile && (
                     <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 truncate max-w-xs">
                       Selected: {localVideoFile.name}
@@ -5270,14 +5289,28 @@ export default function VideoTracker() {
 
               </div>
 
-              {/* 3. Action Buttons: Only Stop & Save at bottom-left */}
-              <div className="flex items-center justify-start pt-1">
+              {/* 3. Action Buttons: Stop & Save and Reset player at bottom-left */}
+              <div className="flex items-center justify-start gap-3 pt-1">
                 <button
+                  type="button"
                   onClick={handleStopSave}
                   className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <span>⏹</span>
                   <span>Stop & Save</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetPlayer}
+                  className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 border shadow-sm ${
+                    isDark
+                      ? "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+                      : "bg-[#f0f2ef] hover:bg-gray-200 text-slate-700 border-slate-300"
+                  }`}
+                  title="Reset player and unload current video"
+                >
+                  <span className="text-sm">⟲</span>
+                  <span>Reset player</span>
                 </button>
               </div>
 

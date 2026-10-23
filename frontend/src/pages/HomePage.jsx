@@ -112,7 +112,7 @@ const Chatbot = () => {
 
 // ------------------- HomePage Component -------------------
 const HomePage = () => {
-  const { isChatOpen, setIsChatOpen, theme, toggleTheme } = useAppContext();
+  const { isChatOpen, setIsChatOpen, theme, toggleTheme, appState } = useAppContext();
   const [user, setUser] = useState(null);
   const [isDropdownOpen, setDropdownOpen] = useState(false);
   const [isAuthModalOpen, setAuthModalOpen] = useState(false); // ✨ NEW: State for modal
@@ -122,6 +122,8 @@ const HomePage = () => {
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
   const navigate = useNavigate();
+
+  const isLoggedIn = Boolean(user || appState?.user || localStorage.getItem("token") || localStorage.getItem("user"));
 
   // Reset and manage iframe timeout when modal opens
   useEffect(() => {
@@ -624,58 +626,77 @@ const HomePage = () => {
           Choose Your Plan
         </h2>
         <div className="grid md:grid-cols-2 gap-8 max-w-5xl mx-auto px-6">
-          <div className={`p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 backdrop-blur-2xl border ${
+          <div className={`p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 backdrop-blur-2xl border flex flex-col justify-between ${
             theme === "dark"
               ? "bg-gradient-to-b from-slate-900/80 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border-white/20 hover:border-purple-500/50 shadow-2xl hover:shadow-[0_12px_36px_rgba(168,85,247,0.2)] text-white"
               : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_10px_35px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_18px_45px_rgba(31,38,135,0.18)] text-slate-800"
           }`}>
-            <h3 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
-              Free Plan
-            </h3>
-            <p className={`mt-3 ${theme === "dark" ? "text-white/90" : "text-slate-600 font-medium"}`}>
-              Perfect for beginners
-            </p>
-            <p className={`mt-4 text-4xl font-extrabold ${theme === "dark" ? "text-white" : "text-slate-950"}`}>
-              ₹0
-            </p>
-            <ul className={`mt-5 space-y-2 text-sm ${theme === "dark" ? "text-white/90" : "text-slate-700 font-medium"}`}>
-              <li>✔ Reminders & Assignments</li>
-              <li>✔ Basic Analytics</li>
-              <li>✔ AI Chatbot (limited)</li>
-            </ul>
-            <Link
-              to="/register"
-              className="mt-6 inline-block px-6 py-3 bg-gradient-to-r from-indigo-700 to-pink-600 text-white font-semibold rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-            >
-              Get Started
-            </Link>
+            <div>
+              <h3 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
+                Free Plan
+              </h3>
+              <p className={`mt-3 ${theme === "dark" ? "text-white/90" : "text-slate-600 font-medium"}`}>
+                Perfect for beginners
+              </p>
+              <p className={`mt-4 text-4xl font-extrabold ${theme === "dark" ? "text-white" : "text-slate-950"}`}>
+                ₹0
+              </p>
+              <ul className={`mt-5 space-y-2 text-sm ${theme === "dark" ? "text-white/90" : "text-slate-700 font-medium"}`}>
+                <li>✔ Reminders & Assignments</li>
+                <li>✔ Basic Analytics</li>
+                <li>✔ AI Chatbot (limited)</li>
+              </ul>
+            </div>
+            {!isLoggedIn && (
+              <div>
+                <Link
+                  to="/register"
+                  className={`mt-6 inline-block px-6 py-3 font-semibold rounded-xl shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-300 text-white ${
+                    theme === "dark"
+                      ? "bg-gradient-to-r from-indigo-700 to-pink-600 shadow-xl hover:shadow-2xl"
+                      : "bg-[#1b3f30] hover:bg-[#143024]"
+                  }`}
+                >
+                  Get Started
+                </Link>
+              </div>
+            )}
           </div>
-          <div className={`p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 backdrop-blur-2xl ${
+          <div className={`p-8 rounded-3xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300 backdrop-blur-2xl flex flex-col justify-between ${
             theme === "dark"
               ? "bg-gradient-to-b from-slate-900/90 via-purple-950/50 to-slate-950/90 hover:from-slate-800/90 hover:to-slate-900/95 border-2 border-purple-500/70 hover:border-pink-500 shadow-[0_12px_40px_rgba(168,85,247,0.3)] hover:shadow-[0_16px_50px_rgba(236,72,153,0.35)] text-white"
               : "bg-gradient-to-b from-white/80 via-indigo-50/75 to-white/75 hover:from-white/90 hover:via-indigo-50/85 hover:to-white/85 border-2 border-indigo-400/80 shadow-[0_16px_45px_rgba(79,70,229,0.18),inset_0_1px_2px_rgba(255,255,255,1)] hover:shadow-[0_22px_55px_rgba(79,70,229,0.26)] text-slate-800"
           }`}>
-            <h3 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-indigo-950"}`}>
-              Pro Plan
-            </h3>
-            <p className={`mt-3 ${theme === "dark" ? "text-white/90" : "text-indigo-600 font-semibold"}`}>
-              For serious learners
-            </p>
-            <p className={`mt-4 text-4xl font-extrabold ${theme === "dark" ? "text-white" : "text-indigo-950"}`}>
-              ₹299/month
-            </p>
-            <ul className={`mt-5 space-y-2 text-sm ${theme === "dark" ? "text-white/90" : "text-slate-700 font-medium"}`}>
-              <li>✔ All Free Plan Features</li>
-              <li>✔ Advanced Analytics & Graphs</li>
-              <li>✔ Unlimited AI Chatbot Access</li>
-              <li>✔ Priority Support</li>
-            </ul>
-            <Link
-              to="/register"
-              className="mt-6 inline-block px-6 py-3 bg-gradient-to-r from-indigo-700 to-pink-600 text-white font-semibold rounded-xl shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
-            >
-              Upgrade Now
-            </Link>
+            <div>
+              <h3 className={`text-2xl font-bold ${theme === "dark" ? "text-white" : "text-indigo-950"}`}>
+                Pro Plan
+              </h3>
+              <p className={`mt-3 ${theme === "dark" ? "text-white/90" : "text-indigo-600 font-semibold"}`}>
+                For serious learners
+              </p>
+              <p className={`mt-4 text-4xl font-extrabold ${theme === "dark" ? "text-white" : "text-indigo-950"}`}>
+                ₹299/month
+              </p>
+              <ul className={`mt-5 space-y-2 text-sm ${theme === "dark" ? "text-white/90" : "text-slate-700 font-medium"}`}>
+                <li>✔ All Free Plan Features</li>
+                <li>✔ Advanced Analytics & Graphs</li>
+                <li>✔ Unlimited AI Chatbot Access</li>
+                <li>✔ Priority Support</li>
+              </ul>
+            </div>
+            <div>
+              <Link
+                to={isLoggedIn ? "#" : "/register"}
+                onClick={isLoggedIn ? (e) => { e.preventDefault(); alert("Pro Plan subscription coming soon!"); } : undefined}
+                className={`mt-6 inline-block px-6 py-3 font-semibold rounded-xl shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-300 text-white ${
+                  theme === "dark"
+                    ? "bg-gradient-to-r from-indigo-700 to-pink-600 shadow-xl hover:shadow-2xl"
+                    : "bg-[#1b3f30] hover:bg-[#143024]"
+                }`}
+              >
+                Upgrade Now
+              </Link>
+            </div>
           </div>
         </div>
       </section>
