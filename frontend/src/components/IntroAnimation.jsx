@@ -30,7 +30,7 @@ const IntroAnimation = ({
       if (onComplete) {
         onComplete(destination);
       }
-    }, 550);
+    }, 200);
   };
 
   const toggleSound = (e) => {
@@ -44,37 +44,35 @@ const IntroAnimation = ({
   };
 
   const handleOverlayClick = () => {
-    if (videoRef.current && videoRef.current.muted) {
-      videoRef.current.muted = false;
-      setIsMuted(false);
-      setShowUnmuteHint(false);
-    }
+    handleFinish();
   };
 
   useEffect(() => {
     // Check prefers-reduced-motion
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (mediaQuery.matches) {
-      const timer = setTimeout(() => handleFinish(), 500);
+      const timer = setTimeout(() => handleFinish(), 200);
       return () => clearTimeout(timer);
     }
 
-    // Safety timeout: 12 seconds max to ensure user is NEVER stuck
+    // Safety timeout: 4 seconds max (intro finishes in ~2.0s at 4.0x speed)
     const safetyTimer = setTimeout(() => {
       handleFinish();
-    }, 12000);
+    }, 4000);
 
-    // Auto-play video with sound
+    // Auto-play video at 4x speed for a super slick, instant logo splash
     if (videoRef.current) {
+      videoRef.current.playbackRate = 4.0;
       videoRef.current.muted = false;
       const playPromise = videoRef.current.play();
       if (playPromise !== undefined) {
         playPromise.catch((err) => {
           console.warn("Unmuted autoplay restricted by browser policy, fallback to muted:", err);
           if (videoRef.current) {
+            videoRef.current.playbackRate = 4.0;
             videoRef.current.muted = true;
             setIsMuted(true);
-            setShowUnmuteHint(true);
+            setShowUnmuteHint(false);
             videoRef.current.play().catch((e) => {
               console.error("Playback error:", e);
             });
@@ -95,6 +93,7 @@ const IntroAnimation = ({
       role="dialog"
       aria-label="StudyBuddy Opening Animation"
       onClick={handleOverlayClick}
+      title="Tap anywhere to skip"
     >
       {/* 16:9 Responsive Video Viewport (Zero Cropping) */}
       <div className="studybuddy-intro-video-container">
@@ -104,6 +103,12 @@ const IntroAnimation = ({
           className="studybuddy-intro-video"
           playsInline
           autoPlay
+          onLoadedMetadata={(e) => {
+            e.target.playbackRate = 4.0;
+          }}
+          onPlay={(e) => {
+            e.target.playbackRate = 4.0;
+          }}
           onEnded={handleFinish}
           onError={(e) => {
             console.error("Intro video error:", e);

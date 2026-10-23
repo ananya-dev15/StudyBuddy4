@@ -11,8 +11,8 @@ export default function PageTransitionLoader() {
   const location = useLocation();
   const videoRef = useRef(null);
 
-  // Initial mount starts visible so there is zero flash of unstyled content
-  const [isVisible, setIsVisible] = useState(true);
+  // Initial mount starts hidden so on link open, intro animation plays without loading icon
+  const [isVisible, setIsVisible] = useState(false);
   const [isFading, setIsFading] = useState(false);
 
   const currentPathRef = useRef(location.pathname);
@@ -59,19 +59,18 @@ export default function PageTransitionLoader() {
     }, 800);
   };
 
-  // 1. Initial Page Load & Refresh trigger
-  useEffect(() => {
-    startTransition();
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
-    };
-  }, []);
-
-  // 2. Navigation trigger on route change
+  // Navigation trigger on route change
+  // Suppressed for /intro (login intro) and navigating from /intro as requested
   useEffect(() => {
     if (currentPathRef.current !== location.pathname) {
+      const prevPath = currentPathRef.current;
       currentPathRef.current = location.pathname;
+
+      // Skip loader on login intro and when transitioning from intro to destination
+      if (location.pathname === "/intro" || prevPath === "/intro") {
+        return;
+      }
+
       startTransition();
     }
   }, [location.pathname]);

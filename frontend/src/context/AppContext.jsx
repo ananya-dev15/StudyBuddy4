@@ -93,6 +93,15 @@ export const AppProvider = ({ children }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [activeVideoContext, setActiveVideoContext] = useState(null);
   const activeRecognitionRef = useRef(null);
+  const activeAudioRef = useRef(null);
+  const mediaRecorderRef = useRef(null);
+  const mediaStreamRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  const recordingTimerRef = useRef(null);
+  const isVoiceListeningRef = useRef(false);
+  const audioContextRef = useRef(null);
+  const animationFrameRef = useRef(null);
+  const currentTranscriptCallbackRef = useRef(null);
 
   const cleanTextForSpeech = (rawText) => {
     if (!rawText) return "";
@@ -120,152 +129,81 @@ export const AppProvider = ({ children }) => {
     return clean.replace(/\s+/g, " ").trim();
   };
 
-  // Pre-fetch browser TTS voices on load
-  useEffect(() => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.getVoices();
-      window.speechSynthesis.onvoiceschanged = () => {
-        window.speechSynthesis.getVoices();
-      };
-    }
-  }, []);
-
-  // Sync isSpeaking state when speech naturally ends
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if ("speechSynthesis" in window) {
-        if (!window.speechSynthesis.speaking && isSpeaking) {
-          setIsSpeaking(false);
-        }
-      }
-    }, 500);
-    return () => clearInterval(interval);
-  }, [isSpeaking]);
-
   const stopSpeakingText = () => {
+    if (activeAudioRef.current) {
+      try {
+        activeAudioRef.current.pause();
+        activeAudioRef.current.currentTime = 0;
+      } catch (err) {}
+      activeAudioRef.current = null;
+    }
     if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch (err) {}
     }
     setIsSpeaking(false);
   };
 
-  const speakText = (text) => {
+  const speakText = async (text, langCode = null) => {
+    if (!text) return;
+    stopSpeakingText();
+
+    const textToSpeak = cleanTextForSpeech(text);
+    if (!textToSpeak) return;
+
+    // 1. Try Sarvam AI TTS via backend endpoint
+    try {
+      const res = await fetch(`${API_BASE}/api/chat/tts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text: textToSpeak,
+          language_code: langCode,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.audio) {
+          const audio = new Audio(`data:audio/${data.format || "wav"};base64,${data.audio}`);
+          activeAudioRef.current = audio;
+
+          audio.onplay = () => setIsSpeaking(true);
+          audio.onended = () => {
+            setIsSpeaking(false);
+            activeAudioRef.current = null;
+          };
+          audio.onerror = (e) => {
+            console.warn("Sarvam audio playback error:", e);
+            setIsSpeaking(false);
+            activeAudioRef.current = null;
+          };
+
+          await audio.play();
+          return;
+        }
+      }
+    } catch (sarvamErr) {
+      console.warn("Sarvam AI TTS error, using speech synthesis fallback:", sarvamErr);
+    }
+
+    // 2. Graceful fallback to browser speech synthesis
     try {
       if (!("speechSynthesis" in window)) return;
       window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-
-      const textToSpeak = cleanTextForSpeech(text);
-      if (!textToSpeak) return;
 
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
-
       utterance.onstart = () => setIsSpeaking(true);
       utterance.onend = () => setIsSpeaking(false);
       utterance.onerror = () => setIsSpeaking(false);
 
-      const getBestVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        if (!voices || voices.length === 0) return null;
-
-        const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
-
-        const femaleKeywords = [
-          "google हिन्दी", "google hindi", "kalpana", "komal", "swara", "madhur",
-          "lekha", "aditi", "veena", "sangeeta", "neerja", "heera", "zira", "samantha",
-          "karen", "victoria", "fiona", "moira", "tessa", "jenny", "aria", "eva",
-          "susan", "female", "woman", "google uk english female", "google us english female", "natural"
-        ];
-
-        let selected = null;
-
-        if (containsHindiScript) {
-          // 1. Prefer Hindi Female voice (Google हिन्दी, Kalpana, Swara, Komal, etc.)
-          selected = voices.find(
-            (v) =>
-              (v.lang.startsWith("hi") || v.name.toLowerCase().includes("hindi")) &&
-              femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
-          );
-          // 2. Any Hindi voice
-          if (!selected) {
-            selected = voices.find((v) => v.lang.startsWith("hi") || v.name.toLowerCase().includes("hindi"));
-          }
-          // 3. Indian English Female voice
-          if (!selected) {
-            selected = voices.find(
-              (v) =>
-                (v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")) &&
-                femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
-            );
-          }
-        } else {
-          // English / Hinglish Text
-          // 1. Indian English Female voice (Veena, Neerja, Sangeeta, Heera, etc.)
-          selected = voices.find(
-            (v) =>
-              (v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india")) &&
-              femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
-          );
-          // 2. Hindi Female voice (Pronounces Hinglish words naturally!)
-          if (!selected) {
-            selected = voices.find(
-              (v) =>
-                (v.lang.startsWith("hi") || v.name.toLowerCase().includes("hindi")) &&
-                femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
-            );
-          }
-          // 3. Any English Female voice (Samantha, Zira, Jenny, Karen, Aria, etc.)
-          if (!selected) {
-            selected = voices.find(
-              (v) =>
-                v.lang.startsWith("en") &&
-                femaleKeywords.some((kw) => v.name.toLowerCase().includes(kw))
-            );
-          }
-          // 4. Any en-IN voice
-          if (!selected) {
-            selected = voices.find((v) => v.lang === "en-IN" || v.lang === "en_IN" || v.name.toLowerCase().includes("india"));
-          }
-          // 5. Any English voice
-          if (!selected) {
-            selected = voices.find((v) => v.lang.startsWith("en"));
-          }
-        }
-
-        return selected;
-      };
-
-      const setVoiceAndSpeak = () => {
-        const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
-        const bestVoice = getBestVoice();
-        if (bestVoice) {
-          utterance.voice = bestVoice;
-          utterance.lang = bestVoice.lang || (containsHindiScript ? "hi-IN" : "en-IN");
-        } else {
-          utterance.lang = containsHindiScript ? "hi-IN" : "en-IN";
-        }
-        utterance.rate = 1.0;
-        utterance.pitch = 1.15; // Soft & clear female voice tone
-        setIsSpeaking(true);
-        window.speechSynthesis.speak(utterance);
-      };
-
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        setVoiceAndSpeak();
-      } else {
-        window.speechSynthesis.onvoiceschanged = () => {
-          setVoiceAndSpeak();
-          window.speechSynthesis.onvoiceschanged = null;
-        };
-        setTimeout(() => {
-          if (!window.speechSynthesis.speaking) {
-            setVoiceAndSpeak();
-          }
-        }, 200);
-      }
+      const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
+      utterance.lang = containsHindiScript ? "hi-IN" : "en-IN";
+      setIsSpeaking(true);
+      window.speechSynthesis.speak(utterance);
     } catch (err) {
-      console.warn("SpeechSynthesis error:", err);
+      console.warn("Speech synthesis fallback error:", err);
       setIsSpeaking(false);
     }
   };
@@ -274,9 +212,7 @@ export const AppProvider = ({ children }) => {
     if (!text || !text.trim()) return;
     const cleanText = text.trim();
 
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-    }
+    stopSpeakingText();
 
     setChatMessages((prev) => [...prev, { sender: "user", text: cleanText }]);
     setChatLoading(true);
@@ -294,7 +230,7 @@ export const AppProvider = ({ children }) => {
       const data = await res.json();
       const botReply = data.reply || "I couldn't process that. Please try asking again!";
       setChatMessages((prev) => [...prev, { sender: "bot", text: botReply }]);
-      speakText(botReply);
+      speakText(botReply, data.detected_language);
     } catch (err) {
       console.error("Chat error:", err);
       setChatMessages((prev) => [
@@ -313,6 +249,36 @@ export const AppProvider = ({ children }) => {
   };
 
   const stopVoiceRecognition = () => {
+    isVoiceListeningRef.current = false;
+    setIsVoiceListening(false);
+
+    if (recordingTimerRef.current) {
+      clearTimeout(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+
+    if (audioContextRef.current) {
+      try {
+        if (audioContextRef.current.state !== "closed") {
+          audioContextRef.current.close();
+        }
+      } catch (e) {}
+      audioContextRef.current = null;
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (err) {
+        console.warn("Error stopping MediaRecorder:", err);
+      }
+    }
+
     if (activeRecognitionRef.current) {
       try {
         if (typeof activeRecognitionRef.current.abort === "function") {
@@ -325,38 +291,30 @@ export const AppProvider = ({ children }) => {
       }
       activeRecognitionRef.current = null;
     }
-    setIsVoiceListening(false);
   };
 
-  const startVoiceRecognition = (onTranscript, onError) => {
-    if (activeRecognitionRef.current || isVoiceListening) {
-      stopVoiceRecognition();
-      return null;
-    }
-
+  const startBrowserSpeechRecognition = (onTranscript, onError) => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Voice Recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      alert("Voice recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
       return null;
     }
     try {
-      if ("speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
-
+      stopSpeakingText();
       const recognition = new SpeechRecognition();
       activeRecognitionRef.current = recognition;
-      recognition.lang = "en-US";
+      recognition.lang = "hi-IN";
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
+        isVoiceListeningRef.current = true;
         setIsVoiceListening(true);
       };
-
       recognition.onresult = (event) => {
         const transcript = event.results?.[0]?.[0]?.transcript;
         activeRecognitionRef.current = null;
+        isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
         if (transcript && transcript.trim()) {
           if (onTranscript) {
@@ -366,33 +324,194 @@ export const AppProvider = ({ children }) => {
           }
         }
       };
-
       recognition.onerror = (err) => {
-        console.warn("Speech recognition error:", err);
+        console.warn("Browser speech recognition error:", err);
         activeRecognitionRef.current = null;
+        isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
         if (onError) onError(err);
       };
-
       recognition.onend = () => {
         activeRecognitionRef.current = null;
+        isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
       };
 
       recognition.start();
       return recognition;
     } catch (e) {
-      console.error("Failed to start speech recognition:", e);
+      console.error("Browser speech recognition failed:", e);
       activeRecognitionRef.current = null;
+      isVoiceListeningRef.current = false;
       setIsVoiceListening(false);
       return null;
     }
   };
 
+  const startVoiceRecognition = async (onTranscript, onError) => {
+    if (isVoiceListeningRef.current || (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording")) {
+      stopVoiceRecognition();
+      return;
+    }
+
+    stopSpeakingText();
+    currentTranscriptCallbackRef.current = onTranscript || null;
+    setIsChatOpen(true);
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+      startBrowserSpeechRecognition(onTranscript, onError);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      let mimeType = "audio/webm";
+      if (!MediaRecorder.isTypeSupported("audio/webm")) {
+        if (MediaRecorder.isTypeSupported("audio/mp4")) {
+          mimeType = "audio/mp4";
+        } else {
+          mimeType = "";
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onstart = () => {
+        isVoiceListeningRef.current = true;
+        setIsVoiceListening(true);
+      };
+
+      recorder.onstop = async () => {
+        isVoiceListeningRef.current = false;
+        setIsVoiceListening(false);
+
+        if (mediaStreamRef.current) {
+          try {
+            mediaStreamRef.current.getTracks().forEach((track) => track.stop());
+          } catch (e) {}
+          mediaStreamRef.current = null;
+        }
+
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || "audio/webm" });
+        if (audioBlob.size < 200) {
+          console.log("Audio recording too short, skipping transcription.");
+          return;
+        }
+
+        // Send recorded audio to Sarvam Saaras STT (Multilingual)
+        try {
+          const formData = new FormData();
+          formData.append("file", audioBlob, `recording.${mimeType.includes("mp4") ? "mp4" : "webm"}`);
+
+          const res = await fetch(`${API_BASE}/api/chat/stt`, {
+            method: "POST",
+            body: formData,
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.transcript && data.transcript.trim()) {
+              const cb = currentTranscriptCallbackRef.current;
+              currentTranscriptCallbackRef.current = null;
+              if (cb) {
+                cb(data.transcript.trim(), data.language_code);
+              } else {
+                processVoiceQuestion(data.transcript.trim());
+              }
+              return;
+            }
+          } else {
+            console.warn("Sarvam STT server response:", res.status);
+          }
+        } catch (sttErr) {
+          console.error("Sarvam STT network error:", sttErr);
+          if (onError) onError(sttErr);
+        }
+      };
+
+      recorder.start(250);
+      isVoiceListeningRef.current = true;
+      setIsVoiceListening(true);
+
+      // Web Audio API Silence & Voice Activity Detection (Auto-stop when speaker finishes)
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) {
+          const audioCtx = new AudioContextClass();
+          audioContextRef.current = audioCtx;
+          const source = audioCtx.createMediaStreamSource(stream);
+          const analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 512;
+          source.connect(analyser);
+
+          const dataArray = new Uint8Array(analyser.frequencyBinCount);
+          let hasSpoken = false;
+          let silenceStart = null;
+
+          const detectSilence = () => {
+            if (!isVoiceListeningRef.current) return;
+            analyser.getByteFrequencyData(dataArray);
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+              sum += dataArray[i];
+            }
+            const avg = sum / dataArray.length;
+
+            if (avg > 10) {
+              hasSpoken = true;
+              silenceStart = null;
+            } else if (hasSpoken) {
+              if (!silenceStart) {
+                silenceStart = Date.now();
+              } else if (Date.now() - silenceStart > 1600) {
+                // User spoke and then paused for 1.6s -> auto-finish and transcribe!
+                stopVoiceRecognition();
+                return;
+              }
+            }
+            animationFrameRef.current = requestAnimationFrame(detectSilence);
+          };
+
+          animationFrameRef.current = requestAnimationFrame(detectSilence);
+        }
+      } catch (vadErr) {
+        console.warn("VAD init note:", vadErr);
+      }
+
+      // Max timeout: auto-stop after 12 seconds
+      recordingTimerRef.current = setTimeout(() => {
+        if (isVoiceListeningRef.current) {
+          stopVoiceRecognition();
+        }
+      }, 12000);
+    } catch (err) {
+      console.warn("Microphone access error:", err);
+      isVoiceListeningRef.current = false;
+      setIsVoiceListening(false);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        alert("Microphone permission was denied. Please allow microphone access in your browser settings to ask voice doubts.");
+      } else {
+        startBrowserSpeechRecognition(onTranscript, onError);
+      }
+      if (onError) onError(err);
+    }
+  };
+
   const toggleVoiceRecognition = (onTranscript, onError) => {
-    if (isVoiceListening || activeRecognitionRef.current) {
+    if (isVoiceListeningRef.current || (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") || activeRecognitionRef.current) {
       stopVoiceRecognition();
     } else {
+      setIsChatOpen(true);
       startVoiceRecognition(onTranscript, onError);
     }
   };
@@ -411,7 +530,7 @@ export const AppProvider = ({ children }) => {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isVoiceListening]);
+  }, []);
 
   // --- Adders (Append NOT Replace) ---
   const addAssignment = (newAssignment) => {

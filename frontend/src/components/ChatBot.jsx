@@ -307,6 +307,17 @@ export default function ChatBot({ standalone = false }) {
             )}
           </div>
 
+          {/* Listening Indicator Banner */}
+          {isVoiceListening && (
+            <div className="bg-red-500/15 border border-red-500/40 text-red-600 dark:text-red-400 px-3 py-1.5 rounded-xl text-xs font-medium flex items-center justify-between animate-pulse mx-2.5 my-1.5">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                <span>🎙️ Listening... Speak now</span>
+              </div>
+              <span className="text-[10px] bg-red-500/20 px-2 py-0.5 rounded-full font-mono">Press V to send</span>
+            </div>
+          )}
+
           {/* Input field */}
           <div className={`flex items-center gap-2 p-2.5 border-t ${
             isDark ? "bg-slate-900 border-slate-800" : "bg-white border-slate-100"
@@ -321,7 +332,7 @@ export default function ChatBot({ standalone = false }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Ask a doubt or question..."
+              placeholder={isVoiceListening ? "Listening... Speak or press V" : "Ask a doubt or question... (Press V to speak)"}
             />
             <button
               onClick={handleVoiceClick}
@@ -333,7 +344,7 @@ export default function ChatBot({ standalone = false }) {
                   ? "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
                   : "bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
               }`}
-              title="Ask by Voice"
+              title={isVoiceListening ? "Listening... Click to send (or press V)" : "Ask by Voice (or press V)"}
             >
               🎤
             </button>

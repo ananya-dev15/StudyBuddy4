@@ -27,7 +27,10 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const [showFreshIntro, setShowFreshIntro] = useState(false);
+  // Play intro on initial link open (except on /intro or /verify-email)
+  const [showFreshIntro, setShowFreshIntro] = useState(() => {
+    return !["/intro", "/verify-email"].includes(location.pathname);
+  });
 
   const handleFreshIntroComplete = () => {
     setShowFreshIntro(false);
