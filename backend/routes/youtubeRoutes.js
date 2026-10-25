@@ -9,12 +9,12 @@ import {
 
 const router = express.Router();
 
-// Public route: search educational YouTube videos (no auth required)
+// Public routes: search educational YouTube videos & fetch playlist info
 router.get("/search", searchYouTube);
+router.get("/playlist", getPlaylistInfo);
 
 // Protected routes (require user login session)
 router.get("/video", protect, getVideoInfo);
-router.get("/playlist", protect, getPlaylistInfo);
 router.post("/save-progress", protect, saveProgress);
 
 export default router;

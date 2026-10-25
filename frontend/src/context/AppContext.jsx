@@ -94,6 +94,11 @@ export const AppProvider = ({ children }) => {
   const [activeVideoContext, setActiveVideoContext] = useState(null);
   const activeRecognitionRef = useRef(null);
   const activeAudioRef = useRef(null);
+  const allAudiosRef = useRef(new Set());
+  const activeUtteranceRef = useRef(null);
+  const currentSpeechIdRef = useRef(0);
+  const isVoiceStartingRef = useRef(false);
+  const lastProcessedTranscriptRef = useRef({ text: "", timestamp: 0 });
   const mediaRecorderRef = useRef(null);
   const mediaStreamRef = useRef(null);
   const audioChunksRef = useRef([]);
@@ -130,27 +135,51 @@ export const AppProvider = ({ children }) => {
   };
 
   const stopSpeakingText = () => {
+    // 1. Invalidate any pending TTS fetch or delayed audio play
+    currentSpeechIdRef.current++;
+
+    // 2. Stop and purge all active HTML5 Audio instances
     if (activeAudioRef.current) {
       try {
         activeAudioRef.current.pause();
+        activeAudioRef.current.src = "";
         activeAudioRef.current.currentTime = 0;
       } catch (err) {}
       activeAudioRef.current = null;
     }
+    allAudiosRef.current.forEach((audioItem) => {
+      try {
+        audioItem.pause();
+        audioItem.src = "";
+        audioItem.currentTime = 0;
+      } catch (e) {}
+    });
+    allAudiosRef.current.clear();
+
+    // 3. Stop browser SpeechSynthesis completely
     if ("speechSynthesis" in window) {
       try {
+        window.speechSynthesis.pause();
         window.speechSynthesis.cancel();
       } catch (err) {}
     }
+    activeUtteranceRef.current = null;
+
     setIsSpeaking(false);
   };
 
   const speakText = async (text, langCode = null) => {
     if (!text) return;
+    
+    // Always stop and cancel any previous speech immediately
     stopSpeakingText();
 
     const textToSpeak = cleanTextForSpeech(text);
     if (!textToSpeak) return;
+
+    // Unique speech request ID to prevent race conditions & overlapping audios
+    const thisSpeechId = ++currentSpeechIdRef.current;
+    setIsSpeaking(true);
 
     // 1. Try Sarvam AI TTS via backend endpoint
     try {
@@ -163,47 +192,53 @@ export const AppProvider = ({ children }) => {
         }),
       });
 
+      // If speech was cancelled or a newer speech was requested while fetching, abort!
+      if (currentSpeechIdRef.current !== thisSpeechId) {
+        return;
+      }
+
       if (res.ok) {
         const data = await res.json();
+        if (currentSpeechIdRef.current !== thisSpeechId) return;
+
         if (data.success && data.audio) {
           const audio = new Audio(`data:audio/${data.format || "wav"};base64,${data.audio}`);
           activeAudioRef.current = audio;
+          allAudiosRef.current.add(audio);
 
-          audio.onplay = () => setIsSpeaking(true);
+          audio.onplay = () => {
+            if (currentSpeechIdRef.current !== thisSpeechId) {
+              audio.pause();
+              audio.src = "";
+              allAudiosRef.current.delete(audio);
+              return;
+            }
+            setIsSpeaking(true);
+          };
           audio.onended = () => {
-            setIsSpeaking(false);
-            activeAudioRef.current = null;
+            allAudiosRef.current.delete(audio);
+            if (currentSpeechIdRef.current === thisSpeechId) {
+              setIsSpeaking(false);
+              activeAudioRef.current = null;
+            }
           };
           audio.onerror = (e) => {
-            console.warn("Sarvam audio playback error:", e);
-            setIsSpeaking(false);
-            activeAudioRef.current = null;
+            allAudiosRef.current.delete(audio);
+            if (currentSpeechIdRef.current === thisSpeechId) {
+              setIsSpeaking(false);
+              activeAudioRef.current = null;
+            }
           };
 
           await audio.play();
           return;
         }
+      } else {
+        console.warn("AI TTS returned non-OK response:", res.status);
+        setIsSpeaking(false);
       }
-    } catch (sarvamErr) {
-      console.warn("Sarvam AI TTS error, using speech synthesis fallback:", sarvamErr);
-    }
-
-    // 2. Graceful fallback to browser speech synthesis
-    try {
-      if (!("speechSynthesis" in window)) return;
-      window.speechSynthesis.cancel();
-
-      const utterance = new SpeechSynthesisUtterance(textToSpeak);
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => setIsSpeaking(false);
-      utterance.onerror = () => setIsSpeaking(false);
-
-      const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
-      utterance.lang = containsHindiScript ? "hi-IN" : "en-IN";
-      setIsSpeaking(true);
-      window.speechSynthesis.speak(utterance);
-    } catch (err) {
-      console.warn("Speech synthesis fallback error:", err);
+    } catch (ttsErr) {
+      console.warn("AI TTS error:", ttsErr);
       setIsSpeaking(false);
     }
   };
@@ -244,8 +279,21 @@ export const AppProvider = ({ children }) => {
 
   const processVoiceQuestion = (transcript, overrideContext = null) => {
     if (!transcript || !transcript.trim()) return;
+    const clean = transcript.trim();
+
+    // Prevent duplicate transcript execution within 2 seconds
+    const now = Date.now();
+    if (
+      lastProcessedTranscriptRef.current.text === clean &&
+      now - lastProcessedTranscriptRef.current.timestamp < 2000
+    ) {
+      console.log("Duplicate voice transcript ignored:", clean);
+      return;
+    }
+    lastProcessedTranscriptRef.current = { text: clean, timestamp: now };
+
     setIsChatOpen(true);
-    sendMessageToChatbot(transcript.trim(), overrideContext);
+    sendMessageToChatbot(clean, overrideContext);
   };
 
   const stopVoiceRecognition = () => {
@@ -303,21 +351,28 @@ export const AppProvider = ({ children }) => {
       stopSpeakingText();
       const recognition = new SpeechRecognition();
       activeRecognitionRef.current = recognition;
-      recognition.lang = "hi-IN";
+      recognition.lang = "en-IN";
       recognition.interimResults = false;
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
+        isVoiceStartingRef.current = false;
         isVoiceListeningRef.current = true;
         setIsVoiceListening(true);
       };
       recognition.onresult = (event) => {
         const transcript = event.results?.[0]?.[0]?.transcript;
         activeRecognitionRef.current = null;
+        isVoiceStartingRef.current = false;
         isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
         if (transcript && transcript.trim()) {
-          if (onTranscript) {
+          setIsChatOpen(true);
+          const cb = currentTranscriptCallbackRef.current;
+          currentTranscriptCallbackRef.current = null;
+          if (cb) {
+            cb(transcript.trim());
+          } else if (onTranscript) {
             onTranscript(transcript.trim());
           } else {
             processVoiceQuestion(transcript.trim());
@@ -327,12 +382,14 @@ export const AppProvider = ({ children }) => {
       recognition.onerror = (err) => {
         console.warn("Browser speech recognition error:", err);
         activeRecognitionRef.current = null;
+        isVoiceStartingRef.current = false;
         isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
         if (onError) onError(err);
       };
       recognition.onend = () => {
         activeRecognitionRef.current = null;
+        isVoiceStartingRef.current = false;
         isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
       };
@@ -342,14 +399,17 @@ export const AppProvider = ({ children }) => {
     } catch (e) {
       console.error("Browser speech recognition failed:", e);
       activeRecognitionRef.current = null;
+      isVoiceStartingRef.current = false;
       isVoiceListeningRef.current = false;
       setIsVoiceListening(false);
+      if (onError) onError(e);
       return null;
     }
   };
 
   const startVoiceRecognition = async (onTranscript, onError) => {
-    if (isVoiceListeningRef.current || (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording")) {
+    if (isVoiceListeningRef.current || (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") || activeRecognitionRef.current) {
+      isVoiceStartingRef.current = false;
       stopVoiceRecognition();
       return;
     }
@@ -358,7 +418,15 @@ export const AppProvider = ({ children }) => {
     currentTranscriptCallbackRef.current = onTranscript || null;
     setIsChatOpen(true);
 
+    // Prefer native SpeechRecognition (Google Chrome / Edge / Safari native engine - instant, free, unlimited, works natively in browser)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      isVoiceStartingRef.current = false;
+      return startBrowserSpeechRecognition(onTranscript, onError);
+    }
+
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
+      isVoiceStartingRef.current = false;
       startBrowserSpeechRecognition(onTranscript, onError);
       return;
     }
@@ -387,11 +455,13 @@ export const AppProvider = ({ children }) => {
       };
 
       recorder.onstart = () => {
+        isVoiceStartingRef.current = false;
         isVoiceListeningRef.current = true;
         setIsVoiceListening(true);
       };
 
       recorder.onstop = async () => {
+        isVoiceStartingRef.current = false;
         isVoiceListeningRef.current = false;
         setIsVoiceListening(false);
 
@@ -440,6 +510,7 @@ export const AppProvider = ({ children }) => {
       };
 
       recorder.start(250);
+      isVoiceStartingRef.current = false;
       isVoiceListeningRef.current = true;
       setIsVoiceListening(true);
 
@@ -495,6 +566,7 @@ export const AppProvider = ({ children }) => {
         }
       }, 12000);
     } catch (err) {
+      isVoiceStartingRef.current = false;
       console.warn("Microphone access error:", err);
       isVoiceListeningRef.current = false;
       setIsVoiceListening(false);
@@ -508,9 +580,13 @@ export const AppProvider = ({ children }) => {
   };
 
   const toggleVoiceRecognition = (onTranscript, onError) => {
+    if (isVoiceStartingRef.current) {
+      return;
+    }
     if (isVoiceListeningRef.current || (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") || activeRecognitionRef.current) {
       stopVoiceRecognition();
     } else {
+      isVoiceStartingRef.current = true;
       setIsChatOpen(true);
       startVoiceRecognition(onTranscript, onError);
     }
@@ -519,12 +595,30 @@ export const AppProvider = ({ children }) => {
   // 🎙️ Global Hotkey: Press 'V' to toggle voice recognition on/off
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Ignore key repeats when holding the key down
+      if (e.repeat) return;
+
       const activeTag = document.activeElement?.tagName;
       const isEditable = document.activeElement?.isContentEditable;
-      if (["INPUT", "TEXTAREA", "SELECT"].includes(activeTag) || isEditable) return;
+
+      // If user is typing in textarea or contentEditable, don't trigger voice
+      if (["TEXTAREA", "SELECT"].includes(activeTag) || isEditable) return;
+
+      // If focused on an INPUT element:
+      if (activeTag === "INPUT") {
+        const val = document.activeElement?.value;
+        // If there is already text typed, let the user type normally
+        if (val && val.trim().length > 0) {
+          return;
+        }
+      }
 
       if (e.key === "v" || e.key === "V") {
         e.preventDefault();
+        if (document.activeElement?.blur) {
+          document.activeElement.blur();
+        }
+        setIsChatOpen(true);
         toggleVoiceRecognition();
       }
     };

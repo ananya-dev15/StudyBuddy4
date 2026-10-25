@@ -12,7 +12,21 @@ const IntroPage = () => {
   const navigate = useNavigate();
   const destination = location.state?.destination || "/";
 
+  // If user refreshed while on /intro, skip directly to destination
+  React.useEffect(() => {
+    try {
+      const navEntries = performance.getEntriesByType("navigation");
+      const isReload = (navEntries && navEntries[0]?.type === "reload") || (performance.navigation && performance.navigation.type === 1);
+      if (isReload) {
+        navigate(destination, { replace: true });
+      }
+    } catch (e) {}
+  }, [destination, navigate]);
+
   const handleComplete = () => {
+    try {
+      sessionStorage.setItem("studybuddy_intro_played", "true");
+    } catch (e) {}
     navigate(destination, { replace: true });
   };
 

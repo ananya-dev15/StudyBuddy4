@@ -27,12 +27,45 @@ function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Play intro on initial link open (except on /intro or /verify-email)
+  // Play intro only on fresh link open (NOT on page refresh, and NOT on /intro or /verify-email)
   const [showFreshIntro, setShowFreshIntro] = useState(() => {
-    return !["/intro", "/verify-email"].includes(location.pathname);
+    if (["/intro", "/verify-email"].includes(location.pathname)) {
+      return false;
+    }
+
+    // Check if the user refreshed the webpage (F5 / Cmd+R / browser reload)
+    let isReload = false;
+    try {
+      const navEntries = performance.getEntriesByType("navigation");
+      if (navEntries && navEntries.length > 0) {
+        isReload = navEntries[0].type === "reload";
+      } else if (performance.navigation) {
+        isReload = performance.navigation.type === 1;
+      }
+    } catch (e) {
+      isReload = false;
+    }
+
+    // Check if link was already opened in this browser session
+    let alreadyOpenedInSession = false;
+    try {
+      alreadyOpenedInSession = sessionStorage.getItem("studybuddy_intro_played") === "true";
+    } catch (e) {
+      alreadyOpenedInSession = false;
+    }
+
+    // Never play on page refresh or if already played in this session
+    if (isReload || alreadyOpenedInSession) {
+      return false;
+    }
+
+    return true;
   });
 
   const handleFreshIntroComplete = () => {
+    try {
+      sessionStorage.setItem("studybuddy_intro_played", "true");
+    } catch (e) {}
     setShowFreshIntro(false);
   };
 

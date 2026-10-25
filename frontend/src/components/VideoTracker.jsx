@@ -393,6 +393,10 @@ export default function VideoTracker() {
   const [searchNextPageToken, setSearchNextPageToken] = useState(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [playerError, setPlayerError] = useState(null);
+  const [searchFilter, setSearchFilter] = useState("all"); // "all" | "videos" | "playlists"
+  const [expandedPlaylistId, setExpandedPlaylistId] = useState(null);
+  const [playlistVideosCache, setPlaylistVideosCache] = useState({});
+  const [loadingPlaylistId, setLoadingPlaylistId] = useState(null);
 
   // 🔔 Custom Notification Popup Modal (same style as Focus Timer popup)
   const [notificationPopup, setNotificationPopup] = useState({
@@ -2511,8 +2515,13 @@ export default function VideoTracker() {
       setSearchNextPageToken(data.nextPageToken || null);
       if (isLoadMore) {
         setSearchResults((prev) => {
-          const existingIds = new Set(prev.map((i) => i.videoId));
-          const newItems = (data.items || []).filter((i) => !existingIds.has(i.videoId));
+          const existingKeys = new Set(
+            prev.map((i) => (i.isPlaylist ? `pl_${i.playlistId}` : `vid_${i.videoId}`))
+          );
+          const newItems = (data.items || []).filter((i) => {
+            const key = i.isPlaylist ? `pl_${i.playlistId}` : `vid_${i.videoId}`;
+            return key && !existingKeys.has(key);
+          });
           return [...prev, ...newItems];
         });
       } else {
@@ -2602,6 +2611,119 @@ export default function VideoTracker() {
       details: [
         `Channel: ${item.channelTitle}`,
         `Duration: ${item.durationFormatted || "Full Video"}`,
+      ],
+      buttonText: "Let's Study",
+    });
+  };
+
+  const handleTogglePlaylist = async (playlist) => {
+    if (!playlist || !playlist.playlistId) return;
+    const plId = playlist.playlistId;
+
+    if (expandedPlaylistId === plId) {
+      setExpandedPlaylistId(null);
+      return;
+    }
+
+    setExpandedPlaylistId(plId);
+
+    if (playlistVideosCache[plId]?.length > 0) {
+      return;
+    }
+
+    setLoadingPlaylistId(plId);
+    try {
+      const res = await fetch(`${API_BASE}/api/youtube/playlist?playlistId=${plId}`);
+      const data = await res.json();
+      if (data.success && Array.isArray(data.items)) {
+        setPlaylistVideosCache((prev) => ({
+          ...prev,
+          [plId]: data.items,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to load playlist items:", err);
+    } finally {
+      setLoadingPlaylistId(null);
+    }
+  };
+
+  const handleSelectPlaylistVideo = async (playlist, videoItem) => {
+    if (!videoItem || !videoItem.videoId) return;
+
+    if (appState.coins === 0) {
+      setShowZeroCoinsPopup(true);
+      return;
+    }
+
+    const vid = videoItem.videoId;
+    const allowed = await isStudyVideo(vid);
+    if (!allowed) {
+      setBlockedTitle("This video is not study related!");
+      setShowBlockedPopup(true);
+      playRestrictionSound();
+      return;
+    }
+
+    const playedSeconds = sessionPlayedSecondsRef.current ?? sessionPlayedSeconds;
+    if (playedSeconds >= 5 && handleStopSaveRef.current) {
+      try {
+        await handleStopSaveRef.current(false);
+      } catch (err) {
+        console.warn("Could not save previous session:", err);
+      }
+    }
+
+    setPlayerError(null);
+    const plUrl = `https://www.youtube.com/watch?v=${vid}&list=${playlist.playlistId}`;
+    setInputUrl(plUrl);
+    setVideoId(vid);
+    setLocalVideoFile(null);
+    setLocalVideoObjectUrl(null);
+    setVideoMeta({
+      title: videoItem.title,
+      channelTitle: playlist.channelTitle || "YouTube",
+      thumbnail: videoItem.thumbnail,
+      duration: 0,
+      description: "",
+      isStudyVideo: true,
+      studyScore: 100,
+    });
+    setResumePosition(0);
+    setSessionPlayedSeconds(0);
+    setTabSwitches(0);
+    hasResumedRef.current = false;
+
+    // Load full playlist items into tracker's playlist panel
+    const cachedItems = playlistVideosCache[playlist.playlistId];
+    if (cachedItems && cachedItems.length > 0) {
+      setPlaylistItems(cachedItems);
+    } else {
+      loadPlaylistForUrl(plUrl);
+    }
+
+    loadYouTubeData(vid);
+
+    if (youtubePlayerRef.current && typeof youtubePlayerRef.current.loadVideoById === "function") {
+      try {
+        youtubePlayerRef.current.loadVideoById({ videoId: vid });
+      } catch (err) {
+        console.warn("Could not load video in active player:", err);
+      }
+    }
+
+    setShowTimerPopup(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    triggerNotification({
+      title: "Playlist Video Loaded",
+      subtitle: videoItem.title,
+      badge: `▶ ${playlist.title}`,
+      badgeColor: "#6366f1",
+      icon: "📑",
+      details: [
+        `Playlist: ${playlist.title}`,
+        `Channel: ${playlist.channelTitle}`,
       ],
       buttonText: "Let's Study",
     });
@@ -4269,16 +4391,82 @@ export default function VideoTracker() {
 
                 {/* Results List */}
                 {!searchLoading && searchResults.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs font-bold px-1 select-none">
-                      <span className={isDark ? "text-gray-400" : "text-gray-600"}>
-                        Search Results ({searchResults.length}{searchNextPageToken ? "+" : ""})
-                      </span>
+                  <div className="flex-1 min-h-0 flex flex-col pt-1">
+                    <div className="flex-shrink-0 flex flex-wrap items-center justify-between gap-2 text-xs font-bold px-1 select-none pb-1.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={isDark ? "text-gray-400" : "text-gray-600"}>
+                          Results ({searchResults.length}{searchNextPageToken ? "+" : ""})
+                          <span
+                            className="ml-2 text-[10px] font-normal opacity-70 hidden sm:inline cursor-help"
+                            title="Ranked intelligently based on current trending popularity, engagement rate & student reliability"
+                          >
+                            • Intelligently Ranked
+                          </span>
+                        </span>
+
+                        {searchNextPageToken && (
+                          <button
+                            type="button"
+                            onClick={(e) => handleYouTubeSearch(e, null, searchNextPageToken)}
+                            disabled={searchLoadingMore}
+                            className="text-[11px] font-bold text-indigo-500 hover:text-indigo-400 dark:text-indigo-400 dark:hover:text-indigo-300 underline cursor-pointer disabled:opacity-50"
+                            title="Fetch more videos and playlists"
+                          >
+                            {searchLoadingMore ? "Loading..." : "+ Load More"}
+                          </button>
+                        )}
+
+                        {/* Filter Tabs if both videos & playlists exist */}
+                        {searchResults.some((i) => i.isPlaylist) && (
+                          <div className={`flex items-center gap-1 p-0.5 rounded-lg text-[11px] ${
+                            isDark ? "bg-gray-800/80 border border-gray-700/60" : "bg-gray-200/80 border border-gray-300/60"
+                          }`}>
+                            <button
+                              type="button"
+                              onClick={() => setSearchFilter("all")}
+                              className={`px-2 py-0.5 rounded-md transition ${
+                                searchFilter === "all"
+                                  ? "bg-indigo-600 text-white font-bold shadow-sm"
+                                  : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                              }`}
+                            >
+                              All ({searchResults.length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSearchFilter("videos")}
+                              className={`px-2 py-0.5 rounded-md transition ${
+                                searchFilter === "videos"
+                                  ? "bg-indigo-600 text-white font-bold shadow-sm"
+                                  : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                              }`}
+                            >
+                              Videos ({searchResults.filter((i) => !i.isPlaylist).length})
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSearchFilter("playlists")}
+                              className={`px-2 py-0.5 rounded-md transition flex items-center gap-1 ${
+                                searchFilter === "playlists"
+                                  ? "bg-indigo-600 text-white font-bold shadow-sm"
+                                  : isDark ? "text-gray-400 hover:text-white" : "text-gray-600 hover:text-gray-900"
+                              }`}
+                            >
+                              <span>Playlists</span>
+                              <span className="px-1 rounded bg-indigo-500/30 text-[10px]">
+                                {searchResults.filter((i) => i.isPlaylist).length}
+                              </span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
                       <button
                         type="button"
                         onClick={() => {
                           setSearchResults([]);
                           setHasSearched(false);
+                          setExpandedPlaylistId(null);
                         }}
                         className="text-gray-400 hover:text-red-400 transition"
                       >
@@ -4286,107 +4474,359 @@ export default function VideoTracker() {
                       </button>
                     </div>
 
-                    <div className="max-h-[250px] overflow-y-auto space-y-2 pr-1 custom-scrollbar flex-1 min-h-0">
-                      {searchResults.map((item) => {
-                        const isCurrent = videoId === item.videoId;
-                        return (
-                          <div
-                            key={item.videoId}
-                            onClick={() => handleSelectSearchResult(item)}
-                            className={`p-2.5 rounded-2xl border transition-all duration-200 flex items-center gap-3 cursor-pointer group ${
-                              isCurrent
-                                ? isDark
-                                  ? "bg-indigo-950/60 border-indigo-500/70 shadow-lg shadow-indigo-900/30 ring-1 ring-indigo-500/40"
-                                  : "bg-emerald-50 border-emerald-500 shadow-md ring-1 ring-emerald-500/30"
-                                : isDark
-                                  ? "bg-[#0f1318] border-gray-800/90 hover:bg-[#181d24] hover:border-gray-700"
-                                  : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
-                            }`}
-                          >
-                            <div className="relative w-24 sm:w-28 h-16 sm:h-18 rounded-xl overflow-hidden flex-shrink-0 bg-black/40">
-                              <img
-                                src={item.thumbnail}
-                                alt={item.title}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                                loading="lazy"
-                              />
-                              {item.durationFormatted && (
-                                <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-black/80 text-white tracking-wide">
-                                  {item.durationFormatted}
-                                </span>
-                              )}
-                            </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain space-y-2.5 pr-1.5 custom-scrollbar">
+                      {searchResults
+                        .filter((item) => {
+                          if (searchFilter === "videos") return !item.isPlaylist;
+                          if (searchFilter === "playlists") return item.isPlaylist;
+                          return true;
+                        })
+                        .map((item, index) => {
+                          const isCurrent = videoId === item.videoId;
+                          const isBestSuggested = Boolean(item.isBestSuggested || (index === 0 && !searchNextPageToken));
 
-                            <div className="flex-1 min-w-0 pr-1">
-                              <h4
-                                className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug group-hover:text-indigo-400 transition-colors ${
-                                  isDark ? "text-white" : "text-gray-900"
+                          // ────────── PLAYLIST ITEM CARD ──────────
+                          if (item.isPlaylist) {
+                            const isExpanded = expandedPlaylistId === item.playlistId;
+                            const playlistVideos = playlistVideosCache[item.playlistId] || [];
+                            const isLoadingThisPl = loadingPlaylistId === item.playlistId;
+
+                            return (
+                              <div
+                                key={item.playlistId}
+                                className={`rounded-2xl border transition-all duration-200 overflow-hidden ${
+                                  isExpanded
+                                    ? isDark
+                                      ? "bg-[#0b0e14] border-indigo-500/60 shadow-lg shadow-indigo-950/40 ring-1 ring-indigo-500/30"
+                                      : "bg-white border-indigo-300 shadow-md ring-1 ring-indigo-400/20"
+                                    : isDark
+                                      ? "bg-[#0f1318] border-gray-800/90 hover:bg-[#151a22] hover:border-indigo-900/50"
+                                      : "bg-white border-gray-200 hover:bg-gray-50 hover:border-indigo-200 shadow-sm"
                                 }`}
                               >
-                                {item.title}
-                              </h4>
-                              <p
-                                className={`text-[11px] sm:text-xs mt-1 truncate flex items-center gap-1.5 ${
-                                  isDark ? "text-gray-400" : "text-gray-500"
-                                }`}
-                              >
-                                <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
-                                <span>{item.channelTitle}</span>
-                              </p>
-                            </div>
+                                <div
+                                  onClick={() => handleTogglePlaylist(item)}
+                                  className="p-2.5 flex items-center gap-3 cursor-pointer group select-none"
+                                >
+                                  {/* Playlist Thumbnail with Overlay */}
+                                  <div className="relative w-24 sm:w-28 h-16 sm:h-18 rounded-xl overflow-hidden flex-shrink-0 bg-black/50">
+                                    <img
+                                      src={item.thumbnail}
+                                      alt={item.title}
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                      loading="lazy"
+                                    />
+                                    {/* Right vertical banner overlay (YouTube Playlist style) */}
+                                    <div className="absolute inset-y-0 right-0 w-8 sm:w-9 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center text-white gap-0.5 border-l border-white/10">
+                                      <span className="text-[11px]">📑</span>
+                                      <span className="text-[9px] font-black">{item.itemCount || ""}</span>
+                                    </div>
+                                    <span className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[8px] sm:text-[9px] font-black uppercase bg-indigo-600 text-white shadow-sm tracking-wider">
+                                      Playlist
+                                    </span>
+                                  </div>
 
-                            <div className="flex-shrink-0 pr-1">
-                              {isCurrent ? (
-                                <span className="px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-emerald-500 text-white flex items-center gap-1 shadow-sm">
-                                  <span>▶</span> Playing
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleSelectSearchResult(item);
-                                  }}
-                                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 ${
-                                    isDark
-                                      ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm"
-                                      : "bg-[#1b3f30] hover:bg-[#143024] text-white shadow-sm"
+                                  {/* Info */}
+                                  <div className="flex-1 min-w-0 pr-1">
+                                    <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-indigo-500/15 border border-indigo-500/40 text-indigo-400">
+                                        <span>📑</span> Playlist {item.itemCount ? `• ${item.itemCount} videos` : "• Complete Course"}
+                                      </div>
+                                      {isBestSuggested && (
+                                        <div
+                                          title={item.suggestedReason || "Recommended based on current popularity, engagement & student reliability"}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-500/15 border border-amber-500/40 text-amber-500 dark:text-amber-400 cursor-help"
+                                        >
+                                          <span>⭐</span> Best Suggested
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <h4
+                                      className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug group-hover:text-indigo-400 transition-colors ${
+                                        isDark ? "text-white" : "text-gray-900"
+                                      }`}
+                                    >
+                                      {item.title}
+                                    </h4>
+
+                                    <p className={`text-[11px] sm:text-xs mt-1 truncate flex items-center gap-1.5 ${
+                                      isDark ? "text-gray-400" : "text-gray-500"
+                                    }`}>
+                                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+                                      <span className="truncate">{item.channelTitle}</span>
+                                    </p>
+                                  </div>
+
+                                  {/* Action Buttons */}
+                                  <div className="flex-shrink-0 flex items-center gap-1.5 pr-1" onClick={(e) => e.stopPropagation()}>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleTogglePlaylist(item)}
+                                      className={`px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 ${
+                                        isExpanded
+                                          ? "bg-indigo-600 text-white shadow-sm"
+                                          : isDark
+                                            ? "bg-gray-800 hover:bg-gray-700 text-gray-200"
+                                            : "bg-gray-100 hover:bg-gray-200 text-gray-800"
+                                      }`}
+                                      title={isExpanded ? "Collapse playlist videos" : "View videos inside this playlist"}
+                                    >
+                                      <span>{isExpanded ? "Hide" : "Videos"}</span>
+                                      <span className="text-[10px]">{isExpanded ? "▲" : "▼"}</span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const cached = playlistVideosCache[item.playlistId];
+                                        if (cached && cached.length > 0) {
+                                          handleSelectPlaylistVideo(item, cached[0]);
+                                        } else {
+                                          setLoadingPlaylistId(item.playlistId);
+                                          try {
+                                            const res = await fetch(`${API_BASE}/api/youtube/playlist?playlistId=${item.playlistId}`);
+                                            const data = await res.json();
+                                            if (data.success && data.items?.length > 0) {
+                                              setPlaylistVideosCache((prev) => ({ ...prev, [item.playlistId]: data.items }));
+                                              handleSelectPlaylistVideo(item, data.items[0]);
+                                            }
+                                          } catch (err) {
+                                            console.error("Failed to play playlist:", err);
+                                          } finally {
+                                            setLoadingPlaylistId(null);
+                                          }
+                                        }
+                                      }}
+                                      className="px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white shadow-sm"
+                                      title="Play this playlist from video #1 in Video Tracker"
+                                    >
+                                      <span>Play All</span>
+                                      <span className="text-[10px]">▶</span>
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Expanded Videos List inside Playlist */}
+                                {isExpanded && (
+                                  <div className={`p-2.5 border-t ${isDark ? "bg-[#07090d] border-gray-800/80" : "bg-gray-50 border-gray-100"}`}>
+                                    <div className="flex items-center justify-between text-[11px] font-bold mb-2 px-1 text-gray-400">
+                                      <span>Click any video below to play in Video Tracker:</span>
+                                      {isLoadingThisPl && (
+                                        <span className="text-indigo-400 flex items-center gap-1 font-semibold">
+                                          <span className="w-3 h-3 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                          Loading playlist videos...
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    {playlistVideos.length > 0 ? (
+                                      <div className="space-y-1.5 max-h-[240px] overflow-y-auto overscroll-contain pr-1 custom-scrollbar">
+                                        {playlistVideos.map((pVid, vIdx) => {
+                                          const isVidPlaying = videoId === pVid.videoId;
+                                          return (
+                                            <div
+                                              key={pVid.videoId || vIdx}
+                                              onClick={() => handleSelectPlaylistVideo(item, pVid)}
+                                              className={`p-2 rounded-xl border flex items-center gap-2.5 cursor-pointer transition group ${
+                                                isVidPlaying
+                                                  ? isDark
+                                                    ? "bg-indigo-950/70 border-indigo-500/80 ring-1 ring-indigo-500/40"
+                                                    : "bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500/30"
+                                                  : isDark
+                                                    ? "bg-[#10141a] border-gray-800/60 hover:bg-[#181d24] hover:border-gray-700"
+                                                    : "bg-white border-gray-200 hover:bg-gray-100 shadow-xs"
+                                              }`}
+                                            >
+                                              <span className="text-[11px] font-black text-gray-400 w-5 text-center flex-shrink-0">
+                                                #{vIdx + 1}
+                                              </span>
+                                              <img
+                                                src={pVid.thumbnail}
+                                                alt={pVid.title}
+                                                className="w-14 sm:w-16 h-9 sm:h-10 rounded-lg object-cover flex-shrink-0 bg-black/40"
+                                                loading="lazy"
+                                              />
+                                              <div className="flex-1 min-w-0">
+                                                <p className={`text-xs font-semibold line-clamp-1 group-hover:text-indigo-400 transition-colors ${
+                                                  isVidPlaying ? "text-indigo-400 font-bold" : isDark ? "text-gray-200" : "text-gray-800"
+                                                }`}>
+                                                  {pVid.title}
+                                                </p>
+                                              </div>
+                                              <div className="flex-shrink-0">
+                                                {isVidPlaying ? (
+                                                  <span className="px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-emerald-500 text-white flex items-center gap-1 shadow-sm">
+                                                    ▶ Playing
+                                                  </span>
+                                                ) : (
+                                                  <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      handleSelectPlaylistVideo(item, pVid);
+                                                    }}
+                                                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1 shadow-sm active:scale-95"
+                                                  >
+                                                    <span>Play</span>
+                                                    <span className="text-[9px]">▶</span>
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    ) : (
+                                      !isLoadingThisPl && (
+                                        <p className="text-xs text-center py-3 text-gray-500">
+                                          No videos found in this playlist.
+                                        </p>
+                                      )
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          }
+
+                          // ────────── SINGLE VIDEO ITEM CARD ──────────
+                          return (
+                            <div
+                              key={item.videoId}
+                              onClick={() => handleSelectSearchResult(item)}
+                              className={`p-2.5 rounded-2xl border transition-all duration-200 flex items-center gap-3 cursor-pointer group relative ${
+                                isCurrent
+                                  ? isDark
+                                    ? "bg-indigo-950/60 border-indigo-500/70 shadow-lg shadow-indigo-900/30 ring-1 ring-indigo-500/40"
+                                    : "bg-emerald-50 border-emerald-500 shadow-md ring-1 ring-emerald-500/30"
+                                  : isBestSuggested
+                                    ? isDark
+                                      ? "bg-gradient-to-r from-amber-500/10 via-indigo-950/40 to-[#0f1318] border-amber-500/60 hover:border-amber-400 shadow-md shadow-amber-500/10 ring-1 ring-amber-500/30"
+                                      : "bg-gradient-to-r from-amber-50/90 via-orange-50/40 to-white border-amber-400 hover:border-amber-500 shadow-md shadow-amber-200/50 ring-1 ring-amber-400/40"
+                                    : isDark
+                                      ? "bg-[#0f1318] border-gray-800/90 hover:bg-[#181d24] hover:border-gray-700"
+                                      : "bg-white border-gray-200 hover:bg-gray-50 hover:border-gray-300 shadow-sm"
+                              }`}
+                            >
+                              <div className="relative w-24 sm:w-28 h-16 sm:h-18 rounded-xl overflow-hidden flex-shrink-0 bg-black/40">
+                                <img
+                                  src={item.thumbnail}
+                                  alt={item.title}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                  loading="lazy"
+                                />
+                                {item.durationFormatted && (
+                                  <span className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-md text-[10px] font-extrabold bg-black/80 text-white tracking-wide">
+                                    {item.durationFormatted}
+                                  </span>
+                                )}
+                                {isBestSuggested && (
+                                  <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow tracking-wider flex items-center gap-0.5">
+                                    <span>⭐</span> Best
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex-1 min-w-0 pr-1">
+                                {isBestSuggested && (
+                                  <div
+                                    title={item.suggestedReason || "Recommended based on current popularity, engagement & student reliability"}
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 mb-1 rounded-full text-[10px] font-extrabold bg-amber-500/15 border border-amber-500/40 text-amber-500 dark:text-amber-400 cursor-help"
+                                  >
+                                    <span>⭐</span> Best Suggested Video
+                                  </div>
+                                )}
+                                <h4
+                                  className={`text-xs sm:text-sm font-bold line-clamp-2 leading-snug group-hover:text-indigo-400 transition-colors ${
+                                    isDark ? "text-white" : "text-gray-900"
                                   }`}
                                 >
-                                  <span>Play</span>
-                                  <span className="text-[10px]">▶</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                                  {item.title}
+                                </h4>
+                                <p
+                                  className={`text-[11px] sm:text-xs mt-1 truncate flex items-center gap-1.5 ${
+                                    isDark ? "text-gray-400" : "text-gray-500"
+                                  }`}
+                                >
+                                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                                  <span className="truncate">{item.channelTitle}</span>
+                                  {item.viewsFormatted && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-semibold opacity-90">{item.viewsFormatted}</span>
+                                    </>
+                                  )}
+                                </p>
+                              </div>
 
-                      {searchNextPageToken && (
+                              <div className="flex-shrink-0 pr-1">
+                                {isCurrent ? (
+                                  <span className="px-2.5 py-1 rounded-xl text-[11px] font-extrabold bg-emerald-500 text-white flex items-center gap-1 shadow-sm">
+                                    <span>▶</span> Playing
+                                  </span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSelectSearchResult(item);
+                                    }}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 flex items-center gap-1 ${
+                                      isDark
+                                        ? "bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm"
+                                        : "bg-[#1b3f30] hover:bg-[#143024] text-white shadow-sm"
+                                    }`}
+                                  >
+                                    <span>Play</span>
+                                    <span className="text-[10px]">▶</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    {/* Load More Button - clearly visible & accessible across All, Videos, and Playlists tabs */}
+                    {searchNextPageToken && (
+                      <div className="flex-shrink-0 pt-2">
                         <button
                           type="button"
                           onClick={(e) => handleYouTubeSearch(e, null, searchNextPageToken)}
                           disabled={searchLoadingMore}
-                          className={`w-full py-2.5 rounded-xl text-xs font-bold border transition-all active:scale-98 flex items-center justify-center gap-2 ${
+                          className={`w-full py-2 sm:py-2.5 rounded-xl text-xs font-bold border transition-all active:scale-98 flex items-center justify-center gap-2 cursor-pointer shadow-xs ${
                             isDark
-                              ? "bg-[#0f1318] hover:bg-gray-800 border-gray-800 text-gray-300"
-                              : "bg-gray-100 hover:bg-gray-200 border-gray-300 text-gray-700"
+                              ? "bg-gradient-to-r from-indigo-950/80 to-[#0f1318] hover:bg-indigo-900/80 border-indigo-700/80 text-indigo-300"
+                              : "bg-indigo-50/90 hover:bg-indigo-100 border-indigo-200 text-indigo-700"
                           }`}
                         >
                           {searchLoadingMore ? (
                             <>
                               <span className="w-3.5 h-3.5 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                              <span>Loading more...</span>
+                              <span>
+                                {searchFilter === "videos"
+                                  ? "Loading more videos..."
+                                  : searchFilter === "playlists"
+                                  ? "Loading more playlists..."
+                                  : "Loading more results..."}
+                              </span>
                             </>
                           ) : (
                             <>
-                              <span>Load More Results</span>
-                              <span>↓</span>
+                              <span>
+                                {searchFilter === "videos"
+                                  ? "Load More Videos"
+                                  : searchFilter === "playlists"
+                                  ? "Load More Playlists"
+                                  : "Load More Results (Videos & Playlists)"}
+                              </span>
+                              <span className="text-sm">↓</span>
                             </>
                           )}
                         </button>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 </div>

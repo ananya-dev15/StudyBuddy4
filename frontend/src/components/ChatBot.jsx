@@ -77,8 +77,12 @@ export default function ChatBot({ standalone = false }) {
               <span>🤖 StudyBuddy AI Assistant</span>
               {isSpeaking && (
                 <button
-                  onClick={stopSpeakingText}
-                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    stopSpeakingText();
+                  }}
+                  className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all cursor-pointer"
                   title="Stop Voice Speech"
                 >
                   ⏹️ Stop Voice
@@ -106,23 +110,15 @@ export default function ChatBot({ standalone = false }) {
                 }`}
               >
                 <div>{m.text}</div>
-                {m.sender === "bot" && (
+                {m.sender === "bot" && !isSpeaking && (
                   <div className="mt-2 flex justify-end">
-                    {isSpeaking ? (
-                      <button
-                        onClick={stopSpeakingText}
-                        className="text-xs text-red-500 font-bold flex items-center gap-1 bg-red-500/10 px-2 py-0.5 rounded-full"
-                      >
-                        ⏹️ Stop Voice
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => speakText(m.text)}
-                        className="text-xs text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1"
-                      >
-                        🔊 Listen
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => speakText(m.text)}
+                      className="text-xs text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1 cursor-pointer"
+                    >
+                      🔊 Listen
+                    </button>
                   </div>
                 )}
               </div>
@@ -217,8 +213,12 @@ export default function ChatBot({ standalone = false }) {
             <div className="flex items-center gap-2">
               {isSpeaking && (
                 <button
-                  onClick={stopSpeakingText}
-                  className="bg-red-500 hover:bg-red-600 text-white px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all"
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    stopSpeakingText();
+                  }}
+                  className="bg-red-500 hover:bg-red-600 active:scale-95 text-white px-2.5 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 animate-pulse shadow transition-all cursor-pointer"
                   title="Stop Assistant Voice"
                 >
                   ⏹️ Stop Voice
@@ -256,23 +256,15 @@ export default function ChatBot({ standalone = false }) {
                 }`}
               >
                 <div>{m.text}</div>
-                {m.sender === "bot" && (
+                {m.sender === "bot" && !isSpeaking && (
                   <div className="mt-1 flex justify-end">
-                    {isSpeaking ? (
-                      <button
-                        onClick={stopSpeakingText}
-                        className="text-[10px] text-red-500 font-bold flex items-center gap-1 bg-red-500/10 px-2 py-0.5 rounded-full"
-                      >
-                        ⏹️ Stop Voice
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => speakText(m.text)}
-                        className="text-[10px] text-purple-400 hover:text-purple-300 font-medium flex items-center gap-0.5"
-                      >
-                        🔊 Listen
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => speakText(m.text)}
+                      className="text-[10px] text-purple-400 hover:text-purple-300 font-medium flex items-center gap-0.5 cursor-pointer"
+                    >
+                      🔊 Listen
+                    </button>
                   </div>
                 )}
               </div>

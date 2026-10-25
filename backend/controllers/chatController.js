@@ -1,5 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
+import { synthesizeNeuralSpeech } from "../utils/neuralTTSHelper.js";
+
+// Cache quota exhaustion state to eliminate 8-10s delay on consecutive TTS requests
+let sarvamQuotaExhaustedUntil = 0;
 
 /**
  * Strips markdown, emojis, code blocks, and symbols so TTS produces clean natural audio.
@@ -31,36 +35,45 @@ export const cleanTextForTTS = (text) => {
 };
 
 /**
- * Detects appropriate Indic/English BCP-47 language code for Sarvam AI models.
+ * Detects appropriate Indic/English BCP-47 language code for models.
  */
 export const detectLanguageCode = (text) => {
   if (!text) return "en-IN";
 
-  // Native Regional Indic Scripts (Tested before Devanagari so shared danda \u0964 does not misclassify)
+  // Native Regional Indic Scripts
+  if (/[\u0A00-\u0A7F]/.test(text)) return "pa-IN"; // Gurmukhi (Punjabi)
   if (/[\u0980-\u09FF]/.test(text)) return "bn-IN"; // Bengali
   if (/[\u0B80-\u0BFF]/.test(text)) return "ta-IN"; // Tamil
   if (/[\u0C00-\u0C7F]/.test(text)) return "te-IN"; // Telugu
   if (/[\u0C80-\u0CFF]/.test(text)) return "kn-IN"; // Kannada
   if (/[\u0D00-\u0D7F]/.test(text)) return "ml-IN"; // Malayalam
   if (/[\u0A80-\u0AFF]/.test(text)) return "gu-IN"; // Gujarati
-  if (/[\u0A00-\u0A7F]/.test(text)) return "pa-IN"; // Gurmukhi (Punjabi)
   if (/[\u0B00-\u0B7F]/.test(text)) return "od-IN"; // Odia
 
   // Devanagari Alphabet Letters (Hindi & Marathi)
   if (/[\u0904-\u0939\u0958-\u0963]/.test(text)) {
-    // Check if text is Marathi in Devanagari
     const marathiWords = ["आहे", "नाही", "कसे", "काय", "कशा", "झाले", "झाला", "करा", "तुम्ही", "माझे", "मला", "होते", "आहात", "पाहिजे", "नमस्कार", "कसं", "आहोत", "करायचे", "सांगा"];
     if (marathiWords.some((w) => text.includes(w))) {
       return "mr-IN";
     }
-    return "hi-IN"; // Default Devanagari to Hindi
+    return "hi-IN";
   }
 
   // Regional transliterated / Romanized words
   const words = text.toLowerCase().split(/[^a-zA-Z]+/);
 
+  // Punjabi transliterated (Checked first so words like 'haal' or 'kive' are identified before Hindi)
+  const punjabiWords = [
+    "tussi", "tusi", "kive", "kiven", "kiwe", "kidda", "kiddan", "haal", "vadiya", "vadia",
+    "daso", "dasso", "chahida", "chahidi", "punjabi", "sat", "akal", "satsriakal",
+    "aaho", "haanji", "karde", "karda", "kardi", "padhna", "parhna", "kehnde",
+    "sanu", "thoda", "thodi", "ethe", "othe", "sohna", "sohni", "kujh", "changa",
+    "changi", "rabb", "rakha", "ajj", "aj", "saade", "tuhanu", "mainu"
+  ];
+  if (words.some((w) => punjabiWords.includes(w))) return "pa-IN";
+
   // Bengali transliterated
-  const bengaliWords = ["kemon", "aacho", "aami", "bhalo", "dhonnobad", "korbo", "shikhbo", "aamake"];
+  const bengaliWords = ["kemon", "aacho", "aami", "bhalo", "dhonnobad", "korbo", "shikhbo", "aamake", "ki", "korcho"];
   if (words.some((w) => bengaliWords.includes(w))) return "bn-IN";
 
   // Tamil transliterated
@@ -72,14 +85,18 @@ export const detectLanguageCode = (text) => {
   if (words.some((w) => teluguWords.includes(w))) return "te-IN";
 
   // Marathi transliterated
-  const marathiWords = ["namaskar", "kasa", "ahes", "aahe", "nahit", "sang", "mahit", "abhyas"];
+  const marathiWords = ["namaskar", "kasa", "ahes", "aahe", "nahit", "sang", "mahit", "abhyas", "karto"];
   if (words.some((w) => marathiWords.includes(w))) return "mr-IN";
+
+  // Gujarati transliterated
+  const gujaratiWords = ["kem", "cho", "majama", "tame", "tamari", "tamaro", "tamaru", "shu", "nathi", "aavjo", "saaru", "gujarati"];
+  if (words.some((w) => gujaratiWords.includes(w))) return "gu-IN";
 
   // English indicator words
   const englishKeywords = ["what", "how", "why", "where", "which", "explain", "concept", "study", "exam", "question", "program", "code", "class", "function", "object"];
   const englishCount = words.filter((w) => englishKeywords.includes(w)).length;
 
-  // Distinctive Hinglish / Romanized Hindi keywords (no English collision like 'the' or 'ho')
+  // Distinctive Hinglish / Romanized Hindi keywords
   const distinctHinglishWords = [
     "kya", "kaise", "kyun", "kab", "kaha", "kahan", "kitna", "kuch",
     "nahi", "nahin", "nhi", "hai", "hain", "hoga", "hogi", "hoge",
@@ -110,19 +127,23 @@ export const handleChat = async (req, res) => {
 
     const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-    let systemPrompt = `You are StudyBuddy AI 🤖, a personalized, patient, and motivating multilingual study mentor for students. 
-Your job is to help students learn effectively, stay focused, and feel encouraged.
+    let systemPrompt = `You are StudyBuddy AI 🤖, an expert, encouraging, and patient study mentor.
 
-Guidelines:
-1. Be friendly, supportive, and clear. Speak like an expert, encouraging study mentor.
-2. Break complex concepts into simple, easy-to-understand explanations with examples.
-3. Keep answers concise, clear, and focused on helping the student learn.
-4. If a question is about study habits, tips, reminders, or focus, provide actionable advice.
-5. Multilingual & Hinglish Matching:
-   - Always respond in the SAME language or code-mix as the student's question, unless they explicitly request another language.
-   - If the student asks in Hindi (Devanagari or Romanized Hinglish), respond naturally in that exact style.
-   - If the student asks in English, respond in English.
-   - If the student asks in Bengali, Tamil, Telugu, Marathi, Gujarati, Kannada, Punjabi, Malayalam, or any other Indian regional language, reply fluently in that language.
+CRITICAL MANDATORY INSTRUCTION - EXACT LANGUAGE & SCRIPT MATCHING:
+The student will ask questions in various languages or code-mixed dialects:
+- If the student asks in PUNJABI (Gurmukhi or Roman Punjabi, e.g. "tussi", "kive", "kidda", "daso", "padhna", "ki haal", "sat sri akal", "ji"): You MUST reply in PUNJABI! Absolutely DO NOT reply in Hindi or English if the student asked in Punjabi!
+- If the student asks in BENGALI: Reply in Bengali!
+- If the student asks in TAMIL: Reply in Tamil!
+- If the student asks in TELUGU: Reply in Telugu!
+- If the student asks in MARATHI: Reply in Marathi!
+- If the student asks in GUJARATI: Reply in Gujarati!
+- If the student asks in KANNADA: Reply in Kannada!
+- If the student asks in MALAYALAM: Reply in Malayalam!
+- If the student asks in HINDI or HINGLISH: Reply in natural Hindi / Hinglish!
+- If the student asks in ENGLISH: Reply in English!
+
+Always match the student's exact language, script, and conversational tone.
+Keep replies concise, clear, motivating, and to the point (2 to 4 sentences).
 `;
 
     if (context && context.source === "video_tracker") {
@@ -139,11 +160,11 @@ When answering, reference this context if relevant, but answer the student's que
     if (apiKey && apiKey !== "YOUR_GEMINI_API_KEY_HERE") {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
+        // Ultra-fast model candidates prioritized for minimal latency
         const candidateModels = [
-          "gemini-2.5-flash",
-          "gemini-2.0-flash",
-          "gemini-1.5-flash",
-          "gemini-flash-latest"
+          "gemini-3.5-flash-lite",
+          "gemini-flash-latest",
+          "gemini-2.5-flash"
         ];
 
         for (const modelName of candidateModels) {
@@ -157,7 +178,7 @@ When answering, reference this context if relevant, but answer the student's que
               return res.json({
                 success: true,
                 reply: reply.trim(),
-                detected_language: detectLanguageCode(reply) || detectLanguageCode(message),
+                detected_language: detectLanguageCode(message) || detectLanguageCode(reply),
               });
             }
           } catch (modelErr) {
@@ -169,31 +190,23 @@ When answering, reference this context if relevant, but answer the student's que
       }
     }
 
-    // Smart fallback if API key is unconfigured or fails
+    // Smart multilingual fallback if AI API is temporarily unavailable
     const lowMsg = message.toLowerCase();
     const detectedLang = detectLanguageCode(message);
     let fallbackReply = "That's a great question! Keep focusing on your study session. Let me know if you need help breaking down concepts, smart study tips, or assignment assistance.";
 
-    if (detectedLang === "hi-IN" || lowMsg.includes("kya") || lowMsg.includes("kaise") || /[\u0900-\u097F]/.test(message)) {
-      fallbackReply = "Bahut badiya sawal hai! Apni study session par focus banaye rakhein. Agar kisi concept ya assignment me doubt ho, toh bejhijhak puchiye!";
-    } else if (lowMsg.includes("conditional") || lowMsg.includes("if else") || lowMsg.includes("switch")) {
-      fallbackReply = "Conditional statements (like if, else if, else, and switch) allow code to make decisions and execute specific blocks depending on whether conditions evaluate to true or false!";
-    } else if (lowMsg.includes("polymorphism")) {
-      fallbackReply = "Polymorphism in OOP allows objects of different classes to be treated as objects of a common superclass. The two main types are Compile-time (Method Overloading) and Runtime (Method Overriding).";
-    } else if (lowMsg.includes("inheritance")) {
-      fallbackReply = "Inheritance in OOP allows a new child class to acquire properties and methods of an existing parent class, promoting code reuse and hierarchical organization.";
-    } else if (lowMsg.includes("abstraction")) {
-      fallbackReply = "Abstraction is hiding internal implementation details and showing only essential functionality to the user, typically achieved using Abstract Classes and Interfaces in Java.";
-    } else if (lowMsg.includes("encapsulation")) {
-      fallbackReply = "Encapsulation is bundling data and methods inside a single class and restricting direct variable access using private modifiers with getters and setters.";
-    } else if (lowMsg.includes("loop") || lowMsg.includes("for") || lowMsg.includes("while")) {
-      fallbackReply = "Loops (for, while, do-while) repeat a block of code multiple times as long as a specified condition remains true.";
-    } else if (lowMsg.includes("array") || lowMsg.includes("list")) {
-      fallbackReply = "An array is a linear data structure that stores elements of the same data type in contiguous memory locations.";
-    } else if (lowMsg.includes("reminder") || lowMsg.includes("assignments")) {
-      fallbackReply = "You can manage your smart reminders and assignments directly from your Dashboard or Reminders panel!";
-    } else if (lowMsg.includes("streak") || lowMsg.includes("coins")) {
-      fallbackReply = "Watching educational videos maintains your daily study streak and earns focus coins. Switching tabs costs 5 coins!";
+    if (detectedLang === "pa-IN") {
+      fallbackReply = "ਬਹੁਤ ਵਧੀਆ ਸਵਾਲ ਹੈ! ਆਪਣੀ ਪੜ੍ਹਾਈ 'ਤੇ ਪੂਰਾ ਧਿਆਨ ਰੱਖੋ। ਜੇਕਰ ਕਿਸੇ ਵੀ ਵਿਸ਼ੇ ਜਾਂ ਕੰਸੈਪਟ ਵਿੱਚ ਕੋਈ ਸ਼ੱਕ ਹੈ, ਤਾਂ ਬੇਝਿਜਕ ਪੁੱਛੋ!";
+    } else if (detectedLang === "mr-IN") {
+      fallbackReply = "खूप छान प्रश्न आहे! अभ्यासावर लक्ष केंद्रित ठेवा. काही अडचण किंवा शंका असल्यास नक्की विचारा!";
+    } else if (detectedLang === "bn-IN") {
+      fallbackReply = "খুব ভালো প্রশ্ন! পড়াশোনায় মনোযোগ রাখুন। কোনো বিষয়ে সন্দেহ থাকলে অবশ্যই জিজ্ঞাসা করুন!";
+    } else if (detectedLang === "ta-IN") {
+      fallbackReply = "மிக அருமையான கேள்வி! படிப்பில் கவனம் செலுத்துங்கள். ஏதேனும் சந்தேகம் இருந்தால் தாராளமாக கேளுங்கள்!";
+    } else if (detectedLang === "te-IN") {
+      fallbackReply = "చాలా మంచి ప్రశ్న! చదువుపై దృష్టి పెట్టండి. ఏదైనా సందేహం ఉంటే తప్పకుండా అడగండి!";
+    } else if (detectedLang === "hi-IN" || lowMsg.includes("kya") || lowMsg.includes("kaise") || /[\u0900-\u097F]/.test(message)) {
+      fallbackReply = "बहुत बढ़िया सवाल है! अपनी पढ़ाई पर ध्यान बनाए रखें। किसी भी टॉपिक में डाउट हो तो बेझिझक पूछिए!";
     }
 
     return res.json({
@@ -211,7 +224,7 @@ When answering, reference this context if relevant, but answer the student's que
 };
 
 /**
- * Sarvam AI Text-to-Speech (Bulbul models: bulbul:v3 / bulbul:v4-flash / bulbul:v2)
+ * Sarvam AI Text-to-Speech + Ultra-Fast Studio Neural AI Voice Engine
  */
 export const handleTextToSpeech = async (req, res) => {
   try {
@@ -224,13 +237,7 @@ export const handleTextToSpeech = async (req, res) => {
       });
     }
 
-    const apiKey = process.env.SARVAM_API_KEY;
-    if (!apiKey) {
-      return res.status(503).json({
-        success: false,
-        message: "SARVAM_API_KEY is not configured in backend/.env",
-      });
-    }
+    const apiKey = process.env.SARVAM_API_KEY ? process.env.SARVAM_API_KEY.trim() : null;
 
     const cleanText = cleanTextForTTS(text);
     if (!cleanText) {
@@ -242,66 +249,76 @@ export const handleTextToSpeech = async (req, res) => {
 
     const targetLangCode = language_code || detectLanguageCode(cleanText);
 
-    // Try Bulbul models in priority order
-    const modelsToTry = [
-      { model: "bulbul:v3", speaker: "shubh" },
-      { model: "bulbul:v2", speaker: "anushka" },
-      { model: "bulbul:v1", speaker: "meera" },
-    ];
+    // 1. Try Sarvam AI first ONLY if credits are available (skip immediately if quota exhausted to avoid 8s lag)
+    if (apiKey && Date.now() > sarvamQuotaExhaustedUntil) {
+      const modelsToTry = [
+        { model: "bulbul:v3", speaker: "simran" },
+        { model: "bulbul:v3", speaker: "kavya" },
+      ];
 
-    let audioBase64 = null;
-    let usedModel = null;
-    let lastError = null;
+      for (const cfg of modelsToTry) {
+        try {
+          const payload = {
+            inputs: [cleanText.slice(0, 450)],
+            target_language_code: targetLangCode,
+            model: cfg.model,
+            speaker: cfg.speaker,
+            pace: 1.0,
+            speech_sample_rate: 22050,
+          };
 
-    for (const cfg of modelsToTry) {
-      try {
-        const payload = {
-          text: cleanText.slice(0, 2500),
-          target_language_code: targetLangCode,
-          model: cfg.model,
-          speaker: cfg.speaker,
-          pace: 1.0,
-          speech_sample_rate: 22050,
-        };
+          const response = await axios.post("https://api.sarvam.ai/text-to-speech", payload, {
+            headers: {
+              "api-subscription-key": apiKey,
+              "Content-Type": "application/json",
+            },
+            timeout: 5000,
+          });
 
-        if (cfg.model === "bulbul:v1") {
-          delete payload.text;
-          payload.inputs = [cleanText.slice(0, 2500)];
+          if (response.data?.audios && response.data.audios.length > 0) {
+            return res.json({
+              success: true,
+              audio: response.data.audios[0],
+              model: `sarvam-${cfg.model}`,
+              speaker: cfg.speaker,
+              language_code: targetLangCode,
+              format: "wav",
+            });
+          }
+        } catch (err) {
+          const status = err.response?.status;
+          const errCode = err.response?.data?.error?.code;
+          // If insufficient quota (402), immediately mark exhausted for 10 mins and BREAK to avoid 5-10s delay!
+          if (status === 402 || errCode === "insufficient_quota_error") {
+            sarvamQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
+            console.log("⚡ Sarvam AI quota exhausted (402). Instantly routing to Ultra-Fast Studio Neural AI Voice.");
+            break;
+          }
+          console.warn(`Sarvam TTS note (${cfg.model}/${cfg.speaker}):`, status, err.response?.data?.error?.message || err.message);
         }
-
-        const response = await axios.post("https://api.sarvam.ai/text-to-speech", payload, {
-          headers: {
-            "api-subscription-key": apiKey,
-            "Content-Type": "application/json",
-          },
-          timeout: 15000,
-        });
-
-        if (response.data?.audios && response.data.audios.length > 0) {
-          audioBase64 = response.data.audios[0];
-          usedModel = cfg.model;
-          break;
-        }
-      } catch (err) {
-        lastError = err.response?.data || err.message;
-        console.warn(`Sarvam TTS error (${cfg.model}):`, err.response?.status, err.response?.data || err.message);
       }
     }
 
-    if (!audioBase64) {
-      return res.status(502).json({
-        success: false,
-        message: "Failed to generate speech audio from Sarvam AI.",
-        error: typeof lastError === "string" ? lastError : JSON.stringify(lastError),
-      });
+    // 2. High-fidelity Neural AI Female Voice Engine (Studio regional accents: Swara, Neerja, Tanishaa, Pallavi, etc.)
+    try {
+      const neuralResult = await synthesizeNeuralSpeech(cleanText, targetLangCode);
+      if (neuralResult && neuralResult.audio) {
+        return res.json({
+          success: true,
+          audio: neuralResult.audio,
+          model: "neural-ai-studio",
+          speaker: neuralResult.voice,
+          language_code: targetLangCode,
+          format: "mp3",
+        });
+      }
+    } catch (neuralErr) {
+      console.warn("Neural TTS engine note:", neuralErr.message);
     }
 
-    return res.json({
-      success: true,
-      audio: audioBase64,
-      model: usedModel,
-      language_code: targetLangCode,
-      format: "wav",
+    return res.status(502).json({
+      success: false,
+      message: "AI voice synthesis currently unavailable.",
     });
   } catch (err) {
     console.error("Sarvam TTS handler error:", err);
@@ -324,7 +341,7 @@ export const handleSpeechToText = async (req, res) => {
       });
     }
 
-    const apiKey = process.env.SARVAM_API_KEY;
+    const apiKey = process.env.SARVAM_API_KEY ? process.env.SARVAM_API_KEY.trim() : null;
     if (!apiKey) {
       return res.status(503).json({
         success: false,
