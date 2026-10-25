@@ -168,6 +168,63 @@ export const AppProvider = ({ children }) => {
     setIsSpeaking(false);
   };
 
+  const speakWithSpeechSynthesis = (textToSpeak, langCode) => {
+    if (!("speechSynthesis" in window)) {
+      setIsSpeaking(false);
+      return;
+    }
+    try {
+      window.speechSynthesis.pause();
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(textToSpeak);
+      activeUtteranceRef.current = utterance;
+
+      utterance.onstart = () => setIsSpeaking(true);
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        activeUtteranceRef.current = null;
+      };
+      utterance.onerror = () => {
+        setIsSpeaking(false);
+        activeUtteranceRef.current = null;
+      };
+
+      const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
+      const isHindi = containsHindiScript || langCode === "hi-IN";
+      const isPunjabi = /[\u0A00-\u0A7F]/.test(textToSpeak) || langCode === "pa-IN";
+      utterance.lang = isPunjabi ? "pa-IN" : isHindi ? "hi-IN" : "en-IN";
+
+      try {
+        const voices = window.speechSynthesis.getVoices() || [];
+        const femaleVoice = voices.find((v) => {
+          const vName = v.name.toLowerCase();
+          const matchesLang = isPunjabi
+            ? v.lang.startsWith("pa") || v.lang.startsWith("hi")
+            : isHindi
+            ? v.lang.startsWith("hi")
+            : v.lang.startsWith("en") || v.lang.startsWith("hi");
+          return (
+            matchesLang &&
+            (vName.includes("female") ||
+              vName.includes("samantha") ||
+              vName.includes("lekha") ||
+              vName.includes("zira") ||
+              vName.includes("veena") ||
+              vName.includes("kavya") ||
+              vName.includes("shruti"))
+          );
+        });
+        if (femaleVoice) utterance.voice = femaleVoice;
+      } catch (_) {}
+
+      utterance.rate = 1.0;
+      utterance.pitch = 1.15;
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      setIsSpeaking(false);
+    }
+  };
+
   const speakText = async (text, langCode = null) => {
     if (!text) return;
     
@@ -181,7 +238,7 @@ export const AppProvider = ({ children }) => {
     const thisSpeechId = ++currentSpeechIdRef.current;
     setIsSpeaking(true);
 
-    // 1. Try Sarvam AI TTS via backend endpoint
+    // 1. Try Studio AI TTS via backend endpoint
     try {
       const res = await fetch(`${API_BASE}/api/chat/tts`, {
         method: "POST",
@@ -202,7 +259,7 @@ export const AppProvider = ({ children }) => {
         if (currentSpeechIdRef.current !== thisSpeechId) return;
 
         if (data.success && data.audio) {
-          const audio = new Audio(`data:audio/${data.format || "wav"};base64,${data.audio}`);
+          const audio = new Audio(`data:audio/${data.format || "mp3"};base64,${data.audio}`);
           activeAudioRef.current = audio;
           allAudiosRef.current.add(audio);
 
@@ -225,21 +282,26 @@ export const AppProvider = ({ children }) => {
           audio.onerror = (e) => {
             allAudiosRef.current.delete(audio);
             if (currentSpeechIdRef.current === thisSpeechId) {
-              setIsSpeaking(false);
-              activeAudioRef.current = null;
+              speakWithSpeechSynthesis(textToSpeak, langCode);
             }
           };
 
-          await audio.play();
-          return;
+          try {
+            await audio.play();
+            return;
+          } catch (playErr) {
+            console.warn("Audio autoplay blocked by browser policy, falling back:", playErr);
+            speakWithSpeechSynthesis(textToSpeak, langCode);
+            return;
+          }
         }
-      } else {
-        console.warn("AI TTS returned non-OK response:", res.status);
-        setIsSpeaking(false);
       }
+
+      // If backend TTS endpoint returned non-OK or failed on deployed host, fall back safely
+      speakWithSpeechSynthesis(textToSpeak, langCode);
     } catch (ttsErr) {
-      console.warn("AI TTS error:", ttsErr);
-      setIsSpeaking(false);
+      console.warn("AI TTS error, falling back to speech synthesis:", ttsErr);
+      speakWithSpeechSynthesis(textToSpeak, langCode);
     }
   };
 

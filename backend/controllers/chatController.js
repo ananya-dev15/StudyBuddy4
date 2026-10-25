@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import { synthesizeNeuralSpeech } from "../utils/neuralTTSHelper.js";
+import { synthesizeCloudSpeech } from "../utils/cloudTTSHelper.js";
 
 // Cache quota exhaustion state to eliminate 8-10s delay on consecutive TTS requests
 let sarvamQuotaExhaustedUntil = 0;
@@ -314,6 +315,23 @@ export const handleTextToSpeech = async (req, res) => {
       }
     } catch (neuralErr) {
       console.warn("Neural TTS engine note:", neuralErr.message);
+    }
+
+    // 3. Universal Cloud Neural TTS Engine (100% pure Node.js, guaranteed to work on Render and deployed servers)
+    try {
+      const cloudResult = await synthesizeCloudSpeech(cleanText, targetLangCode);
+      if (cloudResult && cloudResult.audio) {
+        return res.json({
+          success: true,
+          audio: cloudResult.audio,
+          model: "cloud-neural-studio",
+          speaker: cloudResult.voice,
+          language_code: targetLangCode,
+          format: "mp3",
+        });
+      }
+    } catch (cloudErr) {
+      console.warn("Cloud TTS engine note:", cloudErr.message);
     }
 
     return res.status(502).json({
