@@ -43,6 +43,8 @@ export class BrowserDetector {
     this.currentPhoneDetected = false;
     this.currentPhoneBox = null;
     this.phonePersistenceTimer = 0;
+    this.phoneConsecutiveHits = 0;
+    this.phoneConsecutiveMisses = 0;
     this.latestStatus = "Ready";
   }
 
@@ -249,8 +251,8 @@ export class BrowserDetector {
   }
 
   /**
-   * Fast Phone Detection with COCO-SSD
-   * Matches 'cell phone', 'phone', or 'remote' with sensitive threshold (0.18)
+   * High-Precision Phone Detection with COCO-SSD
+   * Strictly detects genuine cell phones while rejecting hands, palms, remotes, and ambient objects
    */
   async detectPhoneFrame() {
     if (!this.isRunning || !this.cocoModel || !this.videoElement) return;
@@ -258,21 +260,56 @@ export class BrowserDetector {
     if (video.readyState < 2 || video.paused) return;
 
     try {
-      const predictions = await this.cocoModel.detect(video, 10, 0.18);
+      // 1. Run detection with higher base threshold to filter out low-confidence noise
+      const predictions = await this.cocoModel.detect(video, 10, 0.45);
+      const vWidth = video.videoWidth || 640;
+      const vHeight = video.videoHeight || 480;
+      const frameArea = vWidth * vHeight;
+
+      // 2. Strict filtering: Only accept real phones with rectangular aspect ratio and valid dimensions
       const phonePred = predictions.find((p) => {
-        const cls = (p.class || "").toLowerCase();
-        return (cls === "cell phone" || cls === "phone" || cls === "remote") && p.score >= 0.20;
+        const cls = (p.class || "").toLowerCase().trim();
+        // ONLY accept "cell phone" or "phone" — strictly exclude "remote" or generic objects
+        if (cls !== "cell phone" && cls !== "phone") return false;
+
+        const [x, y, w, h] = p.bbox;
+        if (!w || !h || w < 35 || h < 35) return false;
+
+        // Smartphone aspect ratio check (typically 1.25 to 3.2 in portrait or landscape)
+        // Rejects square hands/palms or excessively thin finger slivers
+        const longSide = Math.max(w, h);
+        const shortSide = Math.min(w, h);
+        const aspectRatio = longSide / (shortSide || 1);
+        if (aspectRatio < 1.25 || aspectRatio > 3.2) return false;
+
+        // Bounding box area ratio: must be a handheld device (0.8% to 40% of frame area)
+        const boxArea = w * h;
+        const areaRatio = boxArea / frameArea;
+        if (areaRatio < 0.008 || areaRatio > 0.40) return false;
+
+        // High confidence threshold (>= 0.60) to avoid hand false positives
+        return p.score >= 0.60;
       });
 
       if (phonePred) {
-        this.currentPhoneDetected = true;
-        this.currentPhoneBox = {
-          bbox: phonePred.bbox,
-          score: phonePred.score,
-        };
-        this.phonePersistenceTimer = Date.now() + 800; // 800ms persistence to prevent flicker
+        this.phoneConsecutiveHits = (this.phoneConsecutiveHits || 0) + 1;
+        this.phoneConsecutiveMisses = 0;
+
+        // Require at least 2 consecutive positive frames (~300ms) to confirm genuine phone presence
+        if (this.phoneConsecutiveHits >= 2) {
+          this.currentPhoneDetected = true;
+          this.currentPhoneBox = {
+            bbox: phonePred.bbox,
+            score: phonePred.score,
+          };
+          this.phonePersistenceTimer = Date.now() + 1000;
+        }
       } else {
-        if (Date.now() > this.phonePersistenceTimer) {
+        this.phoneConsecutiveMisses = (this.phoneConsecutiveMisses || 0) + 1;
+        if (this.phoneConsecutiveMisses >= 2) {
+          this.phoneConsecutiveHits = 0;
+        }
+        if (Date.now() > this.phonePersistenceTimer && this.phoneConsecutiveMisses >= 3) {
           this.currentPhoneDetected = false;
           this.currentPhoneBox = null;
         }

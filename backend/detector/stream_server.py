@@ -262,12 +262,19 @@ def process_single_frame(frame, is_stream=False):
             for box in r.boxes:
                 cls = int(box.cls[0])
                 conf = float(box.conf[0])
-                if r.names[cls] == "cell phone" and conf > 0.5:
-                    phone_detected = True
+                if r.names[cls] == "cell phone" and conf >= 0.65:
                     x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                    cv2.putText(frame, "Phone", (x1, y1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    bw = x2 - x1
+                    bh = y2 - y1
+                    if bw >= 35 and bh >= 35:
+                        aspect_ratio = max(bw, bh) / max(min(bw, bh), 1)
+                        frame_area = frame.shape[0] * frame.shape[1]
+                        box_area = bw * bh
+                        if 1.25 <= aspect_ratio <= 3.2 and 0.008 <= (box_area / frame_area) <= 0.40:
+                            phone_detected = True
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            cv2.putText(frame, f"Phone ({int(conf*100)}%)", (x1, y1 - 10),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
     # away timer
     if gaze_status == "away":

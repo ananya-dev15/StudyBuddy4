@@ -654,32 +654,25 @@ export const AppProvider = ({ children }) => {
     }
   };
 
-  // 🎙️ Global Hotkey: Press 'V' to toggle voice recognition on/off
+  // 🎙️ Global Hotkey: Press standalone 'V' to toggle voice recognition on/off
   useEffect(() => {
     const handleKeyDown = (e) => {
       // Ignore key repeats when holding the key down
       if (e.repeat) return;
 
+      // DO NOT trigger if any modifier key (Ctrl, Cmd/Meta, Alt) is pressed!
+      // This ensures Ctrl+V (paste) or Cmd+V (paste) works normally everywhere!
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
       const activeTag = document.activeElement?.tagName;
       const isEditable = document.activeElement?.isContentEditable;
 
-      // If user is typing in textarea or contentEditable, don't trigger voice
-      if (["TEXTAREA", "SELECT"].includes(activeTag) || isEditable) return;
+      // If user is focused on any input, textarea, select or editable element, type normally
+      if (["INPUT", "TEXTAREA", "SELECT"].includes(activeTag) || isEditable) return;
 
-      // If focused on an INPUT element:
-      if (activeTag === "INPUT") {
-        const val = document.activeElement?.value;
-        // If there is already text typed, let the user type normally
-        if (val && val.trim().length > 0) {
-          return;
-        }
-      }
-
+      // ONLY standalone 'v' or 'V' key press:
       if (e.key === "v" || e.key === "V") {
         e.preventDefault();
-        if (document.activeElement?.blur) {
-          document.activeElement.blur();
-        }
         setIsChatOpen(true);
         toggleVoiceRecognition();
       }
