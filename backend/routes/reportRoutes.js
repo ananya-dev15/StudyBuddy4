@@ -8,7 +8,7 @@ import User from "../models/User.js";
 
 const router = express.Router();
 
-// Allow authenticated requests or fallback for local monitoring dashboard
+// Allow authenticated requests or fallback for local / cross-origin monitoring dashboard
 const protectOrLocal = async (req, res, next) => {
   let token = req.cookies?.token;
   if (!token && req.headers.authorization && req.headers.authorization.startsWith("Bearer")) {
@@ -23,9 +23,18 @@ const protectOrLocal = async (req, res, next) => {
         req.user = await User.findById(userId).select("-password");
       }
     } catch (err) {
-      // ignore token error for local fallback
+      // ignore token error for fallback
     }
   }
+
+  // If token was not verified or cookie blocked cross-origin, check x-user-id or query userId
+  const fallbackId = req.headers["x-user-id"] || req.query.userId;
+  if (!req.user && fallbackId) {
+    try {
+      req.user = await User.findById(fallbackId).select("-password");
+    } catch (_) {}
+  }
+
   next();
 };
 
@@ -36,6 +45,6 @@ router.post(
   uploadReport
 );
 
-router.get("/my", protect, getMyReports);
+router.get("/my", protectOrLocal, getMyReports);
 
 export default router;

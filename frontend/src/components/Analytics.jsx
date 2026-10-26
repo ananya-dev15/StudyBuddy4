@@ -12,21 +12,43 @@ const Analytics = () => {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch all saved monitoring & focus reports from backend
+  // Fetch all saved monitoring & focus reports from backend or local backup
   const fetchReports = async () => {
     setLoading(true);
     const token = localStorage.getItem("token");
+    const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+    const userId = storedUser?._id || storedUser?.id || "";
+    const localKey = `studybuddy_saved_reports_${userId || "default"}`;
+    const localBackup = JSON.parse(localStorage.getItem(localKey) || "[]");
+
     try {
-      const res = await fetch(`${API_BASE}/api/reports/my`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (userId) headers["x-user-id"] = userId;
+
+      const url = userId
+        ? `${API_BASE}/api/reports/my?userId=${encodeURIComponent(userId)}`
+        : `${API_BASE}/api/reports/my`;
+
+      const res = await fetch(url, {
+        headers,
         credentials: "include",
       });
       const data = await res.json();
-      if (data.success && data.reports) {
+      if (data.success && Array.isArray(data.reports) && data.reports.length > 0) {
         setReports(data.reports);
+        // Sync cloud reports to local storage
+        localStorage.setItem(localKey, JSON.stringify(data.reports.slice(0, 30)));
+      } else if (localBackup.length > 0) {
+        setReports(localBackup);
+      } else {
+        setReports([]);
       }
     } catch (err) {
-      console.error("Failed to load saved reports:", err);
+      console.warn("Failed to load saved reports from cloud, showing local:", err);
+      if (localBackup.length > 0) {
+        setReports(localBackup);
+      }
     } finally {
       setLoading(false);
     }

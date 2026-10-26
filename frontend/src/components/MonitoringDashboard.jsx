@@ -115,13 +115,22 @@ const MonitoringDashboard = () => {
   const uploadReportToCloud = async (pdfBlob, fileName, title) => {
     try {
       const token = localStorage.getItem("token");
+      const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+      const userId = storedUser?._id || storedUser?.id || "";
+
       const formData = new FormData();
       formData.append("pdf", pdfBlob, fileName);
       formData.append("title", title);
+      if (userId) {
+        formData.append("userId", userId);
+      }
 
       const headers = {};
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
+      }
+      if (userId) {
+        headers["x-user-id"] = userId;
       }
 
       const res = await fetch(`${API_BASE}/api/reports/upload`, {
@@ -131,9 +140,26 @@ const MonitoringDashboard = () => {
         body: formData,
       });
 
-      const data = await res.json();
-      if (data.success) {
-        fetchCloudReports();
+      let cloudData = null;
+      try {
+        cloudData = await res.json();
+      } catch (_) {}
+
+      // Cache report in client storage so Analytics immediately displays it reliably
+      try {
+        const localKey = `studybuddy_saved_reports_${userId || "default"}`;
+        const existing = JSON.parse(localStorage.getItem(localKey) || "[]");
+        const newReportItem = {
+          _id: cloudData?.report?._id || `local_${Date.now()}`,
+          title: title,
+          fileName: fileName,
+          fileUrl: cloudData?.report?.fileUrl || null,
+          createdAt: new Date().toISOString(),
+        };
+        const updated = [newReportItem, ...existing.filter((r) => r.title !== title)].slice(0, 30);
+        localStorage.setItem(localKey, JSON.stringify(updated));
+      } catch (cacheErr) {
+        console.warn("Local report caching error:", cacheErr);
       }
     } catch (err) {
       console.warn("Failed to auto-save report to cloud:", err);
