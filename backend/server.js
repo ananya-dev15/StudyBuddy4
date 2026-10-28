@@ -22,6 +22,7 @@ import reminderRoutes from "./routes/reminderRoutes.js";
 import quizRoutes from "./routes/quizRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
+import feedbackRoutes from "./routes/feedbackRoutes.js";
 
 import connectDB from "./config/db.js";
 
@@ -161,6 +162,7 @@ app.use("/api/reminders", reminderRoutes);
 app.use("/api/quiz", quizRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/blogs", blogRoutes);
+app.use("/api/feedbacks", feedbackRoutes);
 
 // Start server
 const PORT = process.env.PORT || 6000;

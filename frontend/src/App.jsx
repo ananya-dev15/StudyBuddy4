@@ -20,6 +20,7 @@ import IntroPage from "./pages/IntroPage";
 import IntroAnimation from "./components/IntroAnimation";
 import ThemeBackground from "./components/ThemeBackground";
 import PageTransitionLoader from "./components/PageTransitionLoader";
+import GlobalReminderAlarmModal from "./components/GlobalReminderAlarmModal";
 
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -73,6 +74,7 @@ function AppContent() {
     <>
       <ThemeBackground />
       <PageTransitionLoader />
+      <GlobalReminderAlarmModal />
       {showFreshIntro && (
         <IntroAnimation
           onComplete={handleFreshIntroComplete}

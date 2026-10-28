@@ -229,20 +229,20 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 md:p-6 bg-black/65 backdrop-blur-sm animate-in fade-in duration-200">
       <div className={`relative w-full max-w-4xl rounded-3xl shadow-2xl border overflow-hidden flex flex-col backdrop-blur-2xl transition-all ${
         isDark
-          ? "bg-slate-900/95 border-purple-500/30 text-white shadow-purple-950/40"
+          ? "bg-slate-900/95 border-emerald-500/30 text-white shadow-emerald-950/40"
           : "bg-[#fdfbf7] border-[#eee8de] text-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.15)]"
       }`}>
         {/* Header */}
-        <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 p-6 text-white flex justify-between items-center shadow-md">
+        <div className="bg-[#1b3f30] p-6 text-white flex justify-between items-center shadow-md">
           <div>
             <h2 className="text-2xl font-extrabold flex items-center gap-2 tracking-tight">
               👤 User Profile
             </h2>
-            <p className="text-sm opacity-90 font-medium">Signup & Account Information</p>
+            <p className="text-sm opacity-90 font-medium text-emerald-100">Signup & Account Information</p>
           </div>
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-xl font-bold transition-all text-white"
+            className="w-10 h-10 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center text-xl font-bold transition-all text-white"
           >
             ✕
           </button>
@@ -257,7 +257,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
           )}
 
           {loadingProfile && (
-            <div className="mb-4 text-center text-xs text-purple-400 font-semibold animate-pulse">
+            <div className="mb-4 text-center text-xs text-emerald-400 font-semibold animate-pulse">
               🔄 Syncing profile details from database...
             </div>
           )}
@@ -265,17 +265,17 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
           <div className="grid md:grid-cols-3 gap-8 items-start">
             {/* Left Side: Circular Profile Picture & Upload Option */}
             <div className={`md:col-span-1 flex flex-col items-center p-6 rounded-2xl border backdrop-blur-xl shadow-lg text-center ${
-              isDark ? "bg-slate-800/80 border-purple-500/20 text-white" : "bg-white/80 border-white/80 text-slate-800"
+              isDark ? "bg-slate-800/80 border-emerald-500/20 text-white" : "bg-white/80 border-white/80 text-slate-800"
             }`}>
               <div className="relative group">
                 <img
                   src={displayUser.profileImage || profileIcon}
                   alt="Profile"
-                  className="w-36 h-36 rounded-full border-4 border-purple-600 shadow-xl object-cover bg-white"
+                  className="w-36 h-36 rounded-full border-4 border-[#1b3f30] shadow-xl object-cover bg-white"
                 />
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-1 right-1 bg-purple-600 hover:bg-purple-700 text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-110"
+                  className="absolute bottom-1 right-1 bg-[#1b3f30] hover:bg-[#143024] text-white p-2.5 rounded-full shadow-lg transition-transform hover:scale-110"
                   title="Upload / Change Photo"
                 >
                   📷
@@ -290,36 +290,36 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                 onChange={handleImageChange}
               />
 
-              <h3 className={`mt-4 text-xl font-bold ${isDark ? "text-purple-200" : "text-slate-900"}`}>{displayUser.name}</h3>
+              <h3 className={`mt-4 text-xl font-bold ${isDark ? "text-emerald-200" : "text-slate-900"}`}>{displayUser.name}</h3>
               <p className={`text-xs font-medium break-all ${isDark ? "text-slate-400" : "text-slate-500"}`}>{displayUser.email}</p>
 
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading}
-                className="mt-5 px-4 py-2.5 w-full bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs rounded-xl shadow-md transition-all duration-300 hover:shadow-lg disabled:opacity-50"
+                className="mt-5 px-4 py-2.5 w-full bg-[#1b3f30] hover:bg-[#143024] text-white font-semibold text-xs rounded-xl shadow-md transition-all duration-300 hover:shadow-lg disabled:opacity-50"
               >
                 {uploading ? "Uploading..." : "📷 Change Profile Photo"}
               </button>
 
               {/* Stats badges */}
               <div className={`mt-6 w-full grid grid-cols-2 gap-2 text-center pt-4 border-t ${isDark ? "border-slate-700" : "border-slate-200"}`}>
-                <div className={`p-2 rounded-xl ${isDark ? "bg-slate-700/60" : "bg-purple-50"}`}>
-                  <span className="text-xs text-purple-400 font-semibold block">🪙 Coins</span>
+                <div className={`p-2 rounded-xl ${isDark ? "bg-slate-700/60" : "bg-emerald-50"}`}>
+                  <span className={`text-xs ${isDark ? "text-emerald-400" : "text-[#1b3f30]"} font-semibold block`}>🪙 Coins</span>
                   <span className="text-lg font-bold text-amber-500">{displayUser.coins ?? 500}</span>
                 </div>
-                <div className={`p-2 rounded-xl ${isDark ? "bg-slate-700/60" : "bg-pink-50"}`}>
-                  <span className="text-xs text-pink-400 font-semibold block">🔥 Streak</span>
-                  <span className="text-lg font-bold text-pink-500">{displayUser.streak ?? 0}d</span>
+                <div className={`p-2 rounded-xl ${isDark ? "bg-slate-700/60" : "bg-emerald-50"}`}>
+                  <span className={`text-xs ${isDark ? "text-emerald-400" : "text-[#1b3f30]"} font-semibold block`}>🔥 Streak</span>
+                  <span className={`text-lg font-bold ${isDark ? "text-emerald-400" : "text-[#1b3f30]"}`}>{displayUser.streak ?? 0}d</span>
                 </div>
               </div>
             </div>
 
             {/* Right Side: Complete User Information & Edit Mode */}
             <div className={`md:col-span-2 p-6 rounded-2xl border backdrop-blur-xl shadow-lg ${
-              isDark ? "bg-slate-800/80 border-purple-500/20 text-white" : "bg-white/80 border-white/80 text-slate-800"
+              isDark ? "bg-slate-800/80 border-emerald-500/20 text-white" : "bg-white/80 border-white/80 text-slate-800"
             }`}>
               <div className={`flex justify-between items-center mb-4 pb-2 border-b ${isDark ? "border-slate-700" : "border-slate-200"}`}>
-                <h4 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-purple-200" : "text-slate-900"}`}>
+                <h4 className={`text-lg font-bold flex items-center gap-2 ${isDark ? "text-emerald-200" : "text-slate-900"}`}>
                   📋 Account Information
                 </h4>
                 <button
@@ -327,8 +327,8 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                   onClick={() => setIsEditing(!isEditing)}
                   className={`px-3.5 py-1.5 font-bold text-xs rounded-lg transition-all ${
                     isDark
-                      ? "bg-purple-500/20 text-purple-300 hover:bg-purple-500/30"
-                      : "bg-purple-100 text-purple-700 hover:bg-purple-200"
+                      ? "bg-[#1b3f30] text-emerald-300 hover:bg-[#143024]"
+                      : "bg-emerald-50 text-[#1b3f30] border border-[#1b3f30]/20 hover:bg-emerald-100"
                   }`}
                 >
                   {isEditing ? "❌ Cancel Edit" : "✏️ Edit Profile"}
@@ -340,7 +340,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                   <div className="grid sm:grid-cols-2 gap-3">
                     {fieldConfigs.map((field) => (
                       <div key={field.name} className="flex flex-col">
-                        <label className={`text-xs font-semibold mb-1 flex items-center gap-1 ${isDark ? "text-purple-300" : "text-slate-600"}`}>
+                        <label className={`text-xs font-semibold mb-1 flex items-center gap-1 ${isDark ? "text-emerald-300" : "text-slate-600"}`}>
                           <span>{field.icon}</span>
                           <span>{field.label}</span>
                           {field.locked && (
@@ -366,9 +366,9 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                               setFormData({ ...formData, [field.name]: e.target.value })
                             }
                             placeholder={`Enter ${field.label}`}
-                            className={`p-2.5 text-xs font-semibold border rounded-xl focus:ring-2 focus:ring-purple-500 focus:outline-none ${
+                            className={`p-2.5 text-xs font-semibold border rounded-xl focus:ring-2 focus:ring-[#1b3f30] focus:outline-none ${
                               isDark
-                                ? "bg-slate-900 border-purple-500/30 text-white placeholder-slate-400"
+                                ? "bg-slate-900 border-emerald-500/30 text-white placeholder-slate-400"
                                 : "bg-white border-slate-300 text-slate-900 placeholder-slate-400"
                             }`}
                           />
@@ -390,7 +390,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                     <button
                       type="submit"
                       disabled={savingProfile}
-                      className="px-6 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-50"
+                      className="px-6 py-2 bg-[#1b3f30] hover:bg-[#143024] text-white font-bold text-xs rounded-xl shadow-md transition disabled:opacity-50"
                     >
                       {savingProfile ? "Saving..." : "💾 Save Changes"}
                     </button>
@@ -404,7 +404,7 @@ export default function UserProfileModal({ isOpen, onClose, user, onUpdateUser }
                     return (
                       <div key={item.name} className={`p-3.5 rounded-xl border transition ${
                         isDark
-                          ? "bg-slate-800/60 border-purple-500/15 text-white"
+                          ? "bg-slate-800/60 border-emerald-500/15 text-white"
                           : "bg-white/90 border-slate-100 text-slate-800 shadow-sm"
                       }`}>
                         <div className={`flex items-center gap-2 text-xs font-semibold mb-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>

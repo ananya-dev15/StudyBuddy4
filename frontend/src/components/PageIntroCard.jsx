@@ -30,7 +30,7 @@ const ROUTE_INTRO_CONFIG = {
   },
   "/assignments": {
     title: "Assignments",
-    description: "Organize your academic tasks and stay on track.",
+    description: "Organize your academic tasks, deadlines, and study reminders.",
     icon: "📝",
   },
   "/leaderboard": {

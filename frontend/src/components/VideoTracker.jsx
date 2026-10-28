@@ -218,6 +218,37 @@ const playRestrictionSound = () => {
 
 
 
+// --- VIDEO TRACKER PERSISTENCE HELPERS ---
+// Module-level cache for active in-memory session across route navigation (e.g. local files)
+const cachedLocalVideoSession = {
+  localVideoFile: null,
+};
+
+const getSavedActiveVideo = () => {
+  try {
+    const saved = localStorage.getItem("studybuddy_active_video");
+    return saved ? JSON.parse(saved) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const saveActiveVideoToStorage = (data) => {
+  try {
+    if (!data) {
+      localStorage.removeItem("studybuddy_active_video");
+    } else {
+      const existing = getSavedActiveVideo() || {};
+      localStorage.setItem(
+        "studybuddy_active_video",
+        JSON.stringify({ ...existing, ...data })
+      );
+    }
+  } catch (e) {
+    console.warn("Error saving active video to storage:", e);
+  }
+};
+
 // --- VIDEO TRACKER COMPONENT ---
 
 export default function VideoTracker() {
@@ -335,12 +366,16 @@ export default function VideoTracker() {
       });
 
       localStorage.removeItem("user");
+      saveActiveVideoToStorage(null);
+      cachedLocalVideoSession.localVideoFile = null;
       setUser(null);
       setDropdownOpen(false);
       navigate("/");
     } catch (error) {
       console.error("Error during logout:", error);
       localStorage.removeItem("user");
+      saveActiveVideoToStorage(null);
+      cachedLocalVideoSession.localVideoFile = null;
       setUser(null);
       setDropdownOpen(false);
     }
@@ -353,9 +388,17 @@ export default function VideoTracker() {
     }
   };
 
-  const [inputUrl, setInputUrl] = useState("");
-  const [videoId, setVideoId] = useState(null);
-  const [localVideoFile, setLocalVideoFile] = useState(null);
+  const [inputUrl, setInputUrl] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.inputUrl || "";
+  });
+  const [videoId, setVideoId] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.videoId || null;
+  });
+  const [localVideoFile, setLocalVideoFile] = useState(() => {
+    return cachedLocalVideoSession.localVideoFile || null;
+  });
   const [localVideoObjectUrl, setLocalVideoObjectUrl] = useState(null);
 
 
@@ -464,7 +507,10 @@ export default function VideoTracker() {
   const [earnedThisSessionCoins, setEarnedThisSessionCoins] = useState(false);
   const [showZeroCoinsPopup, setShowZeroCoinsPopup] = useState(false);
   // NEW states for YouTube metadata and playlist
-  const [videoMeta, setVideoMeta] = useState(null);
+  const [videoMeta, setVideoMeta] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.videoMeta || null;
+  });
   const [playlistItems, setPlaylistItems] = useState([]);
   const [currentPlaylistIndex, setCurrentPlaylistIndex] = useState(0);
   const [showPlaylist, setShowPlaylist] = useState(false);
@@ -502,7 +548,10 @@ export default function VideoTracker() {
   };
   const [metaError, setMetaError] = useState('');
   const [coinsLoaded, setCoinsLoaded] = useState(false);
-  const [resumePosition, setResumePosition] = useState(0);
+  const [resumePosition, setResumePosition] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.position || saved?.lastWatchedPosition || 0;
+  });
 
   const greetingText = useMemo(() => {
     const hour = new Date().getHours();
@@ -1677,14 +1726,40 @@ export default function VideoTracker() {
     };
   }, [videoId, isPlaying]);
 
-  // Save progress on unmount
+  // Save progress and active video on unmount so returning to tracker preserves the video
   useEffect(() => {
     return () => {
-      if (videoId && youtubePlayerRef.current?.getCurrentTime) {
-        const pos = youtubePlayerRef.current.getCurrentTime();
-        saveResumeProgress(videoId, pos);
+      let pos = 0;
+      try {
+        if (videoId && youtubePlayerRef.current?.getCurrentTime) {
+          pos = youtubePlayerRef.current.getCurrentTime();
+        } else if (localVideoRef.current) {
+          pos = localVideoRef.current.currentTime || 0;
+        }
+      } catch (e) {}
+
+      if (videoId) {
+        const floorPos = Math.floor(pos);
+        if (floorPos > 0) {
+          saveResumeProgress(videoId, floorPos);
+          saveActiveVideoToStorage({ videoId, position: floorPos });
+        }
+      } else if (localVideoFile) {
+        saveActiveVideoToStorage({ isLocal: true, position: Math.floor(pos) });
       }
     };
+  }, [videoId, localVideoFile]);
+
+  // Ensure metadata & playlist are loaded if a video was restored from persistent storage
+  useEffect(() => {
+    if (videoId) {
+      if (!videoMeta || !videoMeta.title) {
+        loadYouTubeData(videoId);
+      }
+      if (inputUrl && (!playlistItems || playlistItems.length === 0)) {
+        loadPlaylistForUrl(inputUrl);
+      }
+    }
   }, [videoId]);
 
 
@@ -2012,7 +2087,7 @@ export default function VideoTracker() {
 
 
   // --- SESSION FINALIZE ---
-  // ✅ Finalize and reward focus session
+  // ✅ Finalize and cleanup session (Coins are ONLY awarded when focus timer completes in handleStopSave)
   const finalizeSession = async (ended = false) => {
     if (window.__alreadyFinalized) {
       console.log("⛔ finalize blocked (already ran)");
@@ -2020,28 +2095,11 @@ export default function VideoTracker() {
     }
     window.__alreadyFinalized = true;
 
-    const currentVideoIdentifier = videoId || localVideoFile?.name;
-    if (!currentVideoIdentifier) return;
-
-    // ✅ +2 reward for completing focus session
-    const reward = 2;
-
     try {
-      console.log("🎬 Finalizing session... checking penalty order");
-
-      // 🕒 Small delay ensures any -5 deduction from tab switch is processed first
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // ✅ Reward 2 coins for focus session completion
-      if (!earnedThisSessionCoins) {
-        await updateBackendCoinsGain(reward);
-        setEarnedThisSessionCoins(true);
-        console.log(`🎉 Focus session complete — +${reward} coins saved!`);
-      }
+      cleanupAfterSession(ended);
     } catch (error) {
       console.error("❌ Error finalizing session:", error);
     } finally {
-      cleanupAfterSession(ended);
       setTimeout(() => {
         window.__alreadyFinalized = false;
         console.log("🔓 finalize unlocked");
@@ -2139,17 +2197,23 @@ export default function VideoTracker() {
       });
       const data = await res.json();
       if (data.success) {
-        setVideoMeta({
+        const meta = {
           title: data.title,
           description: data.description,
           channelTitle: data.channelTitle,
           thumbnail: data.thumbnail,
           duration: data.duration,
           studyScore: data.studyScore,
-        });
+        };
+        setVideoMeta(meta);
         if (data.lastWatchedPosition) {
           setResumePosition(data.lastWatchedPosition);
         }
+        saveActiveVideoToStorage({
+          videoId: vid,
+          videoMeta: meta,
+          position: data.lastWatchedPosition || 0,
+        });
       } else {
         setMetaError(data.message || 'Failed to load video info');
       }
@@ -2165,6 +2229,7 @@ export default function VideoTracker() {
     if (!vid || position == null) return;
     try {
       const floorPos = Math.floor(position);
+      saveActiveVideoToStorage({ videoId: vid, position: floorPos });
       setAppState((prev) => {
         const updated = (prev.history || []).map((h) => {
           const match = String(h.videoId || h.url || "").match(
@@ -2238,6 +2303,8 @@ export default function VideoTracker() {
     setInputUrl(newUrl);
     setVideoId(vid);
     setLocalVideoFile(null);
+    cachedLocalVideoSession.localVideoFile = null;
+    saveActiveVideoToStorage({ videoId: vid, inputUrl: newUrl, position: 0 });
     setVideoMeta(null);
     setResumePosition(0);
     setSessionPlayedSeconds(0);
@@ -2310,6 +2377,8 @@ export default function VideoTracker() {
     setInputUrl(`https://youtu.be/${vid}`);
     setVideoId(vid);
     setLocalVideoFile(null);
+    cachedLocalVideoSession.localVideoFile = null;
+    saveActiveVideoToStorage({ videoId: vid, inputUrl: `https://youtu.be/${vid}`, position: pos });
     setVideoMeta(null);
     setResumePosition(pos);
     setSessionPlayedSeconds(0);
@@ -2569,6 +2638,8 @@ export default function VideoTracker() {
     setInputUrl(`https://www.youtube.com/watch?v=${vid}`);
     setVideoId(vid);
     setLocalVideoFile(null);
+    cachedLocalVideoSession.localVideoFile = null;
+    saveActiveVideoToStorage({ videoId: vid, inputUrl: `https://www.youtube.com/watch?v=${vid}`, position: 0 });
     setLocalVideoObjectUrl(null);
     setVideoMeta({
       title: item.title,
@@ -2679,6 +2750,8 @@ export default function VideoTracker() {
     setInputUrl(plUrl);
     setVideoId(vid);
     setLocalVideoFile(null);
+    cachedLocalVideoSession.localVideoFile = null;
+    saveActiveVideoToStorage({ videoId: vid, inputUrl: plUrl, position: 0 });
     setLocalVideoObjectUrl(null);
     setVideoMeta({
       title: videoItem.title,
@@ -2768,6 +2841,8 @@ export default function VideoTracker() {
       setVideoId(id);
       setInputUrl(effectiveUrl);
       setLocalVideoFile(null);
+      cachedLocalVideoSession.localVideoFile = null;
+      saveActiveVideoToStorage({ videoId: id, inputUrl: effectiveUrl, videoMeta: null, position: 0 });
       setSessionPlayedSeconds(0);
       setTabSwitches(0);
       // Fetch video metadata and transcript from backend
@@ -2799,6 +2874,8 @@ export default function VideoTracker() {
       setVideoMeta(null);
       setInputUrl(""); // Clear any YouTube link
       setLocalVideoFile(file);
+      cachedLocalVideoSession.localVideoFile = file;
+      saveActiveVideoToStorage({ isLocal: true, localFileName: file.name, videoId: null, inputUrl: "", position: 0 });
       setSessionPlayedSeconds(0);
       setTabSwitches(0);
       setFocusRemaining(null);
@@ -2848,6 +2925,8 @@ export default function VideoTracker() {
     setIsFocusTimerPending(false);
     setHasPlaybackStarted(false);
     setPlayerError(null);
+    saveActiveVideoToStorage(null);
+    cachedLocalVideoSession.localVideoFile = null;
     console.log("Player reset: loaded video removed!");
   };
 
@@ -2875,6 +2954,7 @@ export default function VideoTracker() {
   const handleStopSave = async (isFocusComplete = false) => {
     try {
       const isFocus = isFocusComplete === true;
+      const hadActiveFocusTimer = (focusRemainingRef.current !== null && focusRemainingRef.current > 0);
       isVideoEndingRef.current = true;
       setTimeout(() => {
         isVideoEndingRef.current = false;
@@ -2993,10 +3073,14 @@ export default function VideoTracker() {
         };
       });
 
-      // Clear note textarea and reset session timer
+      // Clear note textarea, reset session timer, and reset focus timer
       setNoteText("");
       setSessionPlayedSeconds(0);
       setTabSwitches(0);
+      setFocusRemaining(null);
+      focusRemainingRef.current = null;
+      setIsFocusTimerPending(false);
+      setHasPlaybackStarted(false);
       finalizeSession(true);
 
       const currentPlaybackPos = Math.round(
@@ -3069,7 +3153,7 @@ export default function VideoTracker() {
       if (isFocus) {
         triggerNotification({
           title: "Focus Session Completed!",
-          subtitle: "Great job! You stayed committed and finished your focus study timer.",
+          subtitle: "Great job! You stayed committed and completed your focus study timer.",
           badge: "🎉 +2 Coins Gained",
           badgeColor: "#10b981",
           icon: "🎯",
@@ -3083,12 +3167,16 @@ export default function VideoTracker() {
       } else {
         triggerNotification({
           title: "Session Saved!",
-          subtitle: "Your study video progress has been saved successfully.",
+          subtitle: hadActiveFocusTimer
+            ? "Your study session was saved. Focus timer was stopped early, so no coins were awarded."
+            : "Your study video progress has been saved successfully.",
           badge: "✅ Saved",
           badgeColor: "#3b82f6",
           icon: "📚",
           details: [
-            "⏱️ Watch time saved to history",
+            hadActiveFocusTimer
+              ? "⏱️ Stopped early before focus time finished (0 coins)"
+              : "⏱️ Watch time saved to history",
             "📓 Study notes & tag recorded",
           ],
           buttonText: "Got it!",
@@ -5733,7 +5821,7 @@ export default function VideoTracker() {
               <div className="flex items-center justify-start gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={handleStopSave}
+                  onClick={() => handleStopSave(false)}
                   className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-white bg-red-600 hover:bg-red-700 shadow-md transition-all active:scale-95 cursor-pointer flex items-center gap-1.5"
                 >
                   <span>⏹</span>

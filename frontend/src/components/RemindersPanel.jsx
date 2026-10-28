@@ -21,6 +21,9 @@ const RemindersPanel = () => {
   const handleAdd = async () => {
     if (newReminderTitle.trim() && reminderTime) {
       const token = localStorage.getItem("token");
+      const today = new Date();
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const todayStr = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()}`;
       try {
         const res = await fetch(`${API_BASE}/api/reminders/add`, {
           method: "POST",
@@ -29,7 +32,12 @@ const RemindersPanel = () => {
             Authorization: `Bearer ${token}`,
           },
           credentials: "include",
-          body: JSON.stringify({ title: newReminderTitle, time: reminderTime }),
+          body: JSON.stringify({
+            title: newReminderTitle.trim(),
+            time: reminderTime,
+            date: todayStr,
+            createdAt: new Date().toISOString(),
+          }),
         });
         const data = await res.json();
         if (data.success) {

@@ -98,7 +98,7 @@ const Register = () => {
           to="/"
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
             isDark
-              ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
+              ? "bg-slate-900/70 border-emerald-500/30 text-emerald-200 hover:bg-slate-800"
               : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
           }`}
         >
@@ -109,93 +109,96 @@ const Register = () => {
 
       {/* Main Register Card */}
       <div className="w-full max-w-2xl mx-auto my-auto">
-        <div className={`p-8 md:p-10 rounded-3xl backdrop-blur-2xl border transition-all duration-300 shadow-2xl ${
+        <div className={`rounded-3xl backdrop-blur-2xl border transition-all duration-300 shadow-2xl overflow-hidden ${
           isDark
-            ? "bg-slate-900/85 border-purple-500/25 text-white"
-            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+            ? "bg-slate-900/95 border-emerald-500/30 text-white shadow-emerald-950/40"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_20px_50px_rgba(0,0,0,0.15)] text-slate-800"
         }`}>
-          <div className="text-center mb-6">
-            <h2 className="text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 bg-clip-text text-transparent">
-              Create Your Account
+          {/* Card Header Banner matching Profile */}
+          <div className="bg-[#1b3f30] p-6 text-white text-center shadow-md">
+            <h2 className="text-2xl font-extrabold flex items-center justify-center gap-2 tracking-tight">
+              ✨ Create Your Account
             </h2>
-            <p className={`text-xs md:text-sm mt-1 font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              Join StudyBuddy and elevate your daily learning experience.
+            <p className="text-xs opacity-90 font-medium text-emerald-100">
+              Join StudyBuddy and elevate your daily learning experience
             </p>
           </div>
 
-          {/* Google Sign-Up Button */}
-          <div className="flex justify-center mb-6">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => alert("Google sign-up failed. Please try again.")}
-              text="signup_with"
-              shape="rectangular"
-              size="large"
-              width="350"
-              theme={isDark ? "filled_black" : "outline"}
-            />
-          </div>
-
-          {/* Divider */}
-          <div className="flex items-center mb-6">
-            <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
-            <span className={`px-4 text-xs uppercase font-bold tracking-wider ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-              or register with details
-            </span>
-            <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
-          </div>
-
-          <form onSubmit={handleSignup} className="grid md:grid-cols-2 gap-4">
-            {[
-              { label: "Full Name", name: "name", type: "text", required: true, placeholder: "John Doe" },
-              { label: "Class", name: "className", type: "text", placeholder: "B.Tech" },
-              { label: "Course", name: "course", type: "text", placeholder: "CSE" },
-              { label: "Year", name: "year", type: "text", placeholder: "3rd Year" },
-              { label: "Domain / Interest", name: "domain", type: "text", placeholder: "Web Dev / AI" },
-              { label: "Email", name: "email", type: "email", required: true, placeholder: "you@example.com" },
-              { label: "Phone No.", name: "phone", type: "tel", required: true, placeholder: "+91 9876543210" },
-              { label: "College / School", name: "college", type: "text", required: true, placeholder: "Institute Name" },
-              { label: "City", name: "city", type: "text", required: true, placeholder: "City" },
-              { label: "State", name: "state", type: "text", required: true, placeholder: "State" },
-              { label: "Nation", name: "nation", type: "text", required: true, placeholder: "Country" },
-              { label: "Password", name: "password", type: "password", required: true, placeholder: "••••••••" },
-            ].map((field, idx) => (
-              <div key={idx}>
-                <label className={`block text-xs font-bold uppercase tracking-wider mb-1 ${isDark ? "text-purple-300" : "text-slate-700"}`}>
-                  {field.label}{field.required ? " *" : ""}
-                </label>
-                <input
-                  type={field.type}
-                  name={field.name}
-                  required={field.required || false}
-                  placeholder={field.placeholder}
-                  value={formData[field.name]}
-                  onChange={handleChange}
-                  className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
-                    isDark
-                      ? "bg-slate-800/80 border-purple-500/30 text-white placeholder-slate-400"
-                      : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
-                  }`}
-                />
-              </div>
-            ))}
-
-            <div className="md:col-span-2 mt-4">
-              <button
-                type="submit"
-                className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg hover:shadow-purple-500/25 transition-all duration-300 hover:scale-[1.01]"
-              >
-                Complete Registration
-              </button>
+          <div className="p-6 md:p-8">
+            {/* Google Sign-Up Button */}
+            <div className="flex justify-center mb-6">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => alert("Google sign-up failed. Please try again.")}
+                text="signup_with"
+                shape="rectangular"
+                size="large"
+                width="350"
+                theme={isDark ? "filled_black" : "outline"}
+              />
             </div>
-          </form>
 
-          <p className={`mt-6 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-            Already have an account?{" "}
-            <Link to="/login" className="text-purple-500 font-bold hover:underline">
-              Log in instead
-            </Link>
-          </p>
+            {/* Divider */}
+            <div className="flex items-center mb-6">
+              <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
+              <span className={`px-4 text-xs uppercase font-bold tracking-wider ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                or register with details
+              </span>
+              <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
+            </div>
+
+            <form onSubmit={handleSignup} className="grid md:grid-cols-2 gap-4">
+              {[
+                { label: "Full Name", name: "name", type: "text", required: true, placeholder: "John Doe" },
+                { label: "Class", name: "className", type: "text", placeholder: "B.Tech" },
+                { label: "Course", name: "course", type: "text", placeholder: "CSE" },
+                { label: "Year", name: "year", type: "text", placeholder: "3rd Year" },
+                { label: "Domain / Interest", name: "domain", type: "text", placeholder: "Web Dev / AI" },
+                { label: "Email", name: "email", type: "email", required: true, placeholder: "you@example.com" },
+                { label: "Phone No.", name: "phone", type: "tel", required: true, placeholder: "+91 9876543210" },
+                { label: "College / School", name: "college", type: "text", required: true, placeholder: "Institute Name" },
+                { label: "City", name: "city", type: "text", required: true, placeholder: "City" },
+                { label: "State", name: "state", type: "text", required: true, placeholder: "State" },
+                { label: "Nation", name: "nation", type: "text", required: true, placeholder: "Country" },
+                { label: "Password", name: "password", type: "password", required: true, placeholder: "••••••••" },
+              ].map((field, idx) => (
+                <div key={idx}>
+                  <label className={`block text-xs font-bold uppercase tracking-wider mb-1 ${isDark ? "text-emerald-300" : "text-slate-700"}`}>
+                    {field.label}{field.required ? " *" : ""}
+                  </label>
+                  <input
+                    type={field.type}
+                    name={field.name}
+                    required={field.required || false}
+                    placeholder={field.placeholder}
+                    value={formData[field.name]}
+                    onChange={handleChange}
+                    className={`w-full px-3.5 py-2.5 rounded-xl border text-sm font-medium outline-none focus:ring-2 focus:ring-[#1b3f30] transition-all ${
+                      isDark
+                        ? "bg-slate-800/80 border-emerald-500/30 text-white placeholder-slate-400"
+                        : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
+                    }`}
+                  />
+                </div>
+              ))}
+
+              <div className="md:col-span-2 mt-4">
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-[#1b3f30] hover:bg-[#143024] text-white rounded-xl font-bold shadow-lg shadow-emerald-950/20 transition-all duration-300 hover:scale-[1.01] cursor-pointer"
+                >
+                  Complete Registration
+                </button>
+              </div>
+            </form>
+
+            <p className={`mt-6 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              Already have an account?{" "}
+              <Link to="/login" className="text-[#1b3f30] dark:text-emerald-400 font-bold hover:underline">
+                Log in instead
+              </Link>
+            </p>
+          </div>
         </div>
       </div>
 

@@ -1,831 +1,1996 @@
-// import React, { useState, useEffect } from "react";
-// import {
-//   BarChart,
-//   Bar,
-//   XAxis,
-//   YAxis,
-//   CartesianGrid,
-//   Tooltip,
-//   ResponsiveContainer,
-//   Legend,
-// } from "recharts";
-
-// const AssignmentCard = () => {
-//   // State for data
-//   const [assignments, setAssignments] = useState([]);
-//   const [hackathons, setHackathons] = useState([]);
-//   const [reminders, setReminders] = useState([]);
-
-//   // State for UI and settings
-//   const [coins, setCoins] = useState(() => parseInt(localStorage.getItem("assignment_coins")) || 100);
-//   const [tabSwitches, setTabSwitches] = useState(() => parseInt(localStorage.getItem("assignment_tabSwitches")) || 0);
-//   const [darkMode, setDarkMode] = useState(false);
-//   const [filter, setFilter] = useState("All");
-//   const [currentTime, setCurrentTime] = useState(new Date());
-
-//   // State for input forms (controlled components)
-//   const [newAssignment, setNewAssignment] = useState({ title: "", deadline: "" });
-//   const [newHackathon, setNewHackathon] = useState({ title: "", date: "", platform: "", link: "" });
-//   const [newReminder, setNewReminder] = useState({ title: "", time: "" });
-
-//   // --- SIDE EFFECTS (useEffect) ---
-
-//   // Save coins & tabSwitches to localStorage
-//   useEffect(() => {
-//     localStorage.setItem("assignment_coins", coins);
-//     localStorage.setItem("assignment_tabSwitches", tabSwitches);
-//   }, [coins, tabSwitches]);
-
-//   // Tab switch detection logic
-//   useEffect(() => {
-//     const handleVisibilityChange = () => {
-//       if (document.hidden) {
-//         setTabSwitches((prevSwitches) => {
-//           const newSwitches = prevSwitches + 1;
-//           if (newSwitches > 5) {
-//             if (coins >= 10) {
-//               setCoins((prevCoins) => prevCoins - 10);
-//               alert(`⚠️ Tab switched! -10 coins deducted`);
-//             } else {
-//               alert("🚫 No coins left! Stay on this tab.");
-//               return prevSwitches; // Don't increment if no coins
-//             }
-//           } else {
-//             alert(`⚠️ Tab switched! (${newSwitches}/5 free)`);
-//           }
-//           return newSwitches;
-//         });
-//       }
-//     };
-//     document.addEventListener("visibilitychange", handleVisibilityChange);
-//     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-//   }, [coins]); // Re-check coins value if it changes
-
-//   // Timer to update countdowns every second
-//   useEffect(() => {
-//     const timer = setInterval(() => {
-//       setCurrentTime(new Date());
-//     }, 1000);
-//     return () => clearInterval(timer);
-//   }, []);
-
-//   // --- HELPER FUNCTIONS ---
-
-//   const getTimeRemaining = (deadline) => {
-//     const total = Date.parse(deadline) - currentTime.getTime();
-//     if (total <= 0) return { total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
-//     const seconds = Math.floor((total / 1000) % 60);
-//     const minutes = Math.floor((total / 1000 / 60) % 60);
-//     const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
-//     const days = Math.floor(total / (1000 * 60 * 60 * 24));
-//     return { total, days, hours, minutes, seconds };
-//   };
-
-//   // --- EVENT HANDLERS ---
-
-//   const handleAddAssignment = () => {
-//     if (!newAssignment.title || !newAssignment.deadline) return;
-//     setAssignments(prev => [...prev, { ...newAssignment, id: Date.now(), status: "Pending" }]);
-//     setNewAssignment({ title: "", deadline: "" });
-//   };
-
-//   const handleAddHackathon = () => {
-//     if (!newHackathon.title || !newHackathon.date) return;
-//     setHackathons(prev => [...prev, { ...newHackathon, id: Date.now(), status: "Pending" }]);
-//     setNewHackathon({ title: "", date: "", platform: "", link: "" });
-//   };
-
-//   const handleAddReminder = () => {
-//     if (!newReminder.title || !newReminder.time) return;
-//     setReminders(prev => [...prev, { ...newReminder, id: Date.now() }]);
-//     setNewReminder({ title: "", time: "" });
-//   };
-
-//   const toggleStatus = (id, type) => {
-//     const updater = (item) => item.id === id ? { ...item, status: item.status === "Pending" ? "Completed" : "Pending" } : item;
-//     if (type === "assignment") {
-//       setAssignments(prev => prev.map(updater));
-//     } else if (type === "hackathon") {
-//       setHackathons(prev => prev.map(updater));
-//     }
-//   };
-
-//   const removeReminder = (id) => {
-//     setReminders(prev => prev.filter(r => r.id !== id));
-//   };
-
-
-//   // --- DERIVED DATA for Rendering ---
-
-//   const graphData = [
-//     {
-//       name: "Assignments",
-//       Completed: assignments.filter((a) => a.status === "Completed").length,
-//       Pending: assignments.filter((a) => a.status === "Pending").length,
-//     },
-//     {
-//       name: "Hackathons",
-//       Completed: hackathons.filter((h) => h.status === "Completed").length,
-//       Pending: hackathons.filter((h) => h.status === "Pending").length,
-//     },
-//   ];
-
-//   const filteredAssignments = assignments.filter(a => filter === "All" || a.status === filter);
-//   const filteredHackathons = hackathons.filter(h => filter === "All" || h.status === filter);
-
-//   // --- JSX RENDER ---
-
-//   return (
-//     <div className={darkMode ? 'dark-mode' : ''}>
-//       <div className="header">
-//         <h1>📚 Assignment & Hackathon Tracker</h1>
-//         <button id="darkModeToggle" className="dark-mode-toggle" onClick={() => setDarkMode(!darkMode)}>
-//           {darkMode ? "Light Mode" : "Dark Mode"}
-//         </button>
-//       </div>
-
-//       <div className="status-section">
-//         <span className="coins">🪙 {coins} Coins</span>
-//         <span className="switches">🔄 {tabSwitches}/5 Free</span>
-//       </div>
-
-//       <div className="filter-section">
-//         <button className={filter === 'All' ? 'active-filter' : 'inactive-filter'} onClick={() => setFilter('All')}>All</button>
-//         <button className={filter === 'Pending' ? 'active-filter' : 'inactive-filter'} onClick={() => setFilter('Pending')}>Pending</button>
-//         <button className={filter === 'Completed' ? 'active-filter' : 'inactive-filter'} onClick={() => setFilter('Completed')}>Completed</button>
-//       </div>
-
-//       <div className="add-card">
-//         <h2>📝 Add Assignment</h2>
-//         <input type="text" placeholder="Assignment Title" value={newAssignment.title} onChange={(e) => setNewAssignment({...newAssignment, title: e.target.value})}/>
-//         <input type="datetime-local" value={newAssignment.deadline} onChange={(e) => setNewAssignment({...newAssignment, deadline: e.target.value})}/>
-//         <button onClick={handleAddAssignment}>Add Assignment</button>
-//       </div>
-
-//       <div className="add-card">
-//         <h2>🏆 Add Hackathon</h2>
-//         <input type="text" placeholder="Hackathon Title" value={newHackathon.title} onChange={(e) => setNewHackathon({...newHackathon, title: e.target.value})} />
-//         <input type="date" value={newHackathon.date} onChange={(e) => setNewHackathon({...newHackathon, date: e.target.value})} />
-//         <input type="text" placeholder="Platform" value={newHackathon.platform} onChange={(e) => setNewHackathon({...newHackathon, platform: e.target.value})} />
-//         <input type="text" placeholder="Link" value={newHackathon.link} onChange={(e) => setNewHackathon({...newHackathon, link: e.target.value})} />
-//         <button onClick={handleAddHackathon}>Add Hackathon</button>
-//       </div>
-
-//       <div className="add-card">
-//         <h2>⏰ Add Reminder</h2>
-//         <input type="text" placeholder="Reminder Title" value={newReminder.title} onChange={(e) => setNewReminder({...newReminder, title: e.target.value})} />
-//         <input type="time" value={newReminder.time} onChange={(e) => setNewReminder({...newReminder, time: e.target.value})} />
-//         <button onClick={handleAddReminder}>Add Reminder</button>
-//       </div>
-
-//       <div className="add-card">
-//         <h2>📊 Weekly Stats</h2>
-//         <ResponsiveContainer width="100%" height={250}>
-//             <BarChart data={graphData}>
-//                 <CartesianGrid strokeDasharray="3 3" />
-//                 <XAxis dataKey="name" />
-//                 <YAxis />
-//                 <Tooltip />
-//                 <Legend />
-//                 <Bar dataKey="Completed" stackId="a" fill="#4ade80" name="Completed" />
-//                 <Bar dataKey="Pending" stackId="a" fill="#facc15" name="Pending" />
-//             </BarChart>
-//         </ResponsiveContainer>
-//       </div>
-
-//       <div style={{ marginBottom: '2rem' }}>
-//         <h2>📝 Assignments</h2>
-//         <div className="item-grid">
-//             {filteredAssignments.map(a => {
-//                 const remaining = getTimeRemaining(a.deadline);
-//                 let cloudClass = 'pending-normal';
-//                 if (a.status === 'Completed') {
-//                     cloudClass = 'completed';
-//                 } else if (remaining.total <= 0) {
-//                     cloudClass = 'pending-urgent';
-//                 } else if (remaining.total < 12 * 60 * 60 * 1000) {
-//                     cloudClass = 'pending-warning';
-//                 }
-//                 return (
-//                     <div key={a.id} className={`cloud-item assignment-item ${cloudClass}`}>
-//                         <p className="item-title">{a.title}</p>
-//                         <p className="item-details">
-//                             {remaining.total > 0 ? `${remaining.days}d ${remaining.hours}h ${remaining.minutes}m left` : "Expired"}
-//                         </p>
-//                         <button className="status-btn" onClick={() => toggleStatus(a.id, 'assignment')}>
-//                             {a.status === "Pending" ? "Mark Complete" : "Mark Pending"}
-//                         </button>
-//                     </div>
-//                 );
-//             })}
-//         </div>
-//       </div>
-
-//       <div style={{ marginBottom: '2rem' }}>
-//         <h2>🏆 Hackathons</h2>
-//         <div className="item-grid">
-//             {filteredHackathons.map(h => {
-//                 const cloudClass = h.status === "Completed" ? 'completed' : 'pending-normal';
-//                 return (
-//                     <div key={h.id} className={`cloud-item hackathon-item ${cloudClass}`}>
-//                          <p className="item-title">{h.title}</p>
-//                          <p className="item-details">{new Date(h.date).toLocaleDateString()}</p>
-//                          <p className="item-details">{h.platform}</p>
-//                          <button className="status-btn" onClick={() => toggleStatus(h.id, 'hackathon')}>
-//                              {h.status === "Pending" ? "Mark Complete" : "Mark Pending"}
-//                          </button>
-//                     </div>
-//                 );
-//             })}
-//         </div>
-//       </div>
-
-//       <div style={{ marginBottom: '2rem' }}>
-//         <h2>⏰ Reminders</h2>
-//         <div className="item-grid">
-//             {reminders.map(r => {
-//                 const now = new Date();
-//                 const [hours, minutes] = r.time.split(":").map(Number);
-//                 const target = new Date(now);
-//                 target.setHours(hours, minutes, 0, 0);
-//                 const diff = target - now;
-//                 const timeLeft = diff > 0 ? `${Math.floor(diff / 1000 / 60 / 60)}h ${Math.floor((diff / 1000 / 60) % 60)}m left` : "Time Passed";
-
-//                 return(
-//                     <div key={r.id} className="cloud-item reminder-item">
-//                         <p className="item-title">{r.title}</p>
-//                         <p className="item-details">{r.time}</p>
-//                         <p className="item-details">{timeLeft}</p>
-//                         <button className="status-btn" onClick={() => removeReminder(r.id)}>Dismiss</button>
-//                     </div>
-//                 );
-//             })}
-//         </div>
-//       </div>
-
-//       <style>{`
-//         /* All original CSS is placed here */
-//         @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-//         :root {
-//             --bg-start-color: #e6e0f0; --bg-end-color: #f0f3f8; --text-color: #333; --card-bg: #fff;
-//             --btn-gradient: linear-gradient(to right, #4338ca, #db2777); --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-//             --heading-color: #6B57E0; --yellow-200: #fef08a; --green-200: #dcfce7; --red-200: #fecaca; --orange-200: #fed7aa;
-//             --cloud-bg-assignment: #f7e6f8; --cloud-bg-hackathon: #e6f8f7; --cloud-bg-reminder: #f8e6f7;
-//             --cloud-bg-completed: #dceefc; --cloud-bg-urgent: #fbc2c2; --cloud-bg-warning: #ffe6cc;
-//         }
-//         body { padding: 2rem; margin: 0; }
-//         .app-container { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, var(--bg-start-color), var(--bg-end-color)); color: var(--text-color); min-height: 100vh; }
-//         .dark-mode { background: #1f2937; color: #e5e7eb; }
-//         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-//         .header h1 { font-size: 1.875rem; font-weight: 700; color: var(--heading-color); }
-//         .dark-mode .header h1 { color: #db2777; }
-//         .header .dark-mode-toggle { padding: 0.5rem 1rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.5rem; box-shadow: var(--box-shadow); cursor: pointer; transition: all 0.2s ease; }
-//         .status-section { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
-//         .status-section span { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
-//         .status-section .coins { background-color: var(--yellow-200); }
-//         .status-section .switches { background-color: var(--green-200); }
-//         .filter-section { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-//         .filter-section button { padding: 0.5rem 1rem; border: none; border-radius: 0.5rem; font-weight: 600; box-shadow: var(--box-shadow); cursor: pointer; }
-//         .filter-section .active-filter { background: var(--btn-gradient); color: white; }
-//         .filter-section .inactive-filter { background-color: rgba(255, 255, 255, 0.3); color: #1f2937; }
-//         .dark-mode .filter-section .inactive-filter { background: #374151; color: #e5e7eb; }
-//         .add-card { margin-bottom: 2rem; padding: 1.5rem; background-color: rgba(255, 255, 255, 0.3); backdrop-filter: blur(8px); border-radius: 1rem; box-shadow: var(--box-shadow); }
-//         .dark-mode .add-card { background-color: rgba(31, 41, 55, 0.5); border: 1px solid rgba(255,255,255,0.1); }
-//         .add-card h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
-//         .add-card input { box-sizing: border-box; width: 100%; margin-bottom: 0.5rem; padding: 0.75rem; border-radius: 0.5rem; border: 1px solid #ccc; }
-//         .dark-mode .add-card input { background-color: #374151; color: #fff; border-color: #4b5563; }
-//         .add-card button { padding: 0.75rem 1rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.5rem; box-shadow: var(--box-shadow); cursor: pointer; }
-//         .item-grid { display: flex; flex-wrap: wrap; gap: 2rem; justify-content: flex-start; }
-//         .cloud-item { width: 250px; height: 150px; position: relative; padding: 1.5rem; border-radius: 50%; box-shadow: var(--box-shadow); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; transition: all 0.3s ease; animation: float-animation 6s ease-in-out infinite; }
-//         .cloud-item:hover { transform: translateY(-10px) scale(1.05); }
-//         .cloud-item::before, .cloud-item::after { content: ''; position: absolute; background: inherit; border-radius: 50%; z-index: -1; box-shadow: inherit; }
-//         .cloud-item::before { width: 100px; height: 100px; top: -50px; left: 25px; }
-//         .cloud-item::after { width: 120px; height: 120px; top: -30px; right: 10px; }
-//         .cloud-item:nth-child(even) { animation-delay: -3s; }
-//         @keyframes float-animation { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-//         .cloud-item.assignment-item { background-color: var(--cloud-bg-assignment); }
-//         .cloud-item.hackathon-item { background-color: var(--cloud-bg-hackathon); }
-//         .cloud-item.reminder-item { background-color: var(--cloud-bg-reminder); }
-//         .cloud-item.completed { background-color: var(--cloud-bg-completed); }
-//         .cloud-item.pending-urgent { background-color: var(--cloud-bg-urgent); }
-//         .cloud-item.pending-warning { background-color: var(--cloud-bg-warning); }
-//         .item-title { font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem; }
-//         .item-details { font-size: 0.75rem; color: #4b5563; }
-//         .dark-mode .item-details { color: #d1d5db; }
-//         .status-btn { margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.25rem; cursor: pointer; }
-//       `}</style>
-//     </div>
-//   );
-// };
-
-// export default AssignmentCard;
-
-import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
-import profileIcon from '../assets/profile_icon.png';
 import API_BASE from "../services/apiBase";
 
 const AssignmentCard = () => {
   const {
-    assignments, setAssignments,
-    hackathons, setHackathons,
-    reminders, setReminders,
-    addAssignment, addHackathon, addReminder,
+    assignments = [],
+    setAssignments,
+    reminders = [],
+    setReminders,
+    addAssignment: contextAddAssignment,
+    removeAssignment: contextRemoveAssignment,
+    addReminder: contextAddReminder,
     removeReminder: contextRemoveReminder,
-    highlightedReminders,
-    theme
+    theme,
   } = useAppContext();
 
   const isDark = theme === "dark";
-
   const navigate = useNavigate();
 
-  const [coins, setCoins] = useState(() => parseInt(localStorage.getItem("assignment_coins")) || 100);
-  const [tabSwitches, setTabSwitches] = useState(() => parseInt(localStorage.getItem("assignment_tabSwitches")) || 0);
-  const [darkMode, setDarkMode] = useState(false);
-  const [filter, setFilter] = useState("All");
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [user, setUser] = useState(null);
-  const [isDropdownOpen, setDropdownOpen] = useState(false);
+  // Local state for UI
+  const [activeTab, setActiveTab] = useState("All"); // "All" | "Assignments" | "Reminders"
+  const [searchQuery, setSearchQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("All");
+  const [priorityFilter, setPriorityFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("All");
 
-  const [newAssignment, setNewAssignment] = useState({ title: "", deadline: "" });
-  const [newHackathon, setNewHackathon] = useState({ title: "", date: "", platform: "", link: "" });
-  const [newReminder, setNewReminder] = useState({ title: "", time: "" });
+  // Selection state
+  const [selectedAssignments, setSelectedAssignments] = useState(new Set());
+  const [selectedReminders, setSelectedReminders] = useState(new Set());
 
+  // Active Dropdown state (for row action dots)
+  const [openActionId, setOpenActionId] = useState(null);
+
+  // Modals
+  const [isAddAssignmentOpen, setIsAddAssignmentOpen] = useState(false);
+  const [isEditAssignmentOpen, setIsEditAssignmentOpen] = useState(false);
+  const [currentEditAssignment, setCurrentEditAssignment] = useState(null);
+
+  const [isAddReminderOpen, setIsAddReminderOpen] = useState(false);
+  const [isEditReminderOpen, setIsEditReminderOpen] = useState(false);
+  const [currentEditReminder, setCurrentEditReminder] = useState(null);
+
+  // Calendar State (Default to current date)
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(() => new Date().getDate());
+
+  // Form states for Assignment
+  const [assignmentForm, setAssignmentForm] = useState({
+    title: "",
+    subject: "",
+    deadline: "",
+    priority: "Medium",
+    status: "Pending",
+    description: "",
+  });
+
+  // Form states for Reminder
+  const [reminderForm, setReminderForm] = useState({
+    title: "",
+    category: "Study",
+    date: "",
+    time: "",
+    repeat: "One Time",
+    status: "Pending",
+  });
+
+  // --- Fetch data from backend on mount so refresh never loses user data ---
   useEffect(() => {
-    localStorage.setItem("assignment_coins", coins);
-    localStorage.setItem("assignment_tabSwitches", tabSwitches);
-  }, [coins, tabSwitches]);
+    const fetchFreshData = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) return;
 
-  // Load user from localStorage
+      try {
+        const [aRes, rRes] = await Promise.all([
+          fetch(`${API_BASE}/api/assignments/list`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }),
+          fetch(`${API_BASE}/api/reminders/list`, {
+            headers: { Authorization: `Bearer ${token}` },
+            credentials: "include",
+          }),
+        ]);
+
+        const [aData, rData] = await Promise.all([aRes.json(), rRes.json()]);
+        const userObj = JSON.parse(localStorage.getItem("user") || "{}");
+        const uId = userObj?.id || userObj?._id;
+
+        if (aData.success && Array.isArray(aData.assignments)) {
+          setAssignments(aData.assignments);
+          if (uId) {
+            localStorage.setItem(`assignments_${uId}`, JSON.stringify(aData.assignments));
+          }
+        }
+
+        if (rData.success && Array.isArray(rData.reminders)) {
+          setReminders(rData.reminders);
+          if (uId) {
+            localStorage.setItem(`reminders_${uId}`, JSON.stringify(rData.reminders));
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching tasks from backend:", err);
+      }
+    };
+
+    fetchFreshData();
+  }, [setAssignments, setReminders]);
+
+  // Click outside to close actions dropdown
   useEffect(() => {
-    const storedUser = JSON.parse(localStorage.getItem("user"));
-    if (storedUser) setUser(storedUser);
+    const handleGlobalClick = (e) => {
+      if (!e.target.closest(".row-action-dropdown") && !e.target.closest(".row-action-btn")) {
+        setOpenActionId(null);
+      }
+    };
+    document.addEventListener("click", handleGlobalClick);
+    return () => document.removeEventListener("click", handleGlobalClick);
   }, []);
 
-  const handleLogout = async () => {
+  // Format date helper
+  const formatDateDisplay = (dateVal) => {
+    if (!dateVal) return { formatted: "No Date", relative: "", isOverdue: false };
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return { formatted: String(dateVal), relative: "", isOverdue: false };
+
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const formatted = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+
+    const now = new Date();
+    // Midnight to midnight comparison
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const diffDays = Math.ceil((startOfTarget - startOfToday) / (1000 * 60 * 60 * 24));
+
+    let relative = "";
+    let isOverdue = false;
+
+    if (diffDays < 0) {
+      relative = "Overdue";
+      isOverdue = true;
+    } else if (diffDays === 0) {
+      relative = "Due today";
+    } else if (diffDays === 1) {
+      relative = "1 day left";
+    } else {
+      relative = `${diffDays} days left`;
+    }
+
+    return { formatted, relative, isOverdue };
+  };
+
+  // --- Handlers for Assignments ---
+  const handleOpenAddAssignment = () => {
+    // Current date + 2 days as default
+    const defaultDate = new Date();
+    defaultDate.setDate(defaultDate.getDate() + 2);
+    const dateStr = defaultDate.toISOString().slice(0, 16);
+
+    setAssignmentForm({
+      title: "",
+      subject: "",
+      deadline: dateStr,
+      priority: "Medium",
+      status: "Pending",
+      description: "",
+    });
+    setIsAddAssignmentOpen(true);
+  };
+
+  const handleSaveAddAssignment = async (e) => {
+    e.preventDefault();
+    if (!assignmentForm.title.trim()) return;
+
+    const token = localStorage.getItem("token");
+    const newAss = {
+      title: assignmentForm.title.trim(),
+      subject: assignmentForm.subject.trim() || "General",
+      deadline: assignmentForm.deadline ? new Date(assignmentForm.deadline).toISOString() : new Date().toISOString(),
+      priority: assignmentForm.priority || "Medium",
+      status: assignmentForm.status || "Pending",
+      description: assignmentForm.description || "",
+    };
+
     try {
-      const res = await fetch(`${API_BASE}/api/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      const data = await res.json();
-
-      
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
-      setUser(null);
-      setDropdownOpen(false);
-
-      if (res.ok) {
-        navigate("/");
+      if (token) {
+        const res = await fetch(`${API_BASE}/api/assignments/add`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify(newAss),
+        });
+        const data = await res.json();
+        if (data.success && data.assignment) {
+          if (contextAddAssignment) contextAddAssignment(data.assignment);
+          else setAssignments((prev) => [data.assignment, ...(prev || [])]);
+        } else {
+          setAssignments((prev) => [{ ...newAss, _id: `local-${Date.now()}` }, ...(prev || [])]);
+        }
       } else {
-        console.error("Logout failed:", data.message);
+        setAssignments((prev) => [{ ...newAss, _id: `local-${Date.now()}` }, ...(prev || [])]);
       }
-    } catch (error) {
-      console.error("Error during logout:", error);
-      // Ensure frontend logout even if server call fails
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
-      setUser(null);
-      setDropdownOpen(false);
-      alert("An error occurred during logout.");
+    } catch (err) {
+      console.error("Error saving assignment to MongoDB:", err);
+      setAssignments((prev) => [{ ...newAss, _id: `local-${Date.now()}` }, ...(prev || [])]);
+    }
+
+    setIsAddAssignmentOpen(false);
+  };
+
+  const handleOpenEditAssignment = (ass) => {
+    setCurrentEditAssignment(ass);
+    setAssignmentForm({
+      title: ass.title || "",
+      subject: ass.subject || "",
+      deadline: ass.deadline ? new Date(ass.deadline).toISOString().slice(0, 16) : "",
+      priority: ass.priority || "Medium",
+      status: ass.status || "Pending",
+      description: ass.description || "",
+    });
+    setIsEditAssignmentOpen(true);
+    setOpenActionId(null);
+  };
+
+  const handleSaveEditAssignment = async (e) => {
+    e.preventDefault();
+    if (!currentEditAssignment) return;
+
+    const token = localStorage.getItem("token");
+    const updated = {
+      ...currentEditAssignment,
+      title: assignmentForm.title.trim(),
+      subject: assignmentForm.subject.trim() || "General",
+      deadline: assignmentForm.deadline ? new Date(assignmentForm.deadline).toISOString() : currentEditAssignment.deadline,
+      priority: assignmentForm.priority,
+      status: assignmentForm.status,
+      description: assignmentForm.description,
+    };
+
+    try {
+      if (token && currentEditAssignment._id && !currentEditAssignment._id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/assignments/${currentEditAssignment._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify(updated),
+        });
+      }
+    } catch (err) {
+      console.error("Error updating assignment in MongoDB:", err);
+    }
+
+    setAssignments((prev) => (prev || []).map((a) => (a._id === currentEditAssignment._id ? updated : a)));
+    setIsEditAssignmentOpen(false);
+    setCurrentEditAssignment(null);
+  };
+
+  const handleDeleteAssignment = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this assignment?")) return;
+    const token = localStorage.getItem("token");
+
+    if (contextRemoveAssignment) {
+      contextRemoveAssignment(id);
+    } else {
+      setAssignments((prev) => (prev || []).filter((a) => (a._id || a.id) !== id));
+    }
+    setOpenActionId(null);
+
+    try {
+      if (token && id && !id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/assignments/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+      }
+    } catch (err) {
+      console.error("Error deleting assignment from MongoDB:", err);
     }
   };
 
-  // useEffect(() => {
-  //   const handleVisibilityChange = () => {
-  //     if (document.hidden) {
-  //       setTabSwitches((prevSwitches) => {
-  //         const newSwitches = prevSwitches + 1;
-  //         if (newSwitches > 5) {
-  //           if (coins >= 10) {
-  //             setCoins((prevCoins) => prevCoins - 10);
-  //             alert(`⚠️ Tab switched! -10 coins deducted`);
-  //           } else {
-  //             alert("🚫 No coins left! Stay on this tab.");
-  //             return prevSwitches;
-  //           }
-  //         } else {
-  //           alert(`⚠️ Tab switched! (${newSwitches}/5 free)`);
-  //         }
-  //         return newSwitches;
-  //       });
-  //     }
-  //   };
-  //   document.addEventListener("visibilitychange", handleVisibilityChange);
-  //   return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  // }, [coins]);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentTime(new Date());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  // Tasks are fetched in AppContext on mount
-
-  const getTimeRemaining = (deadline) => {
-    if (!deadline) return { total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
-    const total = Date.parse(deadline) - currentTime.getTime();
-    if (total <= 0) return { total: 0, days: 0, hours: 0, minutes: 0, seconds: 0 };
-    const seconds = Math.floor((total / 1000) % 60);
-    const minutes = Math.floor((total / 1000 / 60) % 60);
-    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
-    const days = Math.floor(total / (1000 * 60 * 60 * 24));
-    return { total, days, hours, minutes, seconds };
-  };
-
-  const getUrgency = (deadline) => {
-    const remaining = getTimeRemaining(deadline);
-    if (remaining.total <= 0) return "urgent";
-    if (remaining.total < 12 * 60 * 60 * 1000) return "warning";
-    return "normal";
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "No Date";
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? "Invalid Date" : d.toLocaleDateString();
-  };
-
-  const handleAddAssignment = async () => {
-    if (!newAssignment.title || !newAssignment.deadline) return;
+  const handleToggleAssignmentStatus = async (ass) => {
+    const nextStatus = ass.status === "Completed" ? "Pending" : "Completed";
+    const token = localStorage.getItem("token");
 
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/assignments/add`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-        body: JSON.stringify(newAssignment),
-      });
+      if (token && !ass._id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/assignments/${ass._id}/status`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      }
+    } catch (err) {
+      console.error("Error toggling assignment status in MongoDB:", err);
+    }
 
-      const data = await res.json();
-      if (data.success) {
-        addAssignment(data.assignment);
-        setNewAssignment({ title: "", deadline: "" });
-        console.log("✅ Assignment saved to backend:", data.assignment);
+    setAssignments((prev) => (prev || []).map((a) => (a._id === ass._id ? { ...a, status: nextStatus } : a)));
+  };
+
+  const handleSetAssignmentStatus = async (ass, newStatus) => {
+    const token = localStorage.getItem("token");
+    try {
+      if (token && !ass._id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/assignments/${ass._id}/status`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({ status: newStatus }),
+        });
+      }
+    } catch (err) {
+      console.error("Error updating status in MongoDB:", err);
+    }
+
+    setAssignments((prev) => (prev || []).map((a) => (a._id === ass._id ? { ...a, status: newStatus } : a)));
+    setOpenActionId(null);
+  };
+
+  // --- Handlers for Reminders ---
+  const handleOpenAddReminder = () => {
+    const today = new Date();
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const todayStr = `${today.getDate()} ${months[today.getMonth()]} ${today.getFullYear()}`;
+
+    // Default target time: 30 minutes from now
+    const futureDate = new Date(Date.now() + 30 * 60 * 1000);
+    let hours = futureDate.getHours();
+    const ampm = hours >= 12 ? "PM" : "AM";
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minutesStr = String(futureDate.getMinutes()).padStart(2, "0");
+    const defaultTime = `${hours}:${minutesStr} ${ampm}`;
+
+    setReminderForm({
+      title: "",
+      category: "Study",
+      date: todayStr,
+      time: defaultTime,
+      repeat: "One Time",
+      status: "Pending",
+    });
+    setIsAddReminderOpen(true);
+  };
+
+  const handleSaveAddReminder = async (e) => {
+    e.preventDefault();
+    if (!reminderForm.title.trim()) return;
+
+    const token = localStorage.getItem("token");
+    const nowIso = new Date().toISOString();
+    const newRem = {
+      title: reminderForm.title.trim(),
+      category: reminderForm.category || "Study",
+      date: reminderForm.date || "",
+      time: reminderForm.time || "",
+      repeat: reminderForm.repeat || "One Time",
+      status: reminderForm.status || "Pending",
+      createdAt: nowIso,
+    };
+
+    try {
+      if (token) {
+        const res = await fetch(`${API_BASE}/api/reminders/add`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify(newRem),
+        });
+        const data = await res.json();
+        if (data.success && data.reminder) {
+          if (contextAddReminder) contextAddReminder(data.reminder);
+          else setReminders((prev) => [data.reminder, ...(prev || [])]);
+        } else {
+          setReminders((prev) => [{ ...newRem, _id: `local-r-${Date.now()}` }, ...(prev || [])]);
+        }
       } else {
-        console.error("⚠️ Failed to save assignment:", data.message);
-        alert(`Error: ${data.message}`);
+        setReminders((prev) => [{ ...newRem, _id: `local-r-${Date.now()}` }, ...(prev || [])]);
       }
     } catch (err) {
-      console.error("❌ Error adding assignment:", err);
+      console.error("Error saving reminder to MongoDB:", err);
+      setReminders((prev) => [{ ...newRem, _id: `local-r-${Date.now()}` }, ...(prev || [])]);
     }
+
+    setIsAddReminderOpen(false);
   };
 
-  const handleAddHackathon = async () => {
-    if (!newHackathon.title || !newHackathon.date) return;
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/hackathons/add`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-        body: JSON.stringify(newHackathon),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addHackathon(data.hackathon);
-        setNewHackathon({ title: "", date: "", platform: "", link: "" });
-        console.log("✅ Hackathon saved:", data.hackathon);
-      }
-    } catch (err) {
-      console.error("❌ Error adding hackathon:", err);
-    }
+  const handleOpenEditReminder = (rem) => {
+    setCurrentEditReminder(rem);
+    setReminderForm({
+      title: rem.title || "",
+      category: rem.category || "Study",
+      date: rem.date || "",
+      time: rem.time || "",
+      repeat: rem.repeat || "One Time",
+      status: rem.status || "Pending",
+    });
+    setIsEditReminderOpen(true);
+    setOpenActionId(null);
   };
 
-  const handleAddReminder = async () => {
-    if (!newReminder.title || !newReminder.time) return;
-    try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/reminders/add`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-        body: JSON.stringify(newReminder),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addReminder(data.reminder);
-        setNewReminder({ title: "", time: "" });
-        console.log("✅ Reminder saved:", data.reminder);
-      }
-    } catch (err) {
-      console.error("❌ Error adding reminder:", err);
-    }
-  };
+  const handleSaveEditReminder = async (e) => {
+    e.preventDefault();
+    if (!currentEditReminder) return;
 
-  const toggleStatus = async (id, type) => {
-    try {
-      const token = localStorage.getItem("token");
-      const url = type === "assignment" ? `${API_BASE}/api/assignments/${id}/status` : `${API_BASE}/api/hackathons/${id}/status`;
-      const res = await fetch(url, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.success) {
-        const updater = (prev) => prev.map(item => item._id === id ? (type === "assignment" ? data.assignment : data.hackathon) : item);
-        if (type === "assignment") setAssignments(updater);
-        else setHackathons(updater);
-      }
-    } catch (err) {
-      console.error(`❌ Error toggling ${type} status:`, err);
-    }
-  };
-
-  const removeReminder = async (id) => {
-    // 1. Optimistic UI update (Instant feedback)
-    const originalReminders = [...reminders];
-    const reminderToDelete = reminders.find(r => (r._id || r.id) === id);
-
-    // Use the unified removal function from AppContext
-    const unifiedId = reminderToDelete?._id || reminderToDelete?.id || id;
-
-    // Call the context function to update global state + localStorage immediately
-    // Note: useAppContext returns setReminders, but we want the wrapper removeReminder
-    // I need to make sure I am destructuring removeReminder from useAppContext
-    contextRemoveReminder(unifiedId);
+    const token = localStorage.getItem("token");
+    const updated = {
+      ...currentEditReminder,
+      title: reminderForm.title.trim(),
+      category: reminderForm.category,
+      date: reminderForm.date,
+      time: reminderForm.time,
+      repeat: reminderForm.repeat,
+      status: reminderForm.status,
+    };
 
     try {
-      const token = localStorage.getItem("token");
-      const res = await fetch(`${API_BASE}/api/reminders/${unifiedId}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (!data.success) {
-        // Rollback on failure
-        console.error("❌ Failed to delete reminder on server:", data.message);
-        setReminders(originalReminders);
-        localStorage.setItem("reminders", JSON.stringify(originalReminders));
-      } else {
-        console.log("✅ Reminder deleted on server");
+      if (token && currentEditReminder._id && !currentEditReminder._id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/reminders/${currentEditReminder._id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify(updated),
+        });
       }
     } catch (err) {
-      console.error("❌ Error deleting reminder:", err);
-      // Rollback on error
-      setReminders(originalReminders);
-      localStorage.setItem("reminders", JSON.stringify(originalReminders));
+      console.error("Error editing reminder in MongoDB:", err);
+    }
+
+    setReminders((prev) => (prev || []).map((r) => (r._id === currentEditReminder._id ? updated : r)));
+    setIsEditReminderOpen(false);
+    setCurrentEditReminder(null);
+  };
+
+  const handleDeleteReminder = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this reminder?")) return;
+    const token = localStorage.getItem("token");
+
+    try {
+      if (token && !id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/reminders/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+          credentials: "include",
+        });
+      }
+    } catch (err) {
+      console.error("Error deleting reminder from MongoDB:", err);
+    }
+
+    if (contextRemoveReminder) {
+      contextRemoveReminder(id);
+    } else {
+      setReminders((prev) => (prev || []).filter((r) => r._id !== id));
+    }
+    setOpenActionId(null);
+  };
+
+  const handleToggleReminderStatus = async (rem) => {
+    const nextStatus = rem.status === "Completed" ? "Pending" : "Completed";
+    const token = localStorage.getItem("token");
+
+    try {
+      if (token && !rem._id.startsWith("local-")) {
+        await fetch(`${API_BASE}/api/reminders/${rem._id}/status`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          body: JSON.stringify({ status: nextStatus }),
+        });
+      }
+    } catch (err) {
+      console.error("Error toggling reminder status in MongoDB:", err);
+    }
+
+    setReminders((prev) => (prev || []).map((r) => (r._id === rem._id ? { ...r, status: nextStatus } : r)));
+  };
+
+  // --- Filtering calculations ---
+  const filteredAssignments = useMemo(() => {
+    return (assignments || []).filter((item) => {
+      if (categoryFilter === "Reminders") return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = (item.title || "").toLowerCase().includes(q);
+        const matchSubject = (item.subject || "").toLowerCase().includes(q);
+        if (!matchTitle && !matchSubject) return false;
+      }
+      if (priorityFilter !== "All" && item.priority !== priorityFilter) return false;
+      if (statusFilter !== "All" && item.status !== statusFilter) return false;
+
+      return true;
+    });
+  }, [assignments, categoryFilter, searchQuery, priorityFilter, statusFilter]);
+
+  const filteredReminders = useMemo(() => {
+    return (reminders || []).filter((item) => {
+      if (categoryFilter === "Assignments") return false;
+      if (categoryFilter !== "All" && categoryFilter !== "Reminders") {
+        if ((item.category || "").toLowerCase() !== categoryFilter.toLowerCase()) return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchTitle = (item.title || "").toLowerCase().includes(q);
+        const matchCat = (item.category || "").toLowerCase().includes(q);
+        if (!matchTitle && !matchCat) return false;
+      }
+      if (statusFilter !== "All" && item.status !== statusFilter) return false;
+
+      return true;
+    });
+  }, [reminders, categoryFilter, searchQuery, statusFilter]);
+
+  // Summary counts based on real user data
+  const totalAssignmentsCount = (assignments || []).length;
+  const pendingAssignmentsCount = (assignments || []).filter((a) => a.status === "Pending" || a.status === "In Progress").length;
+  const completedAssignmentsCount = (assignments || []).filter((a) => a.status === "Completed").length;
+
+  const totalRemindersCount = (reminders || []).length;
+  const now = new Date();
+  const todayStr = `${now.getDate()} ${["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][now.getMonth()]}`;
+  const todayRemindersCount = (reminders || []).filter((r) => r.date && r.date.toLowerCase().includes(todayStr.toLowerCase())).length;
+  const overdueRemindersCount = (reminders || []).filter((r) => r.status === "Overdue").length;
+
+  // --- Dynamic Upcoming Deadlines (Generated solely from user's data) ---
+  const upcomingDeadlines = useMemo(() => {
+    const list = [];
+    const currentTime = new Date();
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+    // 1. User's Assignments
+    (assignments || []).forEach((ass) => {
+      if (!ass.deadline) return;
+      const d = new Date(ass.deadline);
+      if (isNaN(d.getTime())) return;
+
+      const startOfToday = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate()).getTime();
+      const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const diffDays = Math.ceil((startOfTarget - startOfToday) / (1000 * 60 * 60 * 24));
+
+      let badge = `${diffDays} days left`;
+      let badgeType = "warning";
+      let isOverdue = false;
+
+      if (diffDays < 0 || ass.status === "Overdue") {
+        badge = "Overdue";
+        badgeType = "overdue";
+        isOverdue = true;
+      } else if (diffDays === 0) {
+        badge = "Today";
+        badgeType = "today";
+      } else if (diffDays <= 2) {
+        badge = `${diffDays} ${diffDays === 1 ? "day" : "days"} left`;
+        badgeType = "urgent";
+      }
+
+      list.push({
+        id: `ass-${ass._id}`,
+        rawDate: d,
+        day: String(d.getDate()),
+        month: months[d.getMonth()],
+        title: ass.title,
+        type: ass.subject || "Assignment",
+        categoryType: "assignment",
+        badge,
+        badgeType,
+        isOverdue,
+      });
+    });
+
+    // 2. User's Reminders
+    (reminders || []).forEach((rem) => {
+      if (!rem.date) return;
+      const d = new Date(rem.date);
+      if (isNaN(d.getTime())) return;
+
+      const startOfToday = new Date(currentTime.getFullYear(), currentTime.getMonth(), currentTime.getDate()).getTime();
+      const startOfTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+      const diffDays = Math.ceil((startOfTarget - startOfToday) / (1000 * 60 * 60 * 24));
+
+      let badge = `${diffDays} days left`;
+      let badgeType = "warning";
+      let isOverdue = false;
+
+      if (diffDays < 0 || rem.status === "Overdue") {
+        badge = "Overdue";
+        badgeType = "overdue";
+        isOverdue = true;
+      } else if (diffDays === 0) {
+        badge = "Today";
+        badgeType = "today";
+      } else if (diffDays <= 2) {
+        badge = `${diffDays} ${diffDays === 1 ? "day" : "days"} left`;
+        badgeType = "urgent";
+      }
+
+      list.push({
+        id: `rem-${rem._id}`,
+        rawDate: d,
+        day: String(d.getDate()),
+        month: months[d.getMonth()],
+        title: rem.title,
+        type: rem.category || "Reminder",
+        categoryType: "reminder",
+        badge,
+        badgeType,
+        isOverdue,
+      });
+    });
+
+    // Sort by earliest date first
+    list.sort((a, b) => a.rawDate.getTime() - b.rawDate.getTime());
+    return list;
+  }, [assignments, reminders]);
+
+  // Calendar Helpers (Mapped dynamically to user's tasks)
+  const currentMonthYearStr = useMemo(() => {
+    const monthNames = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+    return `${monthNames[calendarDate.getMonth()]} ${calendarDate.getFullYear()}`;
+  }, [calendarDate]);
+
+  const calendarDays = useMemo(() => {
+    const year = calendarDate.getFullYear();
+    const month = calendarDate.getMonth();
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    const days = [];
+    for (let i = 0; i < firstDayIndex; i++) {
+      days.push({ day: null });
+    }
+
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dots = [];
+
+      // Check if user has assignment on this date
+      const hasAssignment = (assignments || []).some((a) => {
+        if (!a.deadline) return false;
+        const dt = new Date(a.deadline);
+        return dt.getFullYear() === year && dt.getMonth() === month && dt.getDate() === d;
+      });
+      if (hasAssignment) dots.push("assignment");
+
+      // Check if user has reminder on this date
+      const hasReminder = (reminders || []).some((r) => {
+        if (!r.date) return false;
+        const dt = new Date(r.date);
+        return !isNaN(dt.getTime()) && dt.getFullYear() === year && dt.getMonth() === month && dt.getDate() === d;
+      });
+      if (hasReminder) dots.push("reminder");
+
+      days.push({
+        day: d,
+        dots,
+        isCurrent: d === selectedCalendarDay,
+      });
+    }
+    return days;
+  }, [calendarDate, selectedCalendarDay, assignments, reminders]);
+
+  const handlePrevMonth = () => {
+    setCalendarDate((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setCalendarDate((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
+
+  // Toggle selection
+  const handleSelectAllAssignments = (e) => {
+    if (e.target.checked) {
+      setSelectedAssignments(new Set(filteredAssignments.map((a) => a._id)));
+    } else {
+      setSelectedAssignments(new Set());
     }
   };
 
-  const graphData = [
-    {
-      name: "Assignments",
-      Completed: assignments.filter((a) => a.status === "Completed").length,
-      Pending: assignments.filter((a) => a.status === "Pending").length,
-    },
-    {
-      name: "Hackathons",
-      Completed: hackathons.filter((h) => h.status === "Completed").length,
-      Pending: hackathons.filter((h) => h.status === "Pending").length,
-    },
-  ];
+  const handleSelectAssignment = (id) => {
+    const next = new Set(selectedAssignments);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedAssignments(next);
+  };
 
-  const filteredAssignments = assignments.filter(a => filter === "All" || a.status === filter);
-  const filteredHackathons = hackathons.filter(h => filter === "All" || h.status === filter);
+  const handleSelectAllReminders = (e) => {
+    if (e.target.checked) {
+      setSelectedReminders(new Set(filteredReminders.map((r) => r._id)));
+    } else {
+      setSelectedReminders(new Set());
+    }
+  };
+
+  const handleSelectReminder = (id) => {
+    const next = new Set(selectedReminders);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedReminders(next);
+  };
 
   return (
-    <div className={`min-h-screen relative z-10 transition-colors duration-500 ${isDark ? 'dark-mode text-white' : 'text-slate-800'}`}>
-      {/* Unified Navbar with ThemeToggle */}
+    <div className={`min-h-screen font-sans relative z-10 transition-colors duration-500 ${isDark ? "text-white" : "text-slate-800"}`}>
+      {/* Top Navbar */}
       <Navbar />
 
-      {/* Main Content Wrapper */}
-      <div className="px-6 md:px-10 py-10">
-        {/* Page Introduction Card */}
+      <main className="px-6 md:px-10 py-10 max-w-[1600px] mx-auto">
+        {/* --- PAGE INTRO BANNER (Nature/Mountain theme from image) --- */}
         <PageIntroCard className="mb-6" />
 
-        {/* <div className="status-section">
-        <span className="coins">🪙 {coins} Coins</span>
-        <span className="switches">🔄 {tabSwitches}/5 Free</span>
-      </div> */}
-
-        <div className="filter-section">
-          <button className={filter === 'All' ? 'active-filter' : 'inactive-filter'} onClick={() => setFilter('All')}>All</button>
-          <button className={filter === 'Pending' ? 'active-filter' : 'inactive-filter'} onClick={() => setFilter('Pending')}>Pending</button>
-          <button className={filter === 'Completed' ? 'active-filter' : 'inactive-filter'} onClick={() => setFilter('Completed')}>Completed</button>
-        </div>
-
-        <div className="cards-grid">
-          <div className="add-card">
-            <h2>📝 Add Assignment</h2>
-            <input type="text" placeholder="Assignment Title" value={newAssignment.title} onChange={(e) => setNewAssignment({ ...newAssignment, title: e.target.value })} />
-            <input type="datetime-local" value={newAssignment.deadline} onChange={(e) => setNewAssignment({ ...newAssignment, deadline: e.target.value })} />
-            <button onClick={handleAddAssignment}>Add Assignment</button>
+        {/* ================= 4 KEY METRIC & ACTION CARDS (Row 1) ================= */}
+        <div className="w-full grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-5 mb-6">
+          {/* Card 1: Total Assignments */}
+          <div
+            className="rounded-3xl p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md hover:scale-[1.01] bg-[#fbf9f3] border-[#eee8de] text-gray-900"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
+                Total Assignments
+              </span>
+              <span className="text-2xl select-none">📚</span>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-purple-600">
+                {totalAssignmentsCount}
+              </div>
+              <p className="text-[11px] sm:text-xs font-medium mt-1 m-0 text-slate-500">
+                {pendingAssignmentsCount} pending • {completedAssignmentsCount} completed
+              </p>
+            </div>
           </div>
 
-          <div className="add-card">
-            <h2>🏆 Add Hackathon</h2>
-            <input type="text" placeholder="Hackathon Title" value={newHackathon.title} onChange={(e) => setNewHackathon({ ...newHackathon, title: e.target.value })} />
-            <input type="date" value={newHackathon.date} onChange={(e) => setNewHackathon({ ...newHackathon, date: e.target.value })} />
-            <input type="text" placeholder="Platform" value={newHackathon.platform} onChange={(e) => setNewHackathon({ ...newHackathon, platform: e.target.value })} />
-            <input type="text" placeholder="Link" value={newHackathon.link} onChange={(e) => setNewHackathon({ ...newHackathon, link: e.target.value })} />
-            <button onClick={handleAddHackathon}>Add Hackathon</button>
+          {/* Card 2: Active Reminders */}
+          <div
+            className="rounded-3xl p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md hover:scale-[1.01] bg-[#fbf9f3] border-[#eee8de] text-gray-900"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
+                Active Reminders
+              </span>
+              <span className="text-2xl select-none">⏰</span>
+            </div>
+            <div>
+              <div className="text-2xl sm:text-3xl font-black tracking-tight text-emerald-600">
+                {totalRemindersCount}
+              </div>
+              <p className="text-[11px] sm:text-xs font-medium mt-1 m-0 text-slate-500">
+                {todayRemindersCount} due today • {overdueRemindersCount} overdue
+              </p>
+            </div>
           </div>
 
-          <div className="add-card">
-            <h2>⏰ Add Reminder</h2>
-            <input type="text" placeholder="Reminder Title" value={newReminder.title} onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })} />
-            <input type="time" value={newReminder.time} onChange={(e) => setNewReminder({ ...newReminder, time: e.target.value })} />
-            <button onClick={handleAddReminder}>Add Reminder</button>
+          {/* Card 3: Add Assignment Quick Action */}
+          <div
+            onClick={handleOpenAddAssignment}
+            className="group cursor-pointer rounded-3xl p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md hover:scale-[1.01] bg-[#fbf9f3] border-[#eee8de] hover:border-blue-400 text-gray-900"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
+                New Task
+              </span>
+              <span className="text-2xl select-none group-hover:scale-110 transition-transform">📝</span>
+            </div>
+            <div>
+              <div className="text-base sm:text-lg font-bold tracking-tight text-blue-600 flex items-center justify-between">
+                <span>+ Add Assignment</span>
+                <span className="text-base group-hover:translate-x-1 transition-transform">→</span>
+              </div>
+              <p className="text-[11px] sm:text-xs font-medium mt-1 m-0 text-slate-500">
+                Create task with deadline & priority
+              </p>
+            </div>
+          </div>
+
+          {/* Card 4: Add Reminder Quick Action */}
+          <div
+            onClick={handleOpenAddReminder}
+            className="group cursor-pointer rounded-3xl p-5 sm:p-6 flex flex-col justify-between transition-all duration-300 border shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md hover:scale-[1.01] bg-[#fbf9f3] border-[#eee8de] hover:border-rose-400 text-gray-900"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
+                Smart Alarm
+              </span>
+              <span className="text-2xl select-none group-hover:scale-110 transition-transform">🔔</span>
+            </div>
+            <div>
+              <div className="text-base sm:text-lg font-bold tracking-tight text-rose-500 flex items-center justify-between">
+                <span>+ Add Reminder</span>
+                <span className="text-base group-hover:translate-x-1 transition-transform">→</span>
+              </div>
+              <p className="text-[11px] sm:text-xs font-medium mt-1 m-0 text-slate-500">
+                Set alarm at 50%, 90% & 95%
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="add-card">
-          <h2>📊 Weekly Stats</h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={graphData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="Completed" stroke="#4ade80" strokeWidth={2} name="Completed" activeDot={{ r: 6 }} />
-              <Line type="monotone" dataKey="Pending" stroke="#facc15" strokeWidth={2} name="Pending" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div style={{ marginBottom: '2rem' }}>
-          <h2>📝 Assignments</h2>
-          <div className="item-grid">
-            {filteredAssignments.map((a, index) => {
-              const assignmentDate = a.deadline || a.dueDate;
-              const remaining = getTimeRemaining(assignmentDate);
-              const urgency = getUrgency(assignmentDate);
-              const cloudClass = a.status === "Completed" ? 'completed' : `pending-${urgency}`;
-              return (
-                <div key={a._id || `a-${index}`} className={`cloud-item assignment-item ${cloudClass}`}>
-                  <p className="item-title">{a.title}</p>
-                  <p className="item-details">{formatDate(assignmentDate)}</p>
-                  <button className="status-btn" onClick={() => toggleStatus(a._id, 'assignment')}>
-                    {a.status === "Pending" ? "Mark Complete" : "Mark Pending"}
-                  </button>
+        {/* --- SECTION: UPCOMING DEADLINES (LEFT) & CALENDAR WIDGET (RIGHT) --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch mb-8">
+          {/* === LEFT: SCROLLABLE UPCOMING DEADLINES (calender ke left mein) === */}
+          <div className="lg:col-span-7 xl:col-span-8 flex flex-col">
+            <div className="rounded-3xl p-6 sm:p-7 border h-full flex flex-col transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md bg-[#fbf9f3] border-[#eee8de] text-gray-900">
+              {/* Header */}
+              <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#eee8de] shrink-0">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-amber-100 text-amber-700">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-sm md:text-base text-slate-900">
+                      Upcoming Deadlines
+                    </h3>
+                    <p className="text-[11px] font-medium text-slate-500">
+                      {upcomingDeadlines.length} active deadlines tracked
+                    </p>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
 
-        <div style={{ marginBottom: '2rem' }}>
-          <h2>🏆 Hackathons</h2>
-          <div className="item-grid">
-            {filteredHackathons.map((h, index) => {
-              const cloudClass = h.status === "Completed" ? 'completed' : 'pending-normal';
-              return (
-                <div key={h._id || `h-${index}`} className={`cloud-item hackathon-item ${cloudClass}`}>
-                  <p className="item-title">{h.title}</p>
-                  <p className="item-details">{formatDate(h.date)}</p>
-                  <p className="item-details">{h.platform}</p>
+                <button
+                  onClick={handleOpenAddAssignment}
+                  className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1"
+                >
+                  + Add New
+                </button>
+              </div>
 
-                  {/* ✅ CLICKABLE LINK ADDED HERE */}
-                  {h.link && (
-                    <a
-                      href={h.link.startsWith("http") ? h.link : `https://${h.link}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="hackathon-link"
+              {/* Scrollable Deadlines List (User requested: isko scrolling bnado) */}
+              <div className="max-h-[320px] overflow-y-auto pr-1.5 space-y-2.5 flex-1">
+                {upcomingDeadlines.length === 0 ? (
+                  <div className="h-full min-h-[160px] flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                    <svg className="w-10 h-10 mb-2 opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
+                      <line x1="16" y1="2" x2="16" y2="6" />
+                      <line x1="8" y1="2" x2="8" y2="6" />
+                      <line x1="3" y1="10" x2="21" y2="10" />
+                    </svg>
+                    <p className="text-xs font-semibold text-slate-600">No upcoming deadlines.</p>
+                    <p className="text-[11px] mt-0.5 text-slate-400">Add an assignment or reminder to track your upcoming deadlines here!</p>
+                  </div>
+                ) : (
+                  upcomingDeadlines.map((dl) => (
+                    <div
+                      key={dl.id}
+                      className="flex items-center justify-between gap-3 p-3.5 rounded-2xl border transition-all bg-white border-[#eee8de] hover:border-[#ded5c5] shadow-xs"
                     >
-                      🔗 Visit Hackathon Page
-                    </a>
-                  )}
+                      <div className="flex items-center gap-3 min-w-0">
+                        {/* Date Block */}
+                        <div className="text-center w-11 shrink-0 py-1.5 px-1.5 rounded-xl border bg-[#f4f0e6] border-[#eee8de]">
+                          <div className={`text-base font-extrabold leading-none ${dl.isOverdue ? "text-rose-600" : "text-slate-900"}`}>
+                            {dl.day}
+                          </div>
+                          <div className={`text-[9px] font-bold uppercase mt-0.5 ${dl.isOverdue ? "text-rose-600" : "text-slate-500"}`}>
+                            {dl.month}
+                          </div>
+                        </div>
 
-                  <button className="status-btn" onClick={() => toggleStatus(h._id, 'hackathon')}>
-                    {h.status === "Pending" ? "Mark Complete" : "Mark Pending"}
+                        {/* Icon */}
+                        <div className="shrink-0">
+                          {dl.categoryType === "assignment" ? (
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-100 text-emerald-700">
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                              </svg>
+                            </div>
+                          ) : (
+                            <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-rose-100 text-rose-600">
+                              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Title & Type */}
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold truncate text-slate-900">
+                            {dl.title}
+                          </div>
+                          <div className="text-[10px] font-medium mt-0.5 text-slate-500">
+                            {dl.type}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Badge */}
+                      <div className="shrink-0">
+                        {dl.badgeType === "today" && (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200">
+                            {dl.badge}
+                          </span>
+                        )}
+                        {dl.badgeType === "urgent" && (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                            {dl.badge}
+                          </span>
+                        )}
+                        {dl.badgeType === "warning" && (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+                            {dl.badge}
+                          </span>
+                        )}
+                        {dl.badgeType === "overdue" && (
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+                            {dl.badge}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* === RIGHT: CALENDAR WIDGET (Hackathon & LeetCode removed) === */}
+          <div className="lg:col-span-5 xl:col-span-4 flex flex-col">
+            <div className="rounded-3xl p-6 sm:p-7 border h-full flex flex-col justify-between transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md bg-[#fbf9f3] border-[#eee8de] text-gray-900">
+              {/* Calendar Month Navigation Header */}
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-sm md:text-base text-slate-900">
+                  {currentMonthYearStr}
+                </h3>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={handlePrevMonth}
+                    className="p-1.5 rounded-xl border border-[#eee8de] text-slate-700 bg-white hover:bg-[#f4f0e6] transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="m15 18-6-6 6-6" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={handleNextMonth}
+                    className="p-1.5 rounded-xl border border-[#eee8de] text-slate-700 bg-white hover:bg-[#f4f0e6] transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
                   </button>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </div>
 
-        <div style={{ marginBottom: '2rem' }}>
-          <h2>⏰ Reminders</h2>
-          <div className="item-grid">
-            {reminders.map((r, index) => {
-              const now = new Date();
-              const [hours, minutes] = r.time ? r.time.split(":").map(Number) : [0, 0];
-              const target = new Date(now);
-              target.setHours(hours, minutes, 0, 0);
-              const diff = target - now;
-              const timeLeft = diff > 0 ? `${Math.floor(diff / 1000 / 60 / 60)}h ${Math.floor((diff / 1000 / 60) % 60)}m left` : "Time Passed";
+              {/* Day Headers: Sun, Mon, Tue, etc. */}
+              <div className="grid grid-cols-7 text-center text-[11px] font-semibold mb-2 text-slate-500">
+                <div>Sun</div>
+                <div>Mon</div>
+                <div>Tue</div>
+                <div>Wed</div>
+                <div>Thu</div>
+                <div>Fri</div>
+                <div>Sat</div>
+              </div>
 
-              const isHighlighted = highlightedReminders.has(r._id);
+              {/* Calendar Days Grid */}
+              <div className="grid grid-cols-7 gap-y-2 text-center text-xs">
+                {calendarDays.map((item, idx) => {
+                  if (!item.day) {
+                    return <div key={`empty-${idx}`} className="h-8" />;
+                  }
 
-              return (
-                <div key={r._id || `r-${index}`} className={`cloud-item reminder-item ${isHighlighted ? 'reminder-glow' : ''}`}>
-                  <p className="item-title">{r.title}</p>
-                  <p className="item-details">{r.time}</p>
-                  <p className="item-details">{timeLeft}</p>
-                  <button className="status-btn" onClick={() => removeReminder(r._id)}>Dismiss</button>
+                  const isSelected = item.day === selectedCalendarDay;
+
+                  return (
+                    <div
+                      key={`day-${item.day}`}
+                      onClick={() => setSelectedCalendarDay(item.day)}
+                      className="flex flex-col items-center justify-center cursor-pointer group"
+                    >
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center font-medium transition-all ${
+                          isSelected
+                            ? "bg-[#1b4332] text-white font-bold scale-105 shadow-sm"
+                            : "text-slate-700 group-hover:bg-[#f4f0e6]"
+                        }`}
+                      >
+                        {item.day}
+                      </div>
+
+                      {/* Dots underneath for actual user tasks */}
+                      <div className="flex items-center gap-0.5 mt-0.5 h-1.5">
+                        {item.dots && item.dots.map((dot, dIdx) => {
+                          const dotColor = dot === "assignment" ? "bg-emerald-500" : "bg-sky-500";
+                          return (
+                            <span
+                              key={`dot-${dIdx}`}
+                              className={`w-1.5 h-1.5 rounded-full ${dotColor}`}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Calendar Legend: Only Assignment & Reminder */}
+              <div className="flex items-center justify-center gap-6 mt-5 pt-4 border-t border-[#eee8de] text-[11px] font-medium text-slate-600">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <span>Assignment</span>
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-sky-500" />
+                  <span>Reminder</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <style>{`
-        /* All original CSS + new hackathon-link style */
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-        :root {
-            --bg-start-color: #e6e0f0; --bg-end-color: #f0f3f8; --text-color: #333; --card-bg: #fff;
-            --btn-gradient: #1b3f30; --box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-            --heading-color: #6B57E0; --yellow-200: #fef08a; --green-200: #dcfce7; --red-200: #fecaca; --orange-200: #fed7aa;
-            --cloud-bg-assignment: #f7e6f8; --cloud-bg-hackathon: #e6f8f7; --cloud-bg-reminder: #f8e6f7;
-            --cloud-bg-completed: #dceefc; --cloud-bg-urgent: #fbc2c2; --cloud-bg-warning: #ffe6cc;
-        }
-        body { padding: 0; margin: 0; }
-        .app-container { font-family: 'Poppins', sans-serif; background: linear-gradient(135deg, var(--bg-start-color), var(--bg-end-color)); color: var(--text-color); min-height: 100vh; }
-        .dark-mode { --btn-gradient: linear-gradient(to right, #4338ca, #db2777); background: transparent; color: #e5e7eb; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
-        .header h1 { font-size: 2.25rem; font-weight: 800; letter-spacing: -0.025em; }
-        .status-section { display: flex; gap: 1.5rem; margin-bottom: 1.5rem; }
-        .status-section span { padding: 0.5rem 1rem; border-radius: 0.75rem; font-weight: 600; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
-        .status-section .coins { background-color: var(--yellow-200); }
-        .status-section .switches { background-color: var(--green-200); }
-        .filter-section { display: flex; gap: 1rem; margin-bottom: 1.5rem; }
-        .filter-section button { padding: 0.6rem 1.25rem; border: none; border-radius: 0.75rem; font-weight: 600; box-shadow: var(--box-shadow); cursor: pointer; transition: all 0.2s ease; }
-        .filter-section .active-filter { background: var(--btn-gradient); color: white; }
-        .filter-section .active-filter:hover { background: #143024; }
-        .dark-mode .filter-section .active-filter:hover { background: linear-gradient(to right, #4f46e5, #e11d48); }
-        .filter-section .inactive-filter { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(12px); color: #1e293b; border: 1px solid rgba(255,255,255,0.8); }
-        .dark-mode .filter-section .inactive-filter { background: rgba(30, 41, 59, 0.8); color: #e2e8f0; border: 1px solid rgba(168,85,247,0.3); }
-        .add-card button:hover, .status-btn:hover { background: #143024; opacity: 0.95; }
-        .dark-mode .add-card button:hover, .dark-mode .status-btn:hover { background: linear-gradient(to right, #4f46e5, #e11d48); }
-        .cards-grid { display: grid; grid-template-columns: repeat(1, 1fr); gap: 1.5rem; }
-        @media (min-width: 768px) { .cards-grid { grid-template-columns: repeat(2, 1fr); } }
-        @media (min-width: 1024px) { .cards-grid { grid-template-columns: repeat(3, 1fr); } }
-        .add-card { margin-bottom: 2rem; padding: 1.75rem; background: #fbf9f3; backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid #eee8de; box-shadow: 0 10px 35px rgba(0,0,0,0.04), inset 0 1px 1px rgba(255,255,255,0.95); color: #1e293b; }
-        .dark-mode .add-card { background: rgba(15, 23, 42, 0.82); backdrop-filter: blur(24px); border-radius: 1.5rem; border: 1px solid rgba(168, 85, 247, 0.25); box-shadow: 0 20px 40px rgba(0,0,0,0.4); color: #fff; }
-        .add-card h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 1rem; }
-        .add-card input { box-sizing: border-box; width: 100%; margin-bottom: 0.75rem; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 1px solid #cbd5e1; background: rgba(255,255,255,0.9); color: #0f172a; font-family: inherit; font-size: 0.95rem; }
-        .dark-mode .add-card input { background-color: rgba(30, 41, 59, 0.8); color: #fff; border: 1px solid rgba(168, 85, 247, 0.35); }
-        .add-card button { padding: 0.75rem 1.25rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.75rem; box-shadow: var(--box-shadow); cursor: pointer; font-weight: 600; }
-        .item-grid { display: flex; flex-wrap: wrap; gap: 2rem; justify-content: flex-start; margin-left: 20%; }
-        .cloud-item { width: 250px; height: 150px; position: relative; padding: 1.5rem; border-radius: 50%; box-shadow: var(--box-shadow); display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; cursor: pointer; transition: all 0.3s ease; animation: float-animation 6s ease-in-out infinite; }
-        .cloud-item:hover { transform: translateY(-10px) scale(1.05); }
-        .cloud-item::before, .cloud-item::after { content: ''; position: absolute; background: inherit; border-radius: 50%; z-index: -1; box-shadow: inherit; }
-        .cloud-item::before { width: 100px; height: 100px; top: -50px; left: 25px; }
-        .cloud-item::after { width: 120px; height: 120px; top: -30px; right: 10px; }
-        .cloud-item:nth-child(even) { animation-delay: -3s; }
-        @keyframes float-animation { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
-        .cloud-item.assignment-item { background-color: var(--cloud-bg-assignment); }
-        .cloud-item.hackathon-item { background-color: var(--cloud-bg-hackathon); }
-        .cloud-item.reminder-item { background-color: var(--cloud-bg-reminder); }
-        .cloud-item.completed { background-color: var(--cloud-bg-completed); }
-        .cloud-item.pending-urgent { background-color: var(--cloud-bg-urgent); }
-        .cloud-item.pending-warning { background-color: var(--cloud-bg-warning); }
-        .item-title { font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem; }
-        .item-details { font-size: 0.75rem; color: #4b5563; }
-        .dark-mode .item-details { color: #d1d5db; }
-        .status-btn { margin-top: 0.5rem; padding: 0.25rem 0.75rem; background: var(--btn-gradient); color: white; border: none; border-radius: 0.25rem; cursor: pointer; }
-        .hackathon-link { margin-top: 0.25rem; font-size: 0.8rem; color: #2563eb; text-decoration: none; font-weight: 600; transition: color 0.2s ease; }
-        .hackathon-link:hover { color: #1d4ed8; text-decoration: underline; }
-        .reminder-glow {
-            box-shadow: 0 0 25px #db2777, inset 0 0 15px #db2777 !important;
-            border: 2px solid #db2777 !important;
-            animation: pulse-glow 1.5s ease-in-out infinite !important;
-        }
-        @keyframes pulse-glow {
-            0%, 100% { transform: translateY(0) scale(1.02); }
-            50% { transform: translateY(-10px) scale(1.08); box-shadow: 0 0 40px #db2777, inset 0 0 25px #db2777 !important; }
-        }
-      `}</style>
-      </div>
+        {/* --- FILTER & SEARCH CONTROLS ROW --- */}
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-6">
+          {/* Segmented Pill Tabs */}
+          <div className="inline-flex p-1.5 rounded-2xl border bg-[#fbf9f3] border-[#eee8de] shadow-[0_8px_30px_rgba(0,0,0,0.03)]">
+            <button
+              onClick={() => setActiveTab("All")}
+              className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                activeTab === "All"
+                  ? "bg-[#1b4332] text-white shadow-sm font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Side by Side
+            </button>
+            <button
+              onClick={() => setActiveTab("Assignments")}
+              className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                activeTab === "Assignments"
+                  ? "bg-[#1b4332] text-white shadow-sm font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Assignments Only
+            </button>
+            <button
+              onClick={() => setActiveTab("Reminders")}
+              className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                activeTab === "Reminders"
+                  ? "bg-[#1b4332] text-white shadow-sm font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              Reminders Only
+            </button>
+          </div>
+
+          {/* Search & Filter Dropdowns */}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 sm:w-64">
+              <svg className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" />
+                <path d="m21 21-4.3-4.3" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 rounded-2xl text-xs border outline-none transition-all bg-white border-[#eee8de] text-slate-800 placeholder-slate-400 focus:border-[#1b4332]"
+              />
+            </div>
+
+            <select
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              className="px-3.5 py-2 rounded-2xl text-xs border outline-none cursor-pointer font-medium bg-white border-[#eee8de] text-slate-700"
+            >
+              <option value="All">All Categories</option>
+              <option value="Assignments">Assignments</option>
+              <option value="Reminders">Reminders</option>
+              <option value="Study">Study</option>
+              <option value="Project">Project</option>
+              <option value="Other">Other</option>
+            </select>
+
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="px-3.5 py-2 rounded-2xl text-xs border outline-none cursor-pointer font-medium bg-white border-[#eee8de] text-slate-700"
+            >
+              <option value="All">Priority: All</option>
+              <option value="High">High</option>
+              <option value="Medium">Medium</option>
+              <option value="Low">Low</option>
+            </select>
+
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-3.5 py-2 rounded-2xl text-xs border outline-none cursor-pointer font-medium bg-white border-[#eee8de] text-slate-700"
+            >
+              <option value="All">Status: All</option>
+              <option value="Pending">Pending</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="Overdue">Overdue</option>
+            </select>
+
+            {(searchQuery || categoryFilter !== "All" || priorityFilter !== "All" || statusFilter !== "All") && (
+              <button
+                onClick={() => {
+                  setSearchQuery("");
+                  setCategoryFilter("All");
+                  setPriorityFilter("All");
+                  setStatusFilter("All");
+                }}
+                title="Reset filters"
+                className="p-2 rounded-2xl border text-xs flex items-center justify-center transition-all bg-white border-[#eee8de] text-slate-600 hover:text-slate-900"
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* --- ASSIGNMENTS & REMINDERS SECTIONS (SIDE-BY-SIDE AS REQUESTED) --- */}
+        <div className={`grid gap-6 items-start ${activeTab === "All" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
+          {/* === ASSIGNMENTS SECTION === */}
+          {(activeTab === "All" || activeTab === "Assignments") && (
+            <div className="rounded-3xl border overflow-hidden transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md bg-[#fbf9f3] border-[#eee8de] text-gray-900">
+              {/* Header */}
+              <div className="px-6 py-5 flex items-center justify-between border-b border-[#eee8de]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-100 text-emerald-700">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                    </svg>
+                  </div>
+                  <h2 className="font-bold text-base md:text-lg text-slate-900">
+                    Assignments
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    {filteredAssignments.length}
+                  </span>
+                </div>
+                <button
+                  onClick={handleOpenAddAssignment}
+                  className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1"
+                >
+                  + Add Assignment
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#eee8de] text-slate-700 bg-[#f4f0e6]">
+                      <th className="py-3 px-3 w-8 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filteredAssignments.length > 0 && selectedAssignments.size === filteredAssignments.length}
+                          onChange={handleSelectAllAssignments}
+                          className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                        />
+                      </th>
+                      <th className="py-3 px-3 font-semibold">Title</th>
+                      <th className="py-3 px-2 font-semibold">Subject</th>
+                      <th className="py-3 px-2 font-semibold">Due Date</th>
+                      <th className="py-3 px-2 font-semibold">Priority</th>
+                      <th className="py-3 px-2 font-semibold">Status</th>
+                      <th className="py-3 px-2 font-semibold text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#eee8de]">
+                    {filteredAssignments.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-12 text-center text-slate-400">
+                          <p className="text-xs font-semibold text-slate-600">No assignments found.</p>
+                          <p className="text-[11px] mt-1 text-slate-400">Click "+ Add Assignment" to create your first assignment!</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredAssignments.map((ass) => {
+                        const dateInfo = formatDateDisplay(ass.deadline);
+                        const isDone = ass.status === "Completed";
+                        const isOverdue = ass.status === "Overdue" || dateInfo.isOverdue;
+
+                        return (
+                          <tr
+                            key={ass._id}
+                            className="transition-colors hover:bg-[#f4f0e6]/70"
+                          >
+                            <td className="py-3.5 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedAssignments.has(ass._id) || isDone}
+                                onChange={() => {
+                                  handleSelectAssignment(ass._id);
+                                  handleToggleAssignmentStatus(ass);
+                                }}
+                                className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                              />
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              <div className="flex items-center gap-1.5">
+                                <svg className="w-3.5 h-3.5 text-sky-600 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                  <polyline points="14 2 14 8 20 8" />
+                                  <line x1="16" y1="13" x2="8" y2="13" />
+                                  <line x1="16" y1="17" x2="8" y2="17" />
+                                </svg>
+                                <span className={`font-semibold truncate max-w-[140px] ${isDone ? "line-through text-slate-400" : "text-slate-900"}`}>
+                                  {ass.title}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-2 font-medium truncate max-w-[110px] text-slate-700">
+                              {ass.subject || "General"}
+                            </td>
+
+                            <td className="py-3.5 px-2 whitespace-nowrap">
+                              <div className="font-semibold text-slate-900">
+                                {dateInfo.formatted}
+                              </div>
+                              <div className={`text-[10px] font-medium ${isOverdue ? "text-rose-600 font-semibold" : "text-slate-500"}`}>
+                                {isOverdue ? "Overdue" : dateInfo.relative}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-2 whitespace-nowrap">
+                              {ass.priority === "High" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  High
+                                </span>
+                              )}
+                              {ass.priority === "Medium" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+                                  Med
+                                </span>
+                              )}
+                              {ass.priority === "Low" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Low
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-2 whitespace-nowrap">
+                              {ass.status === "Pending" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  Pending
+                                </span>
+                              )}
+                              {ass.status === "In Progress" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                  In Progress
+                                </span>
+                              )}
+                              {ass.status === "Completed" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Done
+                                </span>
+                              )}
+                              {ass.status === "Overdue" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  Overdue
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-2 text-center whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1 relative">
+                                <button
+                                  onClick={() => handleOpenEditAssignment(ass)}
+                                  title="Edit"
+                                  className="p-1 rounded text-slate-500 hover:text-slate-800"
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteAssignment(ass._id)}
+                                  title="Delete"
+                                  className="p-1 rounded text-rose-600 hover:text-rose-800"
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M3 6h18" />
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionId(openActionId === ass._id ? null : ass._id);
+                                  }}
+                                  className="row-action-btn p-1 rounded text-slate-400 hover:text-slate-700"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="5" r="1.5" />
+                                    <circle cx="12" cy="12" r="1.5" />
+                                    <circle cx="12" cy="19" r="1.5" />
+                                  </svg>
+                                </button>
+
+                                {openActionId === ass._id && (
+                                  <div className="row-action-dropdown absolute right-0 top-full mt-1 w-32 rounded-2xl border shadow-xl z-20 py-1 text-left bg-white border-[#eee8de] text-slate-800">
+                                    <button
+                                      onClick={() => handleSetAssignmentStatus(ass, "Pending")}
+                                      className="w-full px-2.5 py-1 text-[11px] text-left hover:bg-[#f4f0e6] flex items-center gap-1.5"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                                      Mark Pending
+                                    </button>
+                                    <button
+                                      onClick={() => handleSetAssignmentStatus(ass, "In Progress")}
+                                      className="w-full px-2.5 py-1 text-[11px] text-left hover:bg-[#f4f0e6] flex items-center gap-1.5"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                                      In Progress
+                                    </button>
+                                    <button
+                                      onClick={() => handleSetAssignmentStatus(ass, "Completed")}
+                                      className="w-full px-2.5 py-1 text-[11px] text-left hover:bg-[#f4f0e6] flex items-center gap-1.5"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      Mark Done
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* === REMINDERS SECTION === */}
+          {(activeTab === "All" || activeTab === "Reminders") && (
+            <div className="rounded-3xl border overflow-hidden transition-all duration-300 shadow-[0_8px_30px_rgba(0,0,0,0.03)] hover:shadow-md bg-[#fbf9f3] border-[#eee8de] text-gray-900">
+              {/* Header */}
+              <div className="px-6 py-5 flex items-center justify-between border-b border-[#eee8de]">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-rose-100 text-rose-600">
+                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                  </div>
+                  <h2 className="font-bold text-base md:text-lg text-slate-900">
+                    Reminders
+                  </h2>
+                  <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                    {filteredReminders.length}
+                  </span>
+                </div>
+                <button
+                  onClick={handleOpenAddReminder}
+                  className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1"
+                >
+                  + Add Reminder
+                </button>
+              </div>
+
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#eee8de] text-slate-700 bg-[#f4f0e6]">
+                      <th className="py-3 px-3 w-8 text-center">
+                        <input
+                          type="checkbox"
+                          checked={filteredReminders.length > 0 && selectedReminders.size === filteredReminders.length}
+                          onChange={handleSelectAllReminders}
+                          className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                        />
+                      </th>
+                      <th className="py-3 px-3 font-semibold">Title</th>
+                      <th className="py-3 px-2 font-semibold">Category</th>
+                      <th className="py-3 px-2 font-semibold">Date</th>
+                      <th className="py-3 px-2 font-semibold">Time</th>
+                      <th className="py-3 px-2 font-semibold">Repeat</th>
+                      <th className="py-3 px-2 font-semibold">Status</th>
+                      <th className="py-3 px-2 font-semibold text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#eee8de]">
+                    {filteredReminders.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="py-12 text-center text-slate-400">
+                          <p className="text-xs font-semibold text-slate-600">No reminders found.</p>
+                          <p className="text-[11px] mt-1 text-slate-400">Click "+ Add Reminder" to create your first reminder!</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredReminders.map((rem) => {
+                        const isDone = rem.status === "Completed";
+                        return (
+                          <tr
+                            key={rem._id}
+                            className="transition-colors hover:bg-[#f4f0e6]/70"
+                          >
+                            <td className="py-3.5 px-3 text-center">
+                              <input
+                                type="checkbox"
+                                checked={selectedReminders.has(rem._id) || isDone}
+                                onChange={() => {
+                                  handleSelectReminder(rem._id);
+                                  handleToggleReminderStatus(rem);
+                                }}
+                                className="w-3.5 h-3.5 rounded accent-emerald-600 cursor-pointer"
+                              />
+                            </td>
+
+                            <td className="py-3.5 px-3">
+                              <span className={`font-semibold truncate max-w-[130px] inline-block ${isDone ? "line-through text-slate-400" : "text-slate-900"}`}>
+                                {rem.title}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-2 whitespace-nowrap">
+                              {rem.category === "Study" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-100 text-sky-800 border border-sky-200">
+                                  Study
+                                </span>
+                              )}
+                              {rem.category === "Project" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-800 border border-purple-200">
+                                  Project
+                                </span>
+                              )}
+                              {rem.category !== "Study" && rem.category !== "Project" && (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+                                  {rem.category || "Other"}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-2 font-medium whitespace-nowrap text-slate-700">
+                              {rem.date || "—"}
+                            </td>
+
+                            <td className="py-3.5 px-2 font-medium whitespace-nowrap text-slate-700">
+                              {rem.time || "—"}
+                            </td>
+
+                            <td className="py-3.5 px-2 font-medium whitespace-nowrap text-slate-700">
+                              {rem.repeat || "One Time"}
+                            </td>
+
+                            <td className="py-3.5 px-2 whitespace-nowrap">
+                              {rem.status === "Completed" ? (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Done
+                                </span>
+                              ) : (
+                                <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                                  Pending
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-2 text-center whitespace-nowrap">
+                              <div className="inline-flex items-center gap-1 relative">
+                                <button
+                                  onClick={() => handleOpenEditReminder(rem)}
+                                  title="Edit"
+                                  className="p-1 rounded text-slate-500 hover:text-slate-800"
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteReminder(rem._id)}
+                                  title="Delete"
+                                  className="p-1 rounded text-rose-600 hover:text-rose-800"
+                                >
+                                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M3 6h18" />
+                                    <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionId(openActionId === rem._id ? null : rem._id);
+                                  }}
+                                  className="row-action-btn p-1 rounded text-slate-400 hover:text-slate-700"
+                                >
+                                  <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                                    <circle cx="12" cy="5" r="1.5" />
+                                    <circle cx="12" cy="12" r="1.5" />
+                                    <circle cx="12" cy="19" r="1.5" />
+                                  </svg>
+                                </button>
+
+                                {openActionId === rem._id && (
+                                  <div className="row-action-dropdown absolute right-0 top-full mt-1 w-32 rounded-2xl border shadow-xl z-20 py-1 text-left bg-white border-[#eee8de] text-slate-800">
+                                    <button
+                                      onClick={() => {
+                                        handleToggleReminderStatus(rem);
+                                        setOpenActionId(null);
+                                      }}
+                                      className="w-full px-2.5 py-1 text-[11px] text-left hover:bg-[#f4f0e6] flex items-center gap-1.5"
+                                    >
+                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                      {rem.status === "Completed" ? "Mark Pending" : "Mark Done"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* ========================================================================= */}
+      {/* --- ADD ASSIGNMENT MODAL --- */}
+      {/* ========================================================================= */}
+      {isAddAssignmentOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-[#eee8de] bg-[#fbf9f3] text-slate-900 shadow-2xl p-6 sm:p-7 transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-[#eee8de] mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-emerald-100 text-emerald-700">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-base text-slate-900">Add New Assignment</h3>
+              </div>
+              <button
+                onClick={() => setIsAddAssignmentOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAddAssignment} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Assignment Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. DBMS Assignment 2"
+                  value={assignmentForm.title}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Subject</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Database Management System"
+                  value={assignmentForm.subject}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, subject: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Due Date & Time *</label>
+                  <input
+                    type="datetime-local"
+                    required
+                    value={assignmentForm.deadline}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, deadline: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Priority</label>
+                  <select
+                    value={assignmentForm.priority}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, priority: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  >
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Status</label>
+                <select
+                  value={assignmentForm.status}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, status: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#eee8de]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddAssignmentOpen(false)}
+                  className="px-4 py-2 rounded-xl font-semibold border border-[#eee8de] text-slate-700 hover:bg-[#f4f0e6]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all"
+                >
+                  Save to Database
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* --- EDIT ASSIGNMENT MODAL --- */}
+      {/* ========================================================================= */}
+      {isEditAssignmentOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-[#eee8de] bg-[#fbf9f3] text-slate-900 shadow-2xl p-6 sm:p-7 transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-[#eee8de] mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-sky-100 text-sky-600">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-base text-slate-900">Edit Assignment</h3>
+              </div>
+              <button
+                onClick={() => setIsEditAssignmentOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditAssignment} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Assignment Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={assignmentForm.title}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Subject</label>
+                <input
+                  type="text"
+                  value={assignmentForm.subject}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, subject: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Due Date & Time</label>
+                  <input
+                    type="datetime-local"
+                    value={assignmentForm.deadline}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, deadline: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Priority</label>
+                  <select
+                    value={assignmentForm.priority}
+                    onChange={(e) => setAssignmentForm({ ...assignmentForm, priority: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  >
+                    <option value="High">High</option>
+                    <option value="Medium">Medium</option>
+                    <option value="Low">Low</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Status</label>
+                <select
+                  value={assignmentForm.status}
+                  onChange={(e) => setAssignmentForm({ ...assignmentForm, status: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                >
+                  <option value="Pending">Pending</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Completed">Completed</option>
+                  <option value="Overdue">Overdue</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#eee8de]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditAssignmentOpen(false)}
+                  className="px-4 py-2 rounded-xl font-semibold border border-[#eee8de] text-slate-700 hover:bg-[#f4f0e6]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md transition-all"
+                >
+                  Update in Database
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* --- ADD REMINDER MODAL --- */}
+      {/* ========================================================================= */}
+      {isAddReminderOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-[#eee8de] bg-[#fbf9f3] text-slate-900 shadow-2xl p-6 sm:p-7 transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-[#eee8de] mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-rose-100 text-rose-600">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-base text-slate-900">Add New Reminder</h3>
+              </div>
+              <button
+                onClick={() => setIsAddReminderOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAddReminder} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Reminder Title *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Read DBMS Chapter 4"
+                  value={reminderForm.title}
+                  onChange={(e) => setReminderForm({ ...reminderForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Category</label>
+                <select
+                  value={reminderForm.category}
+                  onChange={(e) => setReminderForm({ ...reminderForm, category: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                >
+                  <option value="Study">Study</option>
+                  <option value="Project">Project</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Date</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 28 Oct 2026"
+                    value={reminderForm.date}
+                    onChange={(e) => setReminderForm({ ...reminderForm, date: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Time</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 8:00 PM"
+                    value={reminderForm.time}
+                    onChange={(e) => setReminderForm({ ...reminderForm, time: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Repeat</label>
+                <select
+                  value={reminderForm.repeat}
+                  onChange={(e) => setReminderForm({ ...reminderForm, repeat: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                >
+                  <option value="One Time">One Time</option>
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#eee8de]">
+                <button
+                  type="button"
+                  onClick={() => setIsAddReminderOpen(false)}
+                  className="px-4 py-2 rounded-xl font-semibold border border-[#eee8de] text-slate-700 hover:bg-[#f4f0e6]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl font-semibold bg-rose-500 hover:bg-rose-600 text-white shadow-md transition-all"
+                >
+                  Save to Database
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* --- EDIT REMINDER MODAL --- */}
+      {/* ========================================================================= */}
+      {isEditReminderOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg rounded-3xl border border-[#eee8de] bg-[#fbf9f3] text-slate-900 shadow-2xl p-6 sm:p-7 transition-all">
+            <div className="flex items-center justify-between pb-3 border-b border-[#eee8de] mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-sky-100 text-sky-600">
+                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+                  </svg>
+                </div>
+                <h3 className="font-bold text-base text-slate-900">Edit Reminder</h3>
+              </div>
+              <button
+                onClick={() => setIsEditReminderOpen(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6 6 18" />
+                  <path d="m6 6 12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditReminder} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Reminder Title *</label>
+                <input
+                  type="text"
+                  required
+                  value={reminderForm.title}
+                  onChange={(e) => setReminderForm({ ...reminderForm, title: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Category</label>
+                <select
+                  value={reminderForm.category}
+                  onChange={(e) => setReminderForm({ ...reminderForm, category: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                >
+                  <option value="Study">Study</option>
+                  <option value="Project">Project</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Date</label>
+                  <input
+                    type="text"
+                    value={reminderForm.date}
+                    onChange={(e) => setReminderForm({ ...reminderForm, date: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold mb-1 text-slate-800">Time</label>
+                  <input
+                    type="text"
+                    value={reminderForm.time}
+                    onChange={(e) => setReminderForm({ ...reminderForm, time: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-slate-800">Repeat</label>
+                <select
+                  value={reminderForm.repeat}
+                  onChange={(e) => setReminderForm({ ...reminderForm, repeat: e.target.value })}
+                  className="w-full px-3.5 py-2.5 rounded-2xl border border-[#eee8de] bg-white text-slate-900 outline-none text-xs transition-all focus:border-[#1b4332]"
+                >
+                  <option value="One Time">One Time</option>
+                  <option value="Daily">Daily</option>
+                  <option value="Weekly">Weekly</option>
+                  <option value="Monthly">Monthly</option>
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#eee8de]">
+                <button
+                  type="button"
+                  onClick={() => setIsEditReminderOpen(false)}
+                  className="px-4 py-2 rounded-xl font-semibold border border-[#eee8de] text-slate-700 hover:bg-[#f4f0e6]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 rounded-xl font-semibold bg-rose-500 hover:bg-rose-600 text-white shadow-md transition-all"
+                >
+                  Update in Database
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

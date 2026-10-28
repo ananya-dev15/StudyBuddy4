@@ -1,0 +1,98 @@
+[dotenv@17.3.1] injecting env (12) from .env -- tip: ⚙️  override existing env vars with { override: true }
+✅ MongoDB Connected
+✅ MongoDB Connected
+✅ Server running on http://localhost:6000
+📹 Stream Server (OpenCV + Flask) launching on http://localhost:5001
+📊 Streamlit Dashboard launching on http://localhost:8501
+📊 [Dashboard] 2026-10-28 14:32:45.919 Port 8501 is already in use
+📊 [Dashboard] exited with code 1
+📹 [StreamServer] * Serving Flask app 'stream_server'
+ * Debug mode: off
+📹 [StreamServer] Address already in use
+Port 5001 is in use by another program. Either identify and stop that program, or start the server with a different port.
+📹 [StreamServer] exited with code 1
+🔥 ADD ASSIGNMENT HIT
+BODY: {
+  title: 'Math Homework',
+  subject: 'Mathematics',
+  priority: 'High',
+  status: 'Pending',
+  deadline: '2026-10-30T10:00:00.000Z'
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'Study Reminder Test',
+  category: 'Study',
+  date: '28 Oct 2026',
+  time: '8:00 PM',
+  repeat: 'One Time',
+  status: 'Pending'
+}
+🔥 ADD ASSIGNMENT HIT
+BODY: {
+  title: 'Maths',
+  subject: 'maths',
+  deadline: '2026-10-30T03:52:00.000Z',
+  priority: 'Medium',
+  status: 'Pending',
+  description: ''
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'bio',
+  category: 'Project',
+  date: '28 Oct 2026',
+  time: '8:00 PM',
+  repeat: 'One Time',
+  status: 'Pending'
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'DBMS',
+  category: 'Study',
+  date: '28 Oct 2026',
+  time: '3:12pm',
+  repeat: 'One Time',
+  status: 'Pending',
+  createdAt: '2026-10-28T09:40:18.351Z'
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'os',
+  category: 'Study',
+  date: '28 Oct 2026',
+  time: '3:18 PM',
+  repeat: 'One Time',
+  status: 'Pending',
+  createdAt: '2026-10-28T09:43:30.807Z'
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'Math',
+  category: 'Study',
+  date: '28 Oct 2026',
+  time: '3:50',
+  repeat: 'One Time',
+  status: 'Pending',
+  createdAt: '2026-10-28T10:19:09.026Z'
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'Math',
+  category: 'Study',
+  date: '28 Oct 2026',
+  time: '3:52',
+  repeat: 'One Time',
+  status: 'Pending',
+  createdAt: '2026-10-28T10:19:30.158Z'
+}
+🔥 ADD REMINDER HIT
+BODY: {
+  title: 'Computer',
+  category: 'Study',
+  date: '28 Oct 2026',
+  time: '3:55pm',
+  repeat: 'One Time',
+  status: 'Pending',
+  createdAt: '2026-10-28T10:21:02.091Z'
+}

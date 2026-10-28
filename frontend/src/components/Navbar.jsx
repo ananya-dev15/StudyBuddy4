@@ -106,7 +106,7 @@ export default function Navbar({ onOpenAuthModal }) {
                   src={user.profileImage || profileIcon}
                   alt="Profile"
                   className={`w-10 h-10 rounded-full border-2 object-cover ${
-                    theme === "dark" ? "border-purple-400" : "border-indigo-600 shadow-sm"
+                    theme === "dark" ? "border-emerald-400" : "border-[#1b3f30] shadow-sm"
                   }`}
                 />
                 <span className={`font-semibold hidden sm:inline ${theme === "dark" ? "text-white" : "text-gray-800"}`}>
@@ -119,7 +119,7 @@ export default function Navbar({ onOpenAuthModal }) {
                 <div
                   className={`absolute right-0 mt-2 py-2 w-52 rounded-xl shadow-2xl z-50 border animate-in fade-in zoom-in-95 duration-150 backdrop-blur-xl ${
                     theme === "dark"
-                      ? "bg-slate-900/95 border-white/20 text-white"
+                      ? "bg-slate-900/95 border-emerald-500/20 text-white"
                       : "bg-white/95 border-gray-100 text-gray-800 shadow-xl"
                   }`}
                 >
@@ -129,7 +129,7 @@ export default function Navbar({ onOpenAuthModal }) {
                       setIsProfileModalOpen(true);
                     }}
                     className={`w-full text-left px-4 py-2.5 text-sm font-semibold flex items-center gap-2 transition-colors ${
-                      theme === "dark" ? "hover:bg-slate-800 text-white" : "hover:bg-indigo-50 text-gray-700"
+                      theme === "dark" ? "hover:bg-slate-800 text-white" : "hover:bg-emerald-50 text-gray-700"
                     }`}
                   >
                     👤 View Profile
@@ -150,15 +150,15 @@ export default function Navbar({ onOpenAuthModal }) {
                 to="/login"
                 className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base font-medium transition-all duration-300 border ${
                   theme === "dark"
-                    ? "border-white/60 bg-white/10 text-white hover:bg-white/20 backdrop-blur-sm"
-                    : "border-indigo-200 bg-white text-indigo-700 hover:bg-indigo-50 shadow-sm"
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 backdrop-blur-sm"
+                    : "border-[#1b3f30]/30 bg-white text-[#1b3f30] hover:bg-emerald-50 shadow-sm"
                 }`}
               >
                 Login
               </Link>
               <Link
                 to="/register"
-                className="px-3 sm:px-4 py-2 bg-gradient-to-r from-indigo-600 to-pink-600 text-white rounded-lg text-sm sm:text-base font-semibold shadow-xl hover:shadow-2xl hover:scale-105 transform transition-all duration-300"
+                className="px-3 sm:px-4 py-2 bg-[#1b3f30] hover:bg-[#143024] text-white rounded-lg text-sm sm:text-base font-semibold shadow-md hover:shadow-lg hover:scale-105 transform transition-all duration-300"
               >
                 Sign Up
               </Link>

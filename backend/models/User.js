@@ -5,8 +5,10 @@ import mongoose from "mongoose";
 
 const assignmentSchema = new mongoose.Schema({
   title: String,
+  subject: String,
   deadline: Date,
-  status: { type: String, enum: ["Pending", "Completed"], default: "Pending" }
+  priority: { type: String, default: "Medium" },
+  status: { type: String, default: "Pending" }
 });
 
 const hackathonSchema = new mongoose.Schema({
@@ -14,12 +16,16 @@ const hackathonSchema = new mongoose.Schema({
   date: Date,
   platform: String,
   link: String,
-  status: { type: String, enum: ["Pending", "Completed"], default: "Pending" }
+  status: { type: String, default: "Pending" }
 });
 
 const reminderSchema = new mongoose.Schema({
   title: String,
-  time: String
+  time: String,
+  date: String,
+  category: { type: String, default: "Study" },
+  repeat: { type: String, default: "One Time" },
+  status: { type: String, default: "Pending" }
 }, { timestamps: true });
 
 const userSchema = new mongoose.Schema(

@@ -17,6 +17,8 @@ import ananya from "../assets/ananya1.jpeg"
 import setu from "../assets/Setu1.jpeg"
 import yash from "../assets/yash.jpeg"
 import heroBgVideo from "../assets/fourth.mp4";
+import FAQCarousel from "../components/FAQCarousel";
+import FeedbackRoadJourney from "../components/FeedbackRoadJourney";
 
 
 
@@ -551,72 +553,21 @@ const HomePage = () => {
         </div>
       </section>
 
-      {/* Reviews Section */}
-      <section className="py-24 text-center relative z-10">
-        <h2 className="text-4xl font-extrabold mb-4 text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-          What Students Say
-        </h2>
-        <p className="max-w-3xl mx-auto mb-12 text-lg text-white/90 drop-shadow-sm font-medium">
-          Join thousands of students who boosted their productivity with StudyBuddy.
-        </p>
-        <div className="grid md:grid-cols-3 gap-8 max-w-6xl mx-auto px-6">
-          {[
-            { name: "Ananya", role: "CS Student", review: "Reminders keep me punctual and streaks keep me motivated. It’s addictive in a good way!" },
-            { name: "Raj", role: "Engineering Student", review: "The AI Chatbot is my study buddy at 2 AM. Never thought an app could help this much." },
-            { name: "Priya", role: "MBA Student", review: "Analytics make me realize how consistent I’ve been. It’s like fitness tracking, but for studying." },
-          ].map((r, idx) => (
-            <div
-              key={idx}
-              className={`relative overflow-hidden rounded-3xl p-7 backdrop-blur-2xl transition-all duration-300 transform hover:-translate-y-2 border ${
-                theme === "dark"
-                  ? "bg-gradient-to-b from-slate-900/80 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border border-purple-500/25 hover:border-purple-400/50 shadow-2xl hover:shadow-[0_12px_36px_rgba(147,51,234,0.2)] text-white"
-                  : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_10px_35px_rgba(0,0,0,0.1),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_18px_45px_rgba(31,38,135,0.18)] text-slate-800"
-              }`}
-            >
-              <div className="flex justify-center text-amber-400 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)] mb-3.5 text-lg">
-                {"★★★★★"}
-              </div>
-              <p className={`text-base md:text-lg mb-4 font-medium leading-relaxed italic ${
-                theme === "dark" ? "text-white" : "text-slate-800"
-              }`}>
-                “{r.review}”
-              </p>
-              <p className={`font-bold text-base ${theme === "dark" ? "text-white" : "text-slate-950"}`}>{r.name}</p>
-              <p className={`text-xs md:text-sm mt-0.5 ${theme === "dark" ? "text-white/80" : "text-indigo-600 font-semibold"}`}>{r.role}</p>
-            </div>
-          ))}
-        </div>
+      {/* Reviews Section - Dynamic Horizontal Road Journey */}
+      <section className="relative z-10 pt-10 pb-12">
+        <FeedbackRoadJourney
+          theme={theme}
+          onOpenAuth={() => setAuthModalOpen(true)}
+        />
       </section>
 
       {/* FAQ Section */}
-      <section className="py-24 relative z-10">
+      <section className="mt-12 pt-16 pb-24 relative z-10">
         <div className="max-w-4xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-extrabold mb-8 text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
             Frequently Asked Questions
           </h2>
-          <div className="space-y-6 text-left">
-            {[
-              { q: "Is StudyBuddy free to use?", a: "Yes! StudyBuddy offers a free plan with core features. You can upgrade for advanced analytics and AI tools." },
-              { q: "Can I use it on mobile?", a: "Absolutely. StudyBuddy is fully responsive and works on all devices." },
-              { q: "How does streak tracking work?", a: "Each day you log study sessions, your streak grows. Miss a day, and it resets — motivating you to stay consistent." },
-            ].map((f, idx) => (
-              <div
-                key={idx}
-                className={`rounded-2xl p-6 backdrop-blur-2xl transition-all duration-300 border ${
-                  theme === "dark"
-                    ? "bg-gradient-to-b from-slate-900/75 to-slate-950/85 hover:from-slate-800/85 hover:to-slate-900/90 border-white/15 hover:border-purple-500/40 shadow-xl hover:shadow-[0_8px_25px_rgba(168,85,247,0.15)] text-white"
-                    : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_8px_25px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_14px_35px_rgba(31,38,135,0.15)] text-slate-800"
-                }`}
-              >
-                <h3 className={`font-bold text-lg md:text-xl ${theme === "dark" ? "text-white" : "text-slate-900"}`}>
-                  {f.q}
-                </h3>
-                <p className={`mt-2 text-sm md:text-base leading-relaxed ${theme === "dark" ? "text-white/90" : "text-slate-700/90 font-medium"}`}>
-                  {f.a}
-                </p>
-              </div>
-            ))}
-          </div>
+          <FAQCarousel theme={theme} />
         </div>
       </section>
 

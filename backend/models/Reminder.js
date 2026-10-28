@@ -12,7 +12,24 @@ const reminderSchema = new mongoose.Schema({
     },
     time: {
         type: String,
-        required: true,
+        default: "",
+    },
+    date: {
+        type: String,
+        default: "",
+    },
+    category: {
+        type: String,
+        default: "Study",
+    },
+    repeat: {
+        type: String,
+        default: "One Time",
+    },
+    status: {
+        type: String,
+        enum: ["Pending", "Completed"],
+        default: "Pending",
     },
 }, {
     timestamps: true,

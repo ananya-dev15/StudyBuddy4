@@ -8,17 +8,53 @@ export const addAssignment = async (req, res) => {
     try {
         console.log("🔥 ADD ASSIGNMENT HIT");
         console.log("BODY:", req.body);
-        const { title, description, deadline } = req.body;
-        const assignment = await Assignment.create({ userId: req.user.id, title, description, deadline });
+        const { title, description, deadline, subject, priority, status } = req.body;
+        const assignment = await Assignment.create({
+            userId: req.user.id,
+            title,
+            description,
+            deadline: deadline ? new Date(deadline) : undefined,
+            subject: subject || "General",
+            priority: priority || "Medium",
+            status: status || "Pending",
+        });
 
         // Also push to User document's assignments array
         await User.findByIdAndUpdate(req.user.id, {
-            $push: { assignments: { title, deadline, status: "Pending" } }
+            $push: {
+                assignments: {
+                    title,
+                    subject: subject || "General",
+                    deadline: deadline ? new Date(deadline) : undefined,
+                    priority: priority || "Medium",
+                    status: status || "Pending",
+                }
+            }
         });
 
         res.status(201).json({ success: true, assignment });
     } catch (error) {
         console.error("❌ ASSIGNMENT SAVE ERROR:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const updateAssignment = async (req, res) => {
+    try {
+        const assignment = await Assignment.findOne({ _id: req.params.id, userId: req.user.id });
+        if (!assignment) return res.status(404).json({ success: false, message: "Assignment not found" });
+
+        const { title, description, deadline, subject, priority, status } = req.body;
+        if (title !== undefined) assignment.title = title;
+        if (description !== undefined) assignment.description = description;
+        if (deadline !== undefined) assignment.deadline = deadline ? new Date(deadline) : null;
+        if (subject !== undefined) assignment.subject = subject;
+        if (priority !== undefined) assignment.priority = priority;
+        if (status !== undefined) assignment.status = status;
+
+        await assignment.save();
+        res.json({ success: true, assignment });
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };
@@ -36,7 +72,12 @@ export const toggleAssignmentStatus = async (req, res) => {
     try {
         const assignment = await Assignment.findOne({ _id: req.params.id, userId: req.user.id });
         if (!assignment) return res.status(404).json({ success: false, message: "Assignment not found" });
-        assignment.status = assignment.status === "Pending" ? "Completed" : "Pending";
+
+        if (req.body && req.body.status) {
+            assignment.status = req.body.status;
+        } else {
+            assignment.status = assignment.status === "Pending" ? "Completed" : "Pending";
+        }
         await assignment.save();
         res.json({ success: true, assignment });
     } catch (error) {
@@ -46,8 +87,24 @@ export const toggleAssignmentStatus = async (req, res) => {
 
 export const deleteAssignment = async (req, res) => {
     try {
-        const assignment = await Assignment.findOneAndDelete({ _id: req.params.id, userId: req.user.id });
-        if (!assignment) return res.status(404).json({ success: false, message: "Assignment not found" });
+        const assignmentId = req.params.id;
+        const userId = req.user.id;
+
+        const assignment = await Assignment.findOneAndDelete({ _id: assignmentId, userId });
+        await User.findByIdAndUpdate(userId, {
+            $pull: { assignments: { _id: assignmentId } }
+        });
+
+        if (!assignment) {
+            const user = await User.findById(userId);
+            if (user && user.assignments && user.assignments.id(assignmentId)) {
+                user.assignments.pull(assignmentId);
+                await user.save();
+                return res.json({ success: true, message: "Assignment deleted from user record" });
+            }
+            return res.status(404).json({ success: false, message: "Assignment not found" });
+        }
+
         res.json({ success: true, message: "Assignment deleted" });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
@@ -110,17 +167,71 @@ export const addReminder = async (req, res) => {
     try {
         console.log("🔥 ADD REMINDER HIT");
         console.log("BODY:", req.body);
-        const { title, time } = req.body;
-        const reminder = await Reminder.create({ userId: req.user.id, title, time });
+        const { title, time, date, category, repeat, status } = req.body;
+        const reminder = await Reminder.create({
+            userId: req.user.id,
+            title,
+            time: time || "",
+            date: date || "",
+            category: category || "Study",
+            repeat: repeat || "One Time",
+            status: status || "Pending",
+        });
 
         // Also push to User document's reminders array
         await User.findByIdAndUpdate(req.user.id, {
-            $push: { reminders: { title, time } }
+            $push: {
+                reminders: {
+                    title,
+                    time: time || "",
+                    date: date || "",
+                    category: category || "Study",
+                    repeat: repeat || "One Time",
+                    status: status || "Pending",
+                }
+            }
         });
 
         res.status(201).json({ success: true, reminder });
     } catch (error) {
         console.error("❌ REMINDER SAVE ERROR:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const updateReminder = async (req, res) => {
+    try {
+        const reminder = await Reminder.findOne({ _id: req.params.id, userId: req.user.id });
+        if (!reminder) return res.status(404).json({ success: false, message: "Reminder not found" });
+
+        const { title, time, date, category, repeat, status } = req.body;
+        if (title !== undefined) reminder.title = title;
+        if (time !== undefined) reminder.time = time;
+        if (date !== undefined) reminder.date = date;
+        if (category !== undefined) reminder.category = category;
+        if (repeat !== undefined) reminder.repeat = repeat;
+        if (status !== undefined) reminder.status = status;
+
+        await reminder.save();
+        res.json({ success: true, reminder });
+    } catch (error) {
+        res.status(500).json({ success: false, message: error.message });
+    }
+};
+
+export const toggleReminderStatus = async (req, res) => {
+    try {
+        const reminder = await Reminder.findOne({ _id: req.params.id, userId: req.user.id });
+        if (!reminder) return res.status(404).json({ success: false, message: "Reminder not found" });
+
+        if (req.body && req.body.status) {
+            reminder.status = req.body.status;
+        } else {
+            reminder.status = reminder.status === "Pending" ? "Completed" : "Pending";
+        }
+        await reminder.save();
+        res.json({ success: true, reminder });
+    } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 };

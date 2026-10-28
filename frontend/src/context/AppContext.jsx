@@ -1,6 +1,6 @@
-// context/AppContext.js
 import React, { createContext, useContext, useState, useEffect, useRef } from "react";
 import API_BASE from "../services/apiBase";
+import { alarmSound } from "../utils/alarmSound";
 
 export const AppContext = createContext();
 
@@ -62,6 +62,7 @@ export const AppProvider = ({ children }) => {
     return highlighted;
   });
   const [activeToast, setActiveToast] = useState(null);
+  const [activeReminderAlert, setActiveReminderAlert] = useState(null);
 
   // --- Theme State (Light / Dark) ---
   const [theme, setTheme] = useState(() => {
@@ -681,11 +682,20 @@ export const AppProvider = ({ children }) => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // --- Adders (Append NOT Replace) ---
+  // --- Adders (Append NOT Replace) & Removers ---
   const addAssignment = (newAssignment) => {
     if (!userId) return;
     setAssignments((prev) => {
       const updated = [...prev, newAssignment];
+      localStorage.setItem(`assignments_${userId}`, JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const removeAssignment = (id) => {
+    if (!userId) return;
+    setAssignments((prev) => {
+      const updated = (prev || []).filter((a) => (a._id || a.id) !== id);
       localStorage.setItem(`assignments_${userId}`, JSON.stringify(updated));
       return updated;
     });
@@ -712,23 +722,36 @@ export const AppProvider = ({ children }) => {
   const removeReminder = (id) => {
     if (!userId) return;
     setReminders((prev) => {
-      const updated = prev.filter(r => (r._id || r.id) !== id);
+      const updated = (prev || []).filter((r) => (r._id || r.id) !== id);
       localStorage.setItem(`reminders_${userId}`, JSON.stringify(updated));
       return updated;
     });
     // Also clean up from triggers and highlighted sets
-    setReminderTriggers(prev => {
+    setReminderTriggers((prev) => {
       const updated = { ...prev };
       delete updated[id];
       localStorage.setItem(`reminderTriggers_${userId}`, JSON.stringify(updated));
       return updated;
     });
-    setHighlightedReminders(prev => {
+    setHighlightedReminders((prev) => {
       const updated = new Set(prev);
       updated.delete(id);
       return updated;
     });
   };
+
+  // Keep localStorage in sync whenever assignments or reminders change
+  useEffect(() => {
+    if (userId) {
+      localStorage.setItem(`assignments_${userId}`, JSON.stringify(assignments || []));
+    }
+  }, [assignments, userId]);
+
+  useEffect(() => {
+    if (userId) {
+      localStorage.setItem(`reminders_${userId}`, JSON.stringify(reminders || []));
+    }
+  }, [reminders, userId]);
 
   // --- Backend Sync on App Load ---
   useEffect(() => {
@@ -785,61 +808,278 @@ export const AppProvider = ({ children }) => {
     audio.play().catch((err) => console.log("🔇 Audio play blocked or failed:", err));
   };
 
-  // --- Smart Reminder Engine ---
+  // Helper to parse reminder target timestamp
+  const parseReminderTargetTime = (r) => {
+    if (!r) return null;
+    const now = new Date();
+    let year = now.getFullYear();
+    let month = now.getMonth();
+    let day = now.getDate();
+
+    if (r.date && String(r.date).trim()) {
+      const d = new Date(String(r.date).trim());
+      if (!isNaN(d.getTime())) {
+        year = d.getFullYear();
+        month = d.getMonth();
+        day = d.getDate();
+      }
+    }
+
+    let hours = 20;
+    let minutes = 0;
+
+    if (r.time && String(r.time).trim()) {
+      const raw = String(r.time).trim().toLowerCase();
+      const isPM = raw.includes("pm");
+      const isAM = raw.includes("am");
+      const clean = raw.replace(/[a-z]/g, "").trim();
+      const parts = clean.split(":").map((p) => parseInt(p, 10));
+
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        let h = parts[0];
+        let m = parts[1];
+        if (isPM && h < 12) h += 12;
+        if (isAM && h === 12) h = 0;
+        hours = h;
+        minutes = m;
+      } else if (parts.length === 1 && !isNaN(parts[0])) {
+        let h = parts[0];
+        if (isPM && h < 12) h += 12;
+        if (isAM && h === 12) h = 0;
+        hours = h;
+      }
+    }
+
+    return new Date(year, month, day, hours, minutes, 0, 0).getTime();
+  };
+
+  // --- Smart Reminder Engine (50%, 90%, 95%, 100% Triggers & Alarm) ---
   useEffect(() => {
-    const interval = setInterval(() => {
+    if (!reminders || reminders.length === 0) return;
+
+    const checkReminders = () => {
       const now = Date.now();
-      const dNow = new Date();
-      const today = `${dNow.getFullYear()}-${String(dNow.getMonth() + 1).padStart(2, "0")}-${String(dNow.getDate()).padStart(2, "0")}`;
       const updatedTriggers = { ...reminderTriggers };
       let changed = false;
+      let pendingAlert = null;
 
       reminders.forEach((r) => {
-        if (!r._id || !r.time) return;
+        const remId = r._id || r.id;
+        if (!remId) return;
+        if (r.status === "Completed") return;
 
-        // ✅ Calculate target timestamp using LOCAL time (to match UI display)
-        const [hours, minutes] = r.time.split(":").map(Number);
-        const targetDate = new Date(now);
-        targetDate.setHours(hours, minutes, 0, 0);
-        const reminderTimestamp = targetDate.getTime();
+        const targetTimestamp = parseReminderTargetTime(r);
+        if (!targetTimestamp) return;
 
-        // ✅ Robust duration calculation
-        const createdAt = new Date(r.createdAt || r.date || now).getTime();
-        const totalDuration = reminderTimestamp - createdAt;
-        const timeLeft = reminderTimestamp - now;
+        const triggerState = updatedTriggers[remId] || {
+          startTime: null,
+          p50: false,
+          p90: false,
+          p95: false,
+          p100: false,
+          snoozedUntil: null,
+          dismissedAt: null,
+        };
 
-        const triggerState = updatedTriggers[r._id] || { early: false, final: false };
-
-        // 1. Early Warning (50% time remaining)
-        // Only trigger if session is meaningful (> 10s) and we're actually halfway
-        if (!triggerState.early && totalDuration > 10000 && timeLeft <= totalDuration * 0.5 && timeLeft > 0) {
-          triggerState.early = true;
+        // Initialize startTime: use r.createdAt if available, or first seen
+        if (!triggerState.startTime) {
+          triggerState.startTime = r.createdAt ? new Date(r.createdAt).getTime() : now;
           changed = true;
-          setActiveToast({ message: `🟡 Halfway there: ${r.title}`, type: "early" });
-          playNotificationSound();
-          setHighlightedReminders((prev) => new Set([...prev, r._id]));
         }
 
-        // 2. Final Alert (Time expired)
-        if (!triggerState.final && timeLeft <= 0) {
-          triggerState.final = true;
-          changed = true;
-          setActiveToast({ message: `🔴 TIME'S UP: ${r.title}`, type: "final" });
-          playNotificationSound();
-          setHighlightedReminders((prev) => new Set([...prev, r._id]));
+        // Handle snooze
+        if (triggerState.snoozedUntil) {
+          if (now < triggerState.snoozedUntil) {
+            return; // Still snoozed
+          } else {
+            // Snooze expired!
+            triggerState.snoozedUntil = null;
+            changed = true;
+            if (!activeReminderAlert && !pendingAlert) {
+              pendingAlert = {
+                id: remId,
+                reminder: r,
+                stage: "100%",
+                percentage: 100,
+                title: r.title,
+                category: r.category || "Study",
+                time: r.time,
+                date: r.date,
+                targetTime: targetTimestamp,
+                isMissed: false,
+              };
+            }
+            return;
+          }
         }
 
-        updatedTriggers[r._id] = triggerState;
+        const totalDuration = targetTimestamp - triggerState.startTime;
+        const elapsed = now - triggerState.startTime;
+
+        // If target time has passed (100% / due)
+        if (now >= targetTimestamp || totalDuration <= 0) {
+          if (!triggerState.p100) {
+            triggerState.p50 = true;
+            triggerState.p90 = true;
+            triggerState.p95 = true;
+            triggerState.p100 = true;
+            changed = true;
+
+            const isMissed = now - targetTimestamp > 30000;
+            if (!activeReminderAlert && !pendingAlert) {
+              pendingAlert = {
+                id: remId,
+                reminder: r,
+                stage: "100%",
+                percentage: 100,
+                title: r.title,
+                category: r.category || "Study",
+                time: r.time,
+                date: r.date,
+                targetTime: targetTimestamp,
+                isMissed,
+              };
+            }
+          }
+          updatedTriggers[remId] = triggerState;
+          return;
+        }
+
+        // Target is in future, calculate percentage
+        const percentage = Math.min(99.9, Math.max(0, (elapsed / totalDuration) * 100));
+
+        // 95% milestone
+        if (percentage >= 95) {
+          if (!triggerState.p95) {
+            triggerState.p50 = true;
+            triggerState.p90 = true;
+            triggerState.p95 = true;
+            changed = true;
+            const isMissed = percentage >= 97;
+            if (!activeReminderAlert && !pendingAlert) {
+              pendingAlert = {
+                id: remId,
+                reminder: r,
+                stage: "95%",
+                percentage: Math.round(percentage),
+                title: r.title,
+                category: r.category || "Study",
+                time: r.time,
+                date: r.date,
+                targetTime: targetTimestamp,
+                isMissed,
+              };
+            }
+          }
+        }
+        // 90% milestone
+        else if (percentage >= 90) {
+          if (!triggerState.p90) {
+            triggerState.p50 = true;
+            triggerState.p90 = true;
+            changed = true;
+            const isMissed = percentage >= 93;
+            if (!activeReminderAlert && !pendingAlert) {
+              pendingAlert = {
+                id: remId,
+                reminder: r,
+                stage: "90%",
+                percentage: Math.round(percentage),
+                title: r.title,
+                category: r.category || "Study",
+                time: r.time,
+                date: r.date,
+                targetTime: targetTimestamp,
+                isMissed,
+              };
+            }
+          }
+        }
+        // 50% milestone
+        else if (percentage >= 50) {
+          if (!triggerState.p50) {
+            triggerState.p50 = true;
+            changed = true;
+            const isMissed = percentage >= 65;
+            if (!activeReminderAlert && !pendingAlert) {
+              pendingAlert = {
+                id: remId,
+                reminder: r,
+                stage: "50%",
+                percentage: Math.round(percentage),
+                title: r.title,
+                category: r.category || "Study",
+                time: r.time,
+                date: r.date,
+                targetTime: targetTimestamp,
+                isMissed,
+              };
+            }
+          }
+        }
+
+        updatedTriggers[remId] = triggerState;
       });
 
       if (changed) {
         setReminderTriggers(updatedTriggers);
-        localStorage.setItem("reminderTriggers", JSON.stringify(updatedTriggers));
+        if (userId) {
+          localStorage.setItem(`reminderTriggers_${userId}`, JSON.stringify(updatedTriggers));
+        }
       }
-    }, 1000);
 
+      if (pendingAlert && !activeReminderAlert) {
+        setActiveReminderAlert(pendingAlert);
+        alarmSound.start();
+        setHighlightedReminders((prev) => new Set([...prev, pendingAlert.id]));
+      }
+    };
+
+    checkReminders();
+    const interval = setInterval(checkReminders, 1000);
     return () => clearInterval(interval);
-  }, [reminders, reminderTriggers]);
+  }, [reminders, reminderTriggers, activeReminderAlert, userId]);
+
+  const dismissReminderAlert = () => {
+    alarmSound.stop();
+    if (activeReminderAlert && userId) {
+      const remId = activeReminderAlert.id;
+      setReminderTriggers((prev) => {
+        const current = prev[remId] || {};
+        const updated = {
+          ...prev,
+          [remId]: {
+            ...current,
+            dismissedAt: Date.now(),
+          },
+        };
+        localStorage.setItem(`reminderTriggers_${userId}`, JSON.stringify(updated));
+        return updated;
+      });
+    }
+    setActiveReminderAlert(null);
+  };
+
+  const snoozeReminderAlert = (minutes = 5) => {
+    alarmSound.stop();
+    if (activeReminderAlert && userId) {
+      const remId = activeReminderAlert.id;
+      const snoozedUntil = Date.now() + minutes * 60 * 1000;
+      setReminderTriggers((prev) => {
+        const current = prev[remId] || {};
+        const updated = {
+          ...prev,
+          [remId]: {
+            ...current,
+            snoozedUntil,
+          },
+        };
+        localStorage.setItem(`reminderTriggers_${userId}`, JSON.stringify(updated));
+        return updated;
+      });
+    }
+    setActiveReminderAlert(null);
+  };
 
   const clearToast = () => setActiveToast(null);
 
@@ -949,11 +1189,15 @@ export const AppProvider = ({ children }) => {
         reminders,
         setReminders,
         addAssignment,
+        removeAssignment,
         addHackathon,
         addReminder,
         removeReminder,
         activeToast,
         clearToast,
+        activeReminderAlert,
+        dismissReminderAlert,
+        snoozeReminderAlert,
         highlightedReminders,
         isChatOpen,
         setIsChatOpen,

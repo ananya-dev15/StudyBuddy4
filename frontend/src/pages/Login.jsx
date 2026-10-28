@@ -101,7 +101,7 @@ const Login = () => {
           to="/"
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold backdrop-blur-xl border transition-all duration-300 hover:scale-105 ${
             isDark
-              ? "bg-slate-900/70 border-purple-500/30 text-purple-200 hover:bg-slate-800"
+              ? "bg-slate-900/70 border-emerald-500/30 text-emerald-200 hover:bg-slate-800"
               : "bg-white/80 border-white/80 text-slate-700 shadow-sm hover:bg-white"
           }`}
         >
@@ -112,91 +112,94 @@ const Login = () => {
 
       {/* Main Login Card */}
       <div className="w-full max-w-md mx-auto my-auto">
-        <div className={`p-8 rounded-3xl backdrop-blur-2xl border transition-all duration-300 shadow-2xl ${
+        <div className={`rounded-3xl backdrop-blur-2xl border transition-all duration-300 shadow-2xl overflow-hidden ${
           isDark
-            ? "bg-slate-900/85 border-purple-500/25 text-white"
-            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_10px_35px_rgba(0,0,0,0.04)] text-slate-800"
+            ? "bg-slate-900/95 border-emerald-500/30 text-white shadow-emerald-950/40"
+            : "bg-[#fdfbf7] border-[#eee8de] shadow-[0_20px_50px_rgba(0,0,0,0.15)] text-slate-800"
         }`}>
-          <div className="text-center mb-6">
-            <h2 className="text-3xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 bg-clip-text text-transparent">
-              Welcome Back
+          {/* Card Header Banner matching Profile */}
+          <div className="bg-[#1b3f30] p-6 text-white text-center shadow-md">
+            <h2 className="text-2xl font-extrabold flex items-center justify-center gap-2 tracking-tight">
+              🔐 Welcome Back
             </h2>
-            <p className={`text-xs md:text-sm mt-1 font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              Log in to continue your personalized study flow.
+            <p className="text-xs opacity-90 font-medium text-emerald-100">
+              Log in to continue your personalized study flow
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className={`block text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? "text-purple-300" : "text-slate-700"}`}>
-                Email Address
-              </label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="you@example.com"
-                className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
-                  isDark
-                    ? "bg-slate-800/80 border-purple-500/30 text-white placeholder-slate-400"
-                    : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
-                }`}
+          <div className="p-6 md:p-8">
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? "text-emerald-300" : "text-slate-700"}`}>
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  placeholder="you@example.com"
+                  className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none focus:ring-2 focus:ring-[#1b3f30] transition-all ${
+                    isDark
+                      ? "bg-slate-800/80 border-emerald-500/30 text-white placeholder-slate-400"
+                      : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
+                  }`}
+                />
+              </div>
+              <div>
+                <label className={`block text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? "text-emerald-300" : "text-slate-700"}`}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  placeholder="••••••••"
+                  className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none focus:ring-2 focus:ring-[#1b3f30] transition-all ${
+                    isDark
+                      ? "bg-slate-800/80 border-emerald-500/30 text-white placeholder-slate-400"
+                      : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
+                  }`}
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-3.5 bg-[#1b3f30] hover:bg-[#143024] text-white rounded-xl font-bold shadow-lg shadow-emerald-950/20 transition-all duration-300 hover:scale-[1.01] cursor-pointer"
+              >
+                Sign In
+              </button>
+            </form>
+
+            {/* Divider */}
+            <div className="flex items-center my-6">
+              <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
+              <span className={`px-4 text-xs uppercase font-bold tracking-wider ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                or continue with
+              </span>
+              <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
+            </div>
+
+            {/* Google Login Button */}
+            <div className="flex justify-center">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => alert("Google login failed. Please try again.")}
+                text="continue_with"
+                shape="rectangular"
+                size="large"
+                width="350"
+                theme={isDark ? "filled_black" : "outline"}
               />
             </div>
-            <div>
-              <label className={`block text-xs font-bold uppercase tracking-wider mb-1.5 ${isDark ? "text-purple-300" : "text-slate-700"}`}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-                className={`w-full px-4 py-3 rounded-xl border text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500 transition-all ${
-                  isDark
-                    ? "bg-slate-800/80 border-purple-500/30 text-white placeholder-slate-400"
-                    : "bg-white/90 border-slate-300 text-slate-800 placeholder-slate-400"
-                }`}
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full py-3.5 bg-gradient-to-r from-purple-600 via-pink-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold shadow-lg hover:shadow-purple-500/25 transition-all duration-300 hover:scale-[1.01]"
-            >
-              Sign In
-            </button>
-          </form>
 
-          {/* Divider */}
-          <div className="flex items-center my-6">
-            <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
-            <span className={`px-4 text-xs uppercase font-bold tracking-wider ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-              or continue with
-            </span>
-            <div className={`flex-1 border-t ${isDark ? "border-slate-800" : "border-slate-200"}`}></div>
+            <p className={`mt-6 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              Don't have an account?{" "}
+              <Link to="/register" className="text-[#1b3f30] dark:text-emerald-400 font-bold hover:underline">
+                Create an account
+              </Link>
+            </p>
           </div>
-
-          {/* Google Login Button */}
-          <div className="flex justify-center">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={() => alert("Google login failed. Please try again.")}
-              text="continue_with"
-              shape="rectangular"
-              size="large"
-              width="350"
-              theme={isDark ? "filled_black" : "outline"}
-            />
-          </div>
-
-          <p className={`mt-6 text-center text-sm font-medium ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-            Don't have an account?{" "}
-            <Link to="/register" className="text-purple-500 font-bold hover:underline">
-              Create an account
-            </Link>
-          </p>
         </div>
       </div>
 
