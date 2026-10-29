@@ -506,7 +506,7 @@ export const AppProvider = ({ children }) => {
       });
 
       const data = await res.json();
-      const botReply = data.reply || "I couldn't process that. Please try asking again!";
+      const botReply = data.displayText || data.reply || "I couldn't process that. Please try asking again!";
       const speechToPlay = data.speechText || botReply;
       setChatMessages((prev) => [
         ...prev,

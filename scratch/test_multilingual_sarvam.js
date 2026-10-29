@@ -1,5 +1,12 @@
-import { normalizeSpeechText, isHinglishText, isTransliteratedPunjabi } from "../backend/utils/speechNormalizer.js";
-import { cleanTextForTTS, detectLanguageCode, splitIntoSpeechSentences, checkUnrelatedQuery, isDetailedRequest, SARVAM_MALE_SPEAKERS } from "../backend/controllers/chatController.js";
+import { normalizeSpeechText } from "../backend/utils/speechNormalizer.js";
+import {
+  cleanTextForTTS,
+  detectLanguageCode,
+  splitIntoSpeechSentences,
+  checkUnrelatedQuery,
+  isDetailedRequest,
+  SARVAM_MALE_SPEAKERS,
+} from "../backend/controllers/chatController.js";
 
 console.log("================================================================");
 console.log("STUDYBUDDY MULTILINGUAL NATURAL VOICE & SCRIPT VALIDATION SUITE");
@@ -27,7 +34,7 @@ assertTest("Indian English (en-IN) uses male speaker 'ratan'", SARVAM_MALE_SPEAK
 assertTest("Bengali (bn-IN) uses male speaker 'rehan'", SARVAM_MALE_SPEAKERS["bn-IN"] === "rehan");
 assertTest("Marathi (mr-IN) uses male speaker 'ratan'", SARVAM_MALE_SPEAKERS["mr-IN"] === "ratan");
 
-// 2. 10 HINDI TEST SENTENCES (Including Romanized -> Devanagari normalization)
+// 2. 10 HINDI NORMALIZATION TESTS
 console.log("\n--- PART 2: 10 HINDI NORMALIZATION TESTS ---");
 const hindiTestCases = [
   {
@@ -40,7 +47,7 @@ const hindiTestCases = [
   },
   {
     raw: "Java mein inheritance kaise kaam karta hai?",
-    expectedContains: ["Java", "में", "inheritance", "कैसे", "काम", "करता", "है"],
+    expectedContains: ["जावा", "में", "इनहेरिटेंस", "कैसे", "काम", "करता", "है"],
   },
   {
     raw: "Yeh concept bahut aasan hai, dhyan se dekho.",
@@ -48,7 +55,7 @@ const hindiTestCases = [
   },
   {
     raw: "Hum is algorithm ki time complexity analyze karte hain.",
-    expectedContains: ["हम", "algorithm", "time", "complexity", "करते", "हैं"],
+    expectedContains: ["हम", "इस", "एल्गोरिदम", "टाइम कॉम्प्लेक्सिटी", "करते", "हैं"],
   },
   {
     raw: "Agar koi doubt ho toh bejijhak pucho.",
@@ -56,19 +63,19 @@ const hindiTestCases = [
   },
   {
     raw: "Ek function define karo aur usme return value likho.",
-    expectedContains: ["एक", "function", "करो", "return", "लिखो"],
+    expectedContains: ["एक", "फ़ंक्शन", "करो", "रिटर्न", "लिखो"],
   },
   {
     raw: "Recursion ko samajhne ke liye base case samajhna zaroori hai.",
-    expectedContains: ["Recursion", "के लिए", "case", "ज़रूर"],
+    expectedContains: ["रिकर्शन", "के लिए", "केस", "ज़रूरी"],
   },
   {
     raw: "Aapka exam preparation kaisa chal raha hai?",
-    expectedContains: ["आपका", "exam", "रहा", "है"],
+    expectedContains: ["आपका", "एग्ज़ाम", "प्रिपरेशन", "कैसा", "चल", "रहा", "है"],
   },
   {
     raw: "Shukriya bhai, ab mujhe binary search poora samajh aa gaya.",
-    expectedContains: ["शुक्रिया", "भाई", "अब", "मुझे", "binary", "search", "पूरा", "समझ"],
+    expectedContains: ["शुक्रिया", "भाई", "अब", "मुझे", "बाइनरी सर्च", "पूरा", "समझ"],
   },
 ];
 
@@ -83,7 +90,7 @@ hindiTestCases.forEach((t, i) => {
   );
 });
 
-// 3. 5 PUNJABI TEST SENTENCES (Including Romanized -> Gurmukhi normalization)
+// 3. 5 PUNJABI NORMALIZATION TESTS
 console.log("\n--- PART 3: 5 PUNJABI NORMALIZATION TESTS ---");
 const punjabiTestCases = [
   {
@@ -96,11 +103,11 @@ const punjabiTestCases = [
   },
   {
     raw: "Ajj asi step by step data structures padhna shuru karde haan.",
-    expectedContains: ["ਅੱਜ", "ਅਸੀਂ", "ਸਟੈਪ ਬਾਏ ਸਟੈਪ", "data", "structures", "ਪੜ੍ਹਨਾ", "ਹਾਂ"],
+    expectedContains: ["ਅੱਜ", "ਅਸੀਂ", "ਸਟੈਪ ਬਾਏ ਸਟੈਪ", "ਡਾਟਾ ਸਟਰੱਕਚਰ", "ਪੜ੍ਹਨਾ", "ਸ਼ੁਰੂ", "ਕਰਦੇ", "ਹਾਂ"],
   },
   {
     raw: "Tuhanu coding vich koi vi doubt hove taan zaroor pucho.",
-    expectedContains: ["ਤੁਹਾਨੂੰ", "coding", "ਵਿੱਚ", "ਪੁੱਛੋ"],
+    expectedContains: ["ਤੁਹਾਨੂੰ", "ਕੋਡਿੰਗ", "ਵਿੱਚ", "ਕੋਈ", "ਵੀ", "ਡਾਊਟ", "ਤਾਂ", "ਜ਼ਰੂਰ", "ਪੁੱਛੋ"],
   },
   {
     raw: "Dhanwad ji, rabb rakha!",
@@ -119,7 +126,7 @@ punjabiTestCases.forEach((t, i) => {
   );
 });
 
-// 4. 5 INDIAN ENGLISH TEST SENTENCES (No false transliteration, numbers/acronyms preserved)
+// 4. 5 INDIAN ENGLISH PRESERVATION TESTS
 console.log("\n--- PART 4: 5 INDIAN ENGLISH PRESERVATION TESTS ---");
 const englishTestCases = [
   {
@@ -155,28 +162,52 @@ englishTestCases.forEach((t, i) => {
   );
 });
 
-// 5. 5 HINGLISH CODE-SWITCHING TESTS WITH TECHNICAL TERMS
+// 5. 5 HINGLISH CODE-SWITCHING TESTS WITH PHONETIC TECHNICAL TERMS
 console.log("\n--- PART 5: 5 HINGLISH CODE-SWITCHING TESTS ---");
 const hinglishTechCases = [
   {
     raw: "React mein useState hook use karke component state manage karte hain.",
-    check: (res) => res.includes("React") && res.includes("useState") && res.includes("में") && res.includes("करके") && res.includes("करते हैं"),
+    check: (res) =>
+      res.includes("रिएक्ट") &&
+      res.includes("यूज़स्टेट") &&
+      res.includes("में") &&
+      res.includes("करके") &&
+      res.includes("करते हैं"),
   },
   {
     raw: "Binary search ka time complexity O(log n) hota hai jabki linear search ka O(n) hota hai.",
-    check: (res) => res.includes("Binary") && res.includes("O of log n") && res.includes("होता है") && res.includes("O of n"),
+    check: (res) =>
+      res.includes("बाइनरी सर्च") &&
+      res.includes("O of log n") &&
+      res.includes("होता है") &&
+      res.includes("लिनियर सर्च"),
   },
   {
     raw: "Node.js aur Express use karke hum REST API backend create karte hain.",
-    check: (res) => res.includes("Node") && res.includes("Express") && res.includes("और") && res.includes("करके") && res.includes("करते हैं"),
+    check: (res) =>
+      res.includes("एक्सप्रेस") &&
+      res.includes("और") &&
+      res.includes("करके") &&
+      res.includes("रेस्ट एपीआई") &&
+      res.includes("करते हैं"),
   },
   {
     raw: "Java class ke andar private variables ko encapsulate karke public getter aur setter methods banate hain.",
-    check: (res) => res.includes("Java") && res.includes("class") && res.includes("के") && res.includes("methods") && res.includes("हैं"),
+    check: (res) =>
+      res.includes("जावा") &&
+      res.includes("क्लास") &&
+      res.includes("प्राइवेट") &&
+      res.includes("मेथड्स") &&
+      res.includes("हैं"),
   },
   {
     raw: "Database queries optimize karne ke liye indexes ka use kiya jata hai.",
-    check: (res) => res.includes("Database") && res.includes("queries") && res.includes("के लिए") && res.includes("किया") && res.includes("जाता है"),
+    check: (res) =>
+      res.includes("डेटाबेस") &&
+      res.includes("क्वेरीज़") &&
+      res.includes("के लिए") &&
+      res.includes("किया") &&
+      res.includes("जाता है"),
   },
 ];
 
@@ -185,7 +216,7 @@ hinglishTechCases.forEach((t, i) => {
   const normalized = normalizeSpeechText(clean, "hi-IN");
   const passed = t.check(normalized);
   assertTest(
-    `Hinglish Test #${i + 1}: Preserves technical words & normalizes Hindi grammar`,
+    `Hinglish Test #${i + 1}: Converts technical terms to phonetic Devanagari`,
     passed,
     `Output: "${normalized}"`
   );
@@ -193,7 +224,8 @@ hinglishTechCases.forEach((t, i) => {
 
 // 6. SENTENCE SEGMENTATION & PACING FOR TTS
 console.log("\n--- PART 6: AUDIO SEGMENTATION & PACING ---");
-const longText = "First, let's understand how a binary search tree works in computer science. Each node has at most two children. The left child contains values less than the parent, and the right child contains values greater than the parent. This property enables efficient logarithmic search operations.";
+const longText =
+  "First, let's understand how a binary search tree works in computer science. Each node has at most two children. The left child contains values less than the parent, and the right child contains values greater than the parent. This property enables efficient logarithmic search operations.";
 const chunks = splitIntoSpeechSentences(longText, 120);
 assertTest(
   "Splits long paragraphs into clean sentence chunks without cutting words",
@@ -204,20 +236,28 @@ assertTest(
 // 7. STUDYBUDDY ACADEMIC BOUNDARY COMPLIANCE
 console.log("\n--- PART 7: ACADEMIC FOCUS & BOUNDARY REJECTION ---");
 const gossipRefusal = checkUnrelatedQuery("Tell me some Bollywood gossip about who is dating whom", "en-IN");
-assertTest("Refuses celebrity gossip in English", typeof gossipRefusal === "string" && gossipRefusal.includes("StudyBuddy AI Mentor"));
+assertTest(
+  "Refuses celebrity gossip in English",
+  typeof gossipRefusal === "string" && gossipRefusal.includes("StudyBuddy AI Mentor")
+);
 
 const hindiGossipRefusal = checkUnrelatedQuery("Bhai koi mast chutkula sunao ya Bollywood gossip batao", "hi-IN");
-assertTest("Refuses chitchat jokes in Hindi", typeof hindiGossipRefusal === "string" && hindiGossipRefusal.includes("StudyBuddy AI Mentor"));
+assertTest(
+  "Refuses chitchat jokes in Hindi",
+  typeof hindiGossipRefusal === "string" && hindiGossipRefusal.includes("StudyBuddy AI Mentor")
+);
 
 const studyQuestion = checkUnrelatedQuery("Explain polymorphism in Java with a code example", "en-IN");
 assertTest("Allows valid academic programming questions", studyQuestion === null);
 
 // 8. ADAPTIVE LENGTH DETECTION
 console.log("\n--- PART 8: ADAPTIVE LENGTH DETECTION ---");
-assertTest("Detects detailed explanation prompt", isDetailedRequest("Please explain binary search tree in detail with code examples") === true);
+assertTest(
+  "Detects detailed explanation prompt",
+  isDetailedRequest("Please explain binary search tree in detail with code examples") === true
+);
 assertTest("Detects concise factual doubt", isDetailedRequest("What is Java?") === false);
 
 console.log("\n================================================================");
 console.log(`ALL TESTS COMPLETED: ${passedCount} / ${totalTests} PASSED (100% SUCCESS)`);
 console.log("================================================================\n");
-

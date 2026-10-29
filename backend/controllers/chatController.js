@@ -29,11 +29,11 @@ export const cleanTextForTTS = (text) => {
   clean = clean.replace(/`([^`]+)`/g, "$1");
 
   // 3. Convert mathematical / algorithmic complexity notations to spoken words
-  clean = clean.replace(/\bO\(\s*1\s*\)/gi, "O of 1 constant time");
-  clean = clean.replace(/\bO\(\s*n\s*\)/gi, "O of n linear time");
-  clean = clean.replace(/\bO\(\s*n\^2\s*\)/gi, "O of n squared");
-  clean = clean.replace(/\bO\(\s*log\s*n\s*\)/gi, "O of log n");
-  clean = clean.replace(/\bO\(\s*n\s*log\s*n\s*\)/gi, "O of n log n");
+  clean = clean.replace(/\bO\(\s*1\s*\)(\s+constant\s+time)?/gi, "O of 1 constant time");
+  clean = clean.replace(/\bO\(\s*n\s*\)(\s+linear\s+time)?/gi, "O of n linear time");
+  clean = clean.replace(/\bO\(\s*n\^2\s*\)(\s+quadratic\s+time)?/gi, "O of n squared");
+  clean = clean.replace(/\bO\(\s*log\s*n\s*\)(\s+logarithmic\s+time)?/gi, "O of log n");
+  clean = clean.replace(/\bO\(\s*n\s*log\s*n\s*\)(\s+log-linear\s+time)?/gi, "O of n log n");
 
   // 4. Convert programming operators to natural spoken words (put negation first)
   clean = clean.replace(/!==?/g, " is not equal to ");
@@ -182,6 +182,11 @@ export const concatWavBuffers = (buffers) => {
 export const detectLanguageCode = (text) => {
   if (!text) return "en-IN";
 
+  // Explicit student prompt instruction detection
+  if (/\b(in\s+hinglish|in\s+hindi|hindi\s+mein|hinglish\s+mein)\b/i.test(text)) return "hi-IN";
+  if (/\b(in\s+punjabi|punjabi\s+vich|punjabi\s+mein)\b/i.test(text)) return "pa-IN";
+  if (/\b(in\s+english)\b/i.test(text)) return "en-IN";
+
   // Native Regional Indic Scripts
   if (/[\u0A00-\u0A7F]/.test(text)) return "pa-IN"; // Gurmukhi (Punjabi)
   if (/[\u0980-\u09FF]/.test(text)) return "bn-IN"; // Bengali
@@ -210,12 +215,13 @@ export const detectLanguageCode = (text) => {
     "daso", "dasso", "chahida", "chahidi", "punjabi", "sat", "akal", "satsriakal",
     "aaho", "haanji", "karde", "karda", "kardi", "padhna", "parhna", "kehnde",
     "sanu", "thoda", "thodi", "ethe", "othe", "sohna", "sohni", "kujh", "changa",
-    "changi", "rabb", "rakha", "ajj", "aj", "saade", "tuhanu", "mainu"
+    "changi", "rabb", "rakha", "ajj", "aj", "saade", "tuhanu", "mainu",
+    "hunda", "hundi", "hunde", "hove", "hovan"
   ];
   if (words.some((w) => punjabiWords.includes(w))) return "pa-IN";
 
   // Bengali transliterated
-  const bengaliWords = ["kemon", "aacho", "aami", "bhalo", "dhonnobad", "korbo", "shikhbo", "aamake", "ki", "korcho"];
+  const bengaliWords = ["kemon", "aacho", "aami", "bhalo", "dhonnobad", "korbo", "shikhbo", "aamake", "korcho", "bujhte", "porashona"];
   if (words.some((w) => bengaliWords.includes(w))) return "bn-IN";
 
   // Tamil transliterated
@@ -245,7 +251,9 @@ export const detectLanguageCode = (text) => {
     "karna", "karo", "kare", "karein", "raha", "rahe", "rahi", "thi", "tha",
     "mujhe", "mera", "meri", "mere", "aap", "aapka", "aapki", "aapke",
     "tum", "tumhara", "tumhari", "tumhare", "bhai", "yaar", "padhai", "samajh",
-    "accha", "theek", "shukriya", "dhanyawad", "namaste", "batao", "sikhao", "bolo", "bataiye", "pucho"
+    "samjhao", "samjhaiye", "batao", "sikhao", "bolo", "bataiye", "pucho",
+    "accha", "theek", "shukriya", "dhanyawad", "namaste", "chalo",
+    "ko", "se", "aur", "mein", "me", "jisme", "isme", "hota", "hoti", "hote", "karke"
   ];
   const hinglishCount = words.filter((w) => distinctHinglishWords.includes(w)).length;
 
@@ -370,14 +378,12 @@ Your primary role is to act as a dedicated personal tutor for students across ac
 ### 5. EXACT LANGUAGE & CODE-SWITCHING MATCHING:
 - Always match the student's language, dialect, and script:
   - English -> Clear, natural English.
-  - Hindi or Hinglish -> Natural Hindi/Hinglish (preserve common technical terms like class, object, function, loop in English).
-  - Punjabi -> Natural Punjabi (Gurmukhi or Roman Punjabi).
-  - Bengali -> Natural Bengali.
-  - Tamil -> Natural Tamil.
-  - Telugu -> Natural Telugu.
-  - Marathi -> Natural Marathi.
-  - Gujarati -> Natural Gujarati.
-- Formulate your answers so they sound fluid, expressive, and conversational when read aloud by text-to-speech.
+  - Hinglish (Roman Hindi using English alphabet, e.g. "Tree data structure kya hai?") -> Respond in natural, conversational Hinglish using English/Latin alphabet (e.g. "Tree ek non-linear data structure hai..."). Do NOT use Devanagari script in the written response unless the student explicitly writes in Devanagari script.
+  - Hindi (written in Devanagari) -> Natural Devanagari Hindi.
+  - Punjabi (Roman or Gurmukhi) -> Match student's script and phrasing.
+  - Bengali, Tamil, Telugu, Marathi, Gujarati -> Match the student's language and script.
+- Keep technical terms (class, object, function, loop, tree, node, database, API) clear and intuitive.
+- Formulate answers so they sound fluid, expressive, and conversational when read aloud by text-to-speech.
 
 ### 6. INTELLIGENT ANSWER LENGTH & ADAPTIVE EXPLANATION DEPTH:
 - **Default Mode (Concise & Focused by default):**
@@ -439,6 +445,7 @@ export const handleChat = async (req, res) => {
       return res.json({
         success: true,
         reply: boundaryRefusal,
+        displayText: boundaryRefusal,
         speechText: speechBoundary,
         detected_language: detectedLang,
         is_boundary_refusal: true,
@@ -521,6 +528,7 @@ export const handleChat = async (req, res) => {
               return res.json({
                 success: true,
                 reply: trimmedReply,
+                displayText: trimmedReply,
                 speechText,
                 detected_language: responseLang,
                 model_used: modelName,
@@ -556,6 +564,7 @@ export const handleChat = async (req, res) => {
     return res.json({
       success: true,
       reply: fallbackReply,
+      displayText: fallbackReply,
       speechText: speechFallback,
       detected_language: detectedLang,
       is_fallback: true,
