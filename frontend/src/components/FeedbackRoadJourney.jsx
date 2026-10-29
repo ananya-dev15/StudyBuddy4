@@ -210,57 +210,73 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
   const isUserInteractingRef = useRef(false);
   const resumeTimeoutRef = useRef(null);
   const scrollSubpixelRef = useRef(0);
+  const isPastStartRef = useRef(false);
 
   // Compute curved road path & milestone positions (alternating above and below, duplicated for seamless loop)
   const {
     displayPositions,
     cycleWidth,
+    cyclePathDist,
     totalTrackWidth,
     pathD,
     startBadges,
     loopBadges,
   } = useMemo(() => {
-    // Generate curved roadmap for 2 complete cycles of feedbacksList
-    const doubled = [...feedbacksList, ...feedbacksList];
+    // Generate curved roadmap for 4 complete cycles of feedbacksList
+    // Cycle 1 contains the one-time START badge; Cycles 2 & 3 form the seamless endless loop
+    const repeated = [
+      ...feedbacksList,
+      ...feedbacksList,
+      ...feedbacksList,
+      ...feedbacksList,
+    ];
     const positions = [];
     const path = [];
     const starts = [];
     const loops = [];
 
+    const CURVE_LEN = Math.PI * R + (Y_BOTTOM - Y_TOP - 2 * R);
+
     let currentX = 0;
     let currentY = Y_TOP;
+    let currentDist = 0;
     let isTopLevel = true;
     let itemIdx = 0;
     let globalCardIdx = 0;
     let cycle1Width = 0;
+    let cycle1PathDist = 0;
 
     path.push(`M 0 ${Y_TOP}`);
     currentX = 30;
+    currentDist = 30;
     path.push(`L ${currentX} ${Y_TOP}`);
 
+    // Exactly 2 cards per segment ensures 4 segments per cycle (8 cards),
+    // meaning every cycle starts at Y_TOP and ends at Y_TOP for a 100% seamless infinite road loop
+    const cardsPerSeg = Math.max(1, Math.ceil(feedbacksList.length / 4));
+
     // Place items along curved road
-    while (itemIdx < doubled.length) {
+    while (itemIdx < repeated.length) {
       const segStartX = currentX;
       const segLevelY = currentY;
+      const segStartDist = currentDist;
 
-      // START badge at beginning of cycle 1 and cycle 2
+      // Only 1 START badge at the very beginning of the journey
       if (itemIdx === 0) {
-        starts.push({ x: segStartX + 10, y: segLevelY });
-      } else if (itemIdx === feedbacksList.length) {
-        starts.push({ x: segStartX + 10, y: segLevelY });
+        starts.push({ x: segStartX + 10, y: segLevelY, pathDist: segStartDist + 10 });
       }
 
-      // We place up to 3 cards per segment
-      const cardsInSeg = Math.min(3, doubled.length - itemIdx);
+      const cardsInSeg = Math.min(cardsPerSeg, repeated.length - itemIdx);
       const segPositions = [];
 
       for (let c = 0; c < cardsInSeg; c++) {
-        const item = doubled[itemIdx];
+        const item = repeated[itemIdx];
         const isTop = globalCardIdx % 2 === 1; // Strict alternation 0=Bottom, 1=Top, 2=Bottom, 3=Top...
         const roadX = segStartX + 130 + c * CARD_GAP;
         const cardX = roadX - CARD_WIDTH / 2;
         // If top: sits above road level; if bottom: sits below road level
         const cardY = isTop ? segLevelY - 21 - 14 - CARD_HEIGHT : segLevelY + 21 + 14;
+        const pathDist = segStartDist + (roadX - segStartX);
 
         segPositions.push({
           item,
@@ -273,6 +289,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
           cardY,
           pinX: roadX,
           pinY: segLevelY,
+          pathDist,
         });
 
         itemIdx++;
@@ -284,17 +301,17 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
       // Horizontal segment road length
       const segContentWidth = 130 + (cardsInSeg - 1) * CARD_GAP + 130;
       const segEndX = segStartX + segContentWidth;
+      const segEndDist = segStartDist + segContentWidth;
       path.push(`L ${segEndX} ${segLevelY}`);
 
+      // Record Cycle 1 completion values for seamless loop
       if (itemIdx === feedbacksList.length) {
-        cycle1Width = segEndX + 2 * R;
-        loops.push({ x: segEndX - 35, y: segLevelY });
-      } else if (itemIdx >= doubled.length) {
-        loops.push({ x: segEndX - 35, y: segLevelY });
+        cycle1Width = (segEndX + 2 * R) - 30;
+        cycle1PathDist = (segEndDist + CURVE_LEN) - 30;
       }
 
       // If more items remain, curve to the other level
-      if (itemIdx < doubled.length) {
+      if (itemIdx < repeated.length) {
         if (isTopLevel) {
           // Curve DOWN from Y_TOP to Y_BOTTOM
           path.push(`A ${R} ${R} 0 0 1 ${segEndX + R} ${Y_TOP + R}`);
@@ -302,6 +319,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
           path.push(`A ${R} ${R} 0 0 0 ${segEndX + 2 * R} ${Y_BOTTOM}`);
           currentX = segEndX + 2 * R;
           currentY = Y_BOTTOM;
+          currentDist = segEndDist + CURVE_LEN;
           isTopLevel = false;
         } else {
           // Curve UP from Y_BOTTOM to Y_TOP
@@ -310,19 +328,23 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
           path.push(`A ${R} ${R} 0 0 1 ${segEndX + 2 * R} ${Y_TOP}`);
           currentX = segEndX + 2 * R;
           currentY = Y_TOP;
+          currentDist = segEndDist + CURVE_LEN;
           isTopLevel = true;
         }
       } else {
         currentX = segEndX + 160;
+        currentDist = segEndDist + 160;
         path.push(`L ${currentX} ${segLevelY}`);
       }
     }
 
-    const calculatedCycleWidth = cycle1Width || currentX / 2;
+    const calculatedCycleWidth = cycle1Width || currentX / 4;
+    const calculatedCycleDist = cycle1PathDist || currentDist / 4;
 
     return {
       displayPositions: positions,
       cycleWidth: calculatedCycleWidth,
+      cyclePathDist: calculatedCycleDist,
       totalTrackWidth: currentX + 80,
       pathD: path.join(" "),
       startBadges: starts,
@@ -330,32 +352,282 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     };
   }, [feedbacksList]);
 
-  // Continuous loop auto-scroll (slow, smooth, seamless wrap-around)
+  // Sorted list of milestone markers along the SVG path for fast lookup & color synchronization
+  const milestonesByDist = useMemo(() => {
+    return displayPositions.map((pos) => ({
+      originalIdx: pos.originalIdx,
+      displayId: pos.displayId,
+      color: pos.item.color || "#6366f1",
+      pathDist: pos.pathDist,
+      roadX: pos.roadX,
+      roadY: pos.roadY,
+      item: pos.item,
+    })).sort((a, b) => a.pathDist - b.pathDist);
+  }, [displayPositions]);
+
+  // Interactive Animated Car State & Refs
+  const roadPathRef = useRef(null);
+  const carGroupRef = useRef(null);
+  const carBodyRef = useRef(null);
+  const carRoofRef = useRef(null);
+  const carUnderglowRef = useRef(null);
+
+  const DEFAULT_CAR_COLOR = "#10b981"; // Starts matching green START marker
+  const startDist = startBadges[0]?.pathDist || 40;
+
+  const carDistRef = useRef(startDist);
+  const carSpeedRef = useRef(0);
+  const carAngleRef = useRef(0);
+  const carColorRef = useRef(DEFAULT_CAR_COLOR);
+  const carModeRef = useRef("waiting_at_start"); // "waiting_at_start" | "cruising" | "targeting" | "hovering" | "stopped"
+  const targetDistRef = useRef(null);
+  const isHoveringCardRef = useRef(false);
+
+  // Animated Car Controller Loop (Single continuous requestAnimationFrame)
   useEffect(() => {
     let animId;
-    const speed = 0.65; // ~39px per second at 60fps - gentle reading speed
+    let startWaitTimeout;
 
-    const step = () => {
-      const el = viewportRef.current;
-      if (el && !isPausedRef.current && !isUserInteractingRef.current) {
-        scrollSubpixelRef.current += speed;
-        if (scrollSubpixelRef.current >= 1) {
-          const moveBy = Math.floor(scrollSubpixelRef.current);
-          scrollSubpixelRef.current -= moveBy;
+    // Initially brief wait at START marker before beginning journey together
+    startWaitTimeout = setTimeout(() => {
+      if (carModeRef.current === "waiting_at_start") {
+        carModeRef.current = "cruising";
+      }
+    }, 700);
 
-          el.scrollLeft += moveBy;
-          // Seamless infinite wrap-around
-          if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
-            el.scrollLeft -= cycleWidth;
+    const updateCarColor = (newColor) => {
+      if (!newColor || carColorRef.current === newColor) return;
+      carColorRef.current = newColor;
+      if (carBodyRef.current) carBodyRef.current.setAttribute("fill", newColor);
+      if (carRoofRef.current) carRoofRef.current.setAttribute("fill", newColor);
+      if (carUnderglowRef.current) carUnderglowRef.current.setAttribute("fill", newColor);
+    };
+
+    const animStep = () => {
+      const pathEl = roadPathRef.current;
+      const carEl = carGroupRef.current;
+
+      if (pathEl && carEl) {
+        const totalLen = typeof pathEl.getTotalLength === "function" ? pathEl.getTotalLength() : 0;
+        if (totalLen > 0) {
+          let curDist = carDistRef.current;
+          let curSpeed = carSpeedRef.current;
+          const targetDist = targetDistRef.current;
+          const prevDist = curDist;
+
+          if (targetDist !== null && targetDist !== undefined) {
+            // DIRECT OR HOVER NAVIGATION TO SELECTED DESTINATION
+            const delta = targetDist - curDist;
+            const distAbs = Math.abs(delta);
+            const dir = Math.sign(delta);
+
+            if (distAbs < 1.0 && Math.abs(curSpeed) < 0.8) {
+              // Smooth arrival at selected destination
+              curDist = targetDist;
+              curSpeed = 0;
+
+              // Ensure exact destination pin color is applied
+              const destMilestone = milestonesByDist.find(
+                (m) => Math.abs(m.pathDist - targetDist) < 8
+              );
+              if (destMilestone) {
+                updateCarColor(destMilestone.color);
+              }
+
+              if (isHoveringCardRef.current) {
+                carModeRef.current = "hovering";
+              } else {
+                carModeRef.current = "stopped";
+              }
+            } else {
+              // Adaptive speed based on distance: distant milestones travel faster
+              const topSpeed = Math.min(13.5, Math.max(3.8, Math.sqrt(distAbs) * 0.44));
+              const decelSpeed = Math.sqrt(2 * 0.3 * distAbs);
+              const desiredSpeed = dir * Math.min(topSpeed, Math.max(0.6, decelSpeed));
+
+              // Smooth acceleration & deceleration
+              curSpeed += (desiredSpeed - curSpeed) * 0.12;
+              curDist += curSpeed;
+            }
+          } else if (carModeRef.current === "cruising" && !isPausedRef.current && !isUserInteractingRef.current) {
+            // NORMAL JOURNEY CRUISING ALONG THE HIGHWAY
+            const cruiseSpeed = 0.92;
+            curSpeed += (cruiseSpeed - curSpeed) * 0.08;
+            curDist += curSpeed;
+
+            // Safe fallback clamp near the absolute end of the SVG track
+            if (curDist >= totalLen - 25 && targetDistRef.current === null) {
+              curDist -= cyclePathDist;
+              if (viewportRef.current) {
+                viewportRef.current.scrollLeft = Math.max(0, viewportRef.current.scrollLeft - cycleWidth);
+              }
+            }
+          } else {
+            // Friction damping when paused or stopped
+            curSpeed *= 0.82;
+            if (Math.abs(curSpeed) < 0.04) curSpeed = 0;
+            curDist += curSpeed;
+          }
+
+          // Boundary clamp
+          curDist = Math.max(0, Math.min(totalLen, curDist));
+          carDistRef.current = curDist;
+          carSpeedRef.current = curSpeed;
+
+          // DYNAMIC CAR COLOR LOGIC: Forward & Reverse pin crossings
+          if (curSpeed > 0.05) {
+            // Moving FORWARD: color becomes that of the crossed pin
+            for (let i = 0; i < milestonesByDist.length; i++) {
+              const m = milestonesByDist[i];
+              if (prevDist < m.pathDist && curDist >= m.pathDist - 2) {
+                updateCarColor(m.color);
+              }
+            }
+          } else if (curSpeed < -0.05) {
+            // Moving BACKWARD: color updates as pins are crossed in reverse
+            for (let i = milestonesByDist.length - 1; i >= 0; i--) {
+              const m = milestonesByDist[i];
+              if (prevDist > m.pathDist && curDist <= m.pathDist + 2) {
+                updateCarColor(m.color);
+              }
+            }
+            // Reverse back to START
+            const startPinDist = startBadges[0]?.pathDist || 40;
+            if (prevDist > startPinDist && curDist <= startPinDist + 5) {
+              updateCarColor(DEFAULT_CAR_COLOR);
+            }
+          }
+
+          // POSITION & ORIENTATION DERIVED FROM EXACT SVG ROAD PATH
+          const pt = pathEl.getPointAtLength(curDist);
+          const sampleDistAhead = Math.min(totalLen, curDist + 2.5);
+          const sampleDistBehind = Math.max(0, curDist - 2.5);
+          const ptAhead = pathEl.getPointAtLength(sampleDistAhead);
+          const ptBehind = pathEl.getPointAtLength(sampleDistBehind);
+
+          const dx = ptAhead.x - ptBehind.x;
+          const dy = ptAhead.y - ptBehind.y;
+          let tangentAngle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+          // Front faces direction of travel
+          let targetAngle = tangentAngle;
+          if (curSpeed < -0.2) {
+            // Reverse direction
+            targetAngle = tangentAngle + 180;
+          }
+
+          // Smooth shortest-arc rotation easing around turns
+          let curAngle = carAngleRef.current;
+          const angleDiff = ((((targetAngle - curAngle) % 360) + 540) % 360) - 180;
+          curAngle += angleDiff * 0.16;
+          carAngleRef.current = curAngle;
+
+          // Direct DOM transform update for smooth 60-120fps motion
+          carEl.setAttribute("transform", `translate(${pt.x}, ${pt.y}) rotate(${curAngle})`);
+
+          // CONTINUOUS ROAD & CAMERA SYNCHRONIZATION WITH CAR
+          // Car and road move continuously together — never stopping, even through curves/turns
+          if (
+            viewportRef.current &&
+            !isUserInteractingRef.current &&
+            !isPausedRef.current &&
+            carModeRef.current === "cruising"
+          ) {
+            const el = viewportRef.current;
+            const cycleRatio = cyclePathDist > 0 ? cycleWidth / cyclePathDist : 0.84;
+            const baseRoadSpeed = Math.max(0.65, curSpeed * cycleRatio);
+
+            // Gentle framing nudge to keep car comfortably around 38% of screen width
+            const desiredScreenX = el.clientWidth * 0.38;
+            const currentScreenX = pt.x - el.scrollLeft;
+            const drift = currentScreenX - desiredScreenX;
+            const driftCorrection = Math.max(-0.20, Math.min(0.20, drift * 0.003));
+
+            // Road speed is strictly positive (always >= 0.55px/frame) so road NEVER stops during turns
+            const effectiveRoadSpeed = Math.max(0.55, baseRoadSpeed + driftCorrection);
+
+            scrollSubpixelRef.current += effectiveRoadSpeed;
+            if (scrollSubpixelRef.current >= 1.0) {
+              const movePx = Math.floor(scrollSubpixelRef.current);
+              scrollSubpixelRef.current -= movePx;
+              el.scrollLeft += movePx;
+            }
+
+            if (el.scrollLeft >= cycleWidth) {
+              isPastStartRef.current = true;
+            }
+
+            // Seamless infinite cycle wrap-around between Cycle 3 and Cycle 2
+            // Cycle 1 contains the one-time START badge; infinite highway loops between Cycle 2 and Cycle 3
+            // This ensures Milestone 1 never converts back to START, and road never refreshes!
+            if (
+              el.scrollLeft >= 2 * cycleWidth &&
+              cycleWidth > 0 &&
+              curDist >= 2 * cyclePathDist &&
+              targetDistRef.current === null
+            ) {
+              el.scrollLeft -= cycleWidth;
+              curDist -= cyclePathDist;
+              carDistRef.current = curDist;
+            }
           }
         }
       }
-      animId = requestAnimationFrame(step);
+
+      animId = requestAnimationFrame(animStep);
     };
 
-    animId = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(animId);
-  }, [cycleWidth]);
+    animId = requestAnimationFrame(animStep);
+
+    return () => {
+      cancelAnimationFrame(animId);
+      if (startWaitTimeout) clearTimeout(startWaitTimeout);
+    };
+  }, [milestonesByDist, feedbacksList.length, startBadges, cycleWidth, cyclePathDist]);
+
+  // Handle hovering over a feedback card: drive to milestone and stop
+  const handleCardMouseEnter = (pos) => {
+    isUserInteractingRef.current = true;
+    isHoveringCardRef.current = true;
+    targetDistRef.current = pos.pathDist;
+    carModeRef.current = "targeting";
+  };
+
+  // Handle cursor leaving feedback card: resume journey cruising
+  const handleCardMouseLeave = () => {
+    isHoveringCardRef.current = false;
+    targetDistRef.current = null;
+    carModeRef.current = "cruising";
+    if (!isDraggingRef.current) {
+      if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = setTimeout(() => {
+        isUserInteractingRef.current = false;
+      }, 1200);
+    }
+  };
+
+  // Handle direct selection of a feedback card or location pin
+  const handleMilestoneSelect = (pos) => {
+    isUserInteractingRef.current = true;
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    resumeTimeoutRef.current = setTimeout(() => {
+      isUserInteractingRef.current = false;
+    }, 2500);
+
+    // Direct travel to selected milestone
+    targetDistRef.current = pos.pathDist;
+    carModeRef.current = "targeting";
+
+    // Smoothly center milestone in viewport
+    const el = viewportRef.current;
+    if (el && pos.roadX !== undefined) {
+      const targetX = Math.max(0, pos.roadX - el.clientWidth / 2);
+      el.scrollTo({
+        left: targetX,
+        behavior: "smooth",
+      });
+    }
+  };
 
   // Toggle pause on tap/click
   const handleTogglePause = () => {
@@ -400,10 +672,16 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
       }, 1800);
 
       el.scrollLeft += e.deltaY * 1.5;
-      if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
+      if (el.scrollLeft >= 2 * cycleWidth && cycleWidth > 0) {
         el.scrollLeft -= cycleWidth;
-      } else if (el.scrollLeft <= 0 && cycleWidth > 0) {
+        if (carDistRef.current >= 2 * cyclePathDist && targetDistRef.current === null) {
+          carDistRef.current -= cyclePathDist;
+        }
+      } else if (el.scrollLeft < cycleWidth && cycleWidth > 0 && isPastStartRef.current) {
         el.scrollLeft += cycleWidth;
+        if (carDistRef.current < 2 * cyclePathDist && targetDistRef.current === null) {
+          carDistRef.current += cyclePathDist;
+        }
       }
     }
   };
@@ -431,14 +709,20 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     const walk = (x - startXRef.current) * 1.6;
     el.scrollLeft = startScrollLeftRef.current - walk;
 
-    if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
+    if (el.scrollLeft >= 2 * cycleWidth && cycleWidth > 0) {
       el.scrollLeft -= cycleWidth;
       startXRef.current = x;
       startScrollLeftRef.current = el.scrollLeft;
-    } else if (el.scrollLeft <= 0 && cycleWidth > 0) {
+      if (carDistRef.current >= 2 * cyclePathDist && targetDistRef.current === null) {
+        carDistRef.current -= cyclePathDist;
+      }
+    } else if (el.scrollLeft < cycleWidth && cycleWidth > 0 && isPastStartRef.current) {
       el.scrollLeft += cycleWidth;
       startXRef.current = x;
       startScrollLeftRef.current = el.scrollLeft;
+      if (carDistRef.current < 2 * cyclePathDist && targetDistRef.current === null) {
+        carDistRef.current += cyclePathDist;
+      }
     }
   };
 
@@ -450,7 +734,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     }, 1800);
   };
 
-  // Button navigation helper (Left/Right)
+  // Button navigation helper (Left/Right) - moves car to prev/next milestone & scrolls
   const scrollByDirection = (dir) => {
     const el = viewportRef.current;
     if (!el) return;
@@ -459,22 +743,44 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
     resumeTimeoutRef.current = setTimeout(() => {
       isUserInteractingRef.current = false;
-    }, 2000);
+    }, 2200);
 
-    const step = 360;
-    const newLeft = dir === "next" ? el.scrollLeft + step : el.scrollLeft - step;
-    el.scrollTo({
-      left: newLeft,
-      behavior: "smooth",
-    });
+    const curDist = carDistRef.current;
+    let targetM = null;
 
-    setTimeout(() => {
-      if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
-        el.scrollLeft -= cycleWidth;
-      } else if (el.scrollLeft <= 0 && cycleWidth > 0) {
-        el.scrollLeft += cycleWidth;
+    if (dir === "next") {
+      targetM = milestonesByDist.find((m) => m.pathDist > curDist + 15);
+      if (!targetM) {
+        targetM = milestonesByDist.find((m) => m.pathDist >= cyclePathDist) || milestonesByDist[0];
       }
-    }, 400);
+    } else {
+      for (let i = milestonesByDist.length - 1; i >= 0; i--) {
+        if (milestonesByDist[i].pathDist < curDist - 15) {
+          targetM = milestonesByDist[i];
+          break;
+        }
+      }
+      if (!targetM) {
+        targetM = milestonesByDist[milestonesByDist.length - 1];
+      }
+    }
+
+    if (targetM) {
+      targetDistRef.current = targetM.pathDist;
+      carModeRef.current = "targeting";
+      const targetX = Math.max(0, targetM.roadX - el.clientWidth / 2);
+      el.scrollTo({
+        left: targetX,
+        behavior: "smooth",
+      });
+    } else {
+      const step = 360;
+      const newLeft = dir === "next" ? el.scrollLeft + step : el.scrollLeft - step;
+      el.scrollTo({
+        left: newLeft,
+        behavior: "smooth",
+      });
+    }
   };
 
   // Jump directly to milestone
@@ -482,11 +788,21 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     const el = viewportRef.current;
     if (!el) return;
 
-    setIsPaused(true);
-    const targetPos = displayPositions.find((p) => p.originalIdx === milestoneIdx);
-    if (!targetPos) return;
+    const currentCenter = el.scrollLeft + el.clientWidth / 2;
+    const matches = displayPositions.filter((p) => p.originalIdx === milestoneIdx);
+    if (matches.length === 0) return;
 
-    const targetX = Math.max(0, targetPos.roadX - el.clientWidth / 2);
+    let bestMatch = matches[0];
+    let bestDist = Math.abs(bestMatch.roadX - currentCenter);
+    for (let i = 1; i < matches.length; i++) {
+      const d = Math.abs(matches[i].roadX - currentCenter);
+      if (d < bestDist) {
+        bestDist = d;
+        bestMatch = matches[i];
+      }
+    }
+
+    const targetX = Math.max(0, bestMatch.roadX - el.clientWidth / 2);
     el.scrollTo({
       left: targetX,
       behavior: "smooth",
@@ -602,7 +918,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
         className="cursor-pointer pointer-events-auto transition-opacity hover:opacity-90"
         onClick={(e) => {
           e.stopPropagation();
-          scrollToMilestone(originalIdx);
+          handleMilestoneSelect(pos);
         }}
       >
         {/* Pulsing subtle radar ring */}
@@ -700,40 +1016,6 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
 
       {/* Roadmap Container */}
       <div className="relative max-w-7xl mx-auto px-2 sm:px-4">
-        {/* Left-Side Fixed PREV Button */}
-        <button
-          type="button"
-          onClick={() => scrollByDirection("prev")}
-          aria-label="Previous Milestones"
-          title="Previous (←)"
-          className={`absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-11 md:h-11 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer hover:scale-110 active:scale-95 hover:border-purple-400/60 ${
-            theme === "dark"
-              ? "bg-slate-900/80 border-white/20 text-white shadow-purple-500/10"
-              : "bg-white/85 border-white text-slate-900 shadow-indigo-500/15"
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
-
-        {/* Right-Side Fixed NEXT Button */}
-        <button
-          type="button"
-          onClick={() => scrollByDirection("next")}
-          aria-label="Next Milestones"
-          title="Next (→)"
-          className={`absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-11 md:h-11 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer hover:scale-110 active:scale-95 hover:border-purple-400/60 ${
-            theme === "dark"
-              ? "bg-slate-900/80 border-white/20 text-white shadow-purple-500/10"
-              : "bg-white/85 border-white text-slate-900 shadow-indigo-500/15"
-          }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
         {/* Scrollable Viewport (Smooth continuous loop scroll, hidden scrollbar) */}
         <div
           ref={viewportRef}
@@ -769,6 +1051,25 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
                 <filter id="road-subtle-glow" x="-10%" y="-10%" width="120%" height="120%">
                   <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="rgba(0,0,0,0.3)" />
                 </filter>
+                {/* Car underglow blur filter */}
+                <filter id="car-underglow-blur" x="-50%" y="-50%" width="200%" height="200%">
+                  <feGaussianBlur stdDeviation="3.5" />
+                </filter>
+                {/* Car shadow blur */}
+                <filter id="car-shadow-blur" x="-30%" y="-30%" width="160%" height="160%">
+                  <feGaussianBlur stdDeviation="1.8" />
+                </filter>
+                {/* Headlight beam gradient */}
+                <linearGradient id="headlight-beam-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#fef08a" stopOpacity="0.65" />
+                  <stop offset="40%" stopColor="#fef08a" stopOpacity="0.25" />
+                  <stop offset="100%" stopColor="#fef08a" stopOpacity="0" />
+                </linearGradient>
+                {/* Windshield cyan tint gradient */}
+                <linearGradient id="car-windshield-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#0284c7" />
+                  <stop offset="100%" stopColor="#38bdf8" />
+                </linearGradient>
               </defs>
 
               {/* 1. Road Outer Shadow / Curb - Broad */}
@@ -794,6 +1095,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
 
               {/* 3. Center Dashed Line */}
               <path
+                ref={roadPathRef}
                 d={pathD}
                 fill="none"
                 stroke="#ffffff"
@@ -883,6 +1185,119 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
 
               {/* Map Pin Markers attached directly to the road */}
               {displayPositions.map((pos) => renderPin(pos))}
+
+              {/* Interactive Animated Car driving along the road */}
+              <g
+                ref={carGroupRef}
+                transform={`translate(${startBadges[0]?.x || 40}, ${startBadges[0]?.y || 205}) rotate(0)`}
+                className="pointer-events-none select-none"
+                style={{ filter: "drop-shadow(0 2px 5px rgba(0,0,0,0.5))" }}
+              >
+                {/* Dynamic Underglow matching milestone pin color */}
+                <ellipse
+                  ref={carUnderglowRef}
+                  cx="0"
+                  cy="0"
+                  rx="22"
+                  ry="11"
+                  fill="#10b981"
+                  opacity="0.6"
+                  filter="url(#car-underglow-blur)"
+                  style={{ transition: "fill 0.35s ease" }}
+                />
+
+                {/* Asphalt contact shadow */}
+                <rect
+                  x="-18"
+                  y="-9"
+                  width="36"
+                  height="18"
+                  rx="5"
+                  fill="#000000"
+                  opacity="0.5"
+                  filter="url(#car-shadow-blur)"
+                />
+
+                {/* 4 Tires (Dark rubber with alloy rims) */}
+                <rect x="7" y="-11.2" width="8" height="2.8" rx="1.2" fill="#0f172a" stroke="#64748b" strokeWidth="0.5" />
+                <rect x="7" y="8.4" width="8" height="2.8" rx="1.2" fill="#0f172a" stroke="#64748b" strokeWidth="0.5" />
+                <rect x="-15" y="-11.2" width="8" height="2.8" rx="1.2" fill="#0f172a" stroke="#64748b" strokeWidth="0.5" />
+                <rect x="-15" y="8.4" width="8" height="2.8" rx="1.2" fill="#0f172a" stroke="#64748b" strokeWidth="0.5" />
+
+                {/* Headlight beams projected forward */}
+                <polygon
+                  points="18,-5.5 44,-12 44,-1 18,-5.5"
+                  fill="url(#headlight-beam-grad)"
+                />
+                <polygon
+                  points="18,5.5 44,1 44,12 18,5.5"
+                  fill="url(#headlight-beam-grad)"
+                />
+
+                {/* Main Car Body Chassis with dynamic color fill */}
+                <path
+                  ref={carBodyRef}
+                  d="M -16 -8.5 C -17.5 -8.5 -18.5 -6.8 -18.5 -4.5 L -18.5 4.5 C -18.5 6.8 -17.5 8.5 -16 8.5 L 12.5 8.5 C 15.5 8.5 18.5 5.8 18.5 3.2 L 18.5 -3.2 C 18.5 -5.8 15.5 -8.5 12.5 -8.5 Z"
+                  fill="#10b981"
+                  stroke="rgba(255,255,255,0.4)"
+                  strokeWidth="0.75"
+                  style={{ transition: "fill 0.35s ease" }}
+                />
+
+                {/* Body Top Gloss Highlight */}
+                <path
+                  d="M -14 -7 L 11 -7 C 14 -7 16.5 -4.8 17 -2.5 L -15 -2.5 C -15 -5 -14 -7 -14 -7 Z"
+                  fill="#ffffff"
+                  opacity="0.22"
+                />
+
+                {/* Aerodynamic Side Mirrors */}
+                <rect x="4" y="-11.5" width="2.8" height="1.6" rx="0.8" fill="#0f172a" />
+                <rect x="4" y="9.9" width="2.8" height="1.6" rx="0.8" fill="#0f172a" />
+
+                {/* Tinted Cabin Canopy */}
+                <path
+                  d="M -8 -6 C -8 -6 -4.5 -6.5 5 -6.5 C 8.5 -6.5 10.5 -4.5 11 -2 L 11 2 C 10.5 4.5 8.5 6.5 5 6.5 C -4.5 6.5 -8 6 -8 6 C -9.5 6 -10.5 4.5 -10.5 2.5 L -10.5 -2.5 C -10.5 -4.5 -9.5 -6 -8 -6 Z"
+                  fill="#090d16"
+                  stroke="rgba(255,255,255,0.25)"
+                  strokeWidth="0.5"
+                />
+
+                {/* Windshield (Front glass) */}
+                <path
+                  d="M 4 -5.5 L 9.5 -2.2 L 9.5 2.2 L 4 5.5 C 5.5 3.5 6 0 6 0 C 6 0 5.5 -3.5 4 -5.5 Z"
+                  fill="url(#car-windshield-grad)"
+                  opacity="0.8"
+                />
+
+                {/* Rear Window (Back glass) */}
+                <path
+                  d="M -6.5 -4.8 L -9.5 -2 L -9.5 2 L -6.5 4.8 Z"
+                  fill="url(#car-windshield-grad)"
+                  opacity="0.5"
+                />
+
+                {/* Roof Panel matching dynamic color */}
+                <rect
+                  ref={carRoofRef}
+                  x="-5"
+                  y="-4"
+                  width="8.5"
+                  height="8"
+                  rx="1.8"
+                  fill="#10b981"
+                  opacity="0.9"
+                  style={{ transition: "fill 0.35s ease" }}
+                />
+
+                {/* Front Dual LED Headlights */}
+                <circle cx="17.5" cy="-5" r="1.6" fill="#fef08a" />
+                <circle cx="17.5" cy="5" r="1.6" fill="#fef08a" />
+
+                {/* Rear Dual Ruby Red Taillights */}
+                <rect x="-18.8" y="-6.5" width="1.3" height="2.5" rx="0.6" fill="#ef4444" />
+                <rect x="-18.8" y="4" width="1.3" height="2.5" rx="0.6" fill="#ef4444" />
+              </g>
             </svg>
 
             {/* HTML Feedback Cards - Alternating Top & Bottom */}
@@ -895,15 +1310,13 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
                   key={`card-${pos.displayId}`}
                   onClick={(e) => {
                     e.stopPropagation();
-                    setIsPaused((prev) => !prev);
+                    handleMilestoneSelect(pos);
                   }}
                   onMouseEnter={() => {
-                    isUserInteractingRef.current = true;
+                    handleCardMouseEnter(pos);
                   }}
                   onMouseLeave={() => {
-                    if (!isDraggingRef.current) {
-                      isUserInteractingRef.current = false;
-                    }
+                    handleCardMouseLeave();
                   }}
                   className="absolute z-20 group transition-all duration-300 pointer-events-auto cursor-pointer"
                   style={{
@@ -911,7 +1324,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
                     top: `${pos.cardY}px`,
                     width: `${CARD_WIDTH}px`,
                   }}
-                  title="Tap to pause/resume auto-scroll"
+                  title="Click to drive here • Hover to preview"
                 >
                   {/* Card Body: Glassmorphism directly over homepage background */}
                   <div
