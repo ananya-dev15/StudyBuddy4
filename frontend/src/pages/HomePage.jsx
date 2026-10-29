@@ -580,7 +580,7 @@ const HomePage = () => {
 
       {/* FAQ Section */}
       <section className="mt-12 pt-16 pb-24 relative z-10">
-        <div className="max-w-4xl mx-auto px-6 text-center">
+        <div className="max-w-5xl mx-auto px-6 text-center">
           <h2 className="text-3xl md:text-4xl font-extrabold mb-8 text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
             Frequently Asked Questions
           </h2>
