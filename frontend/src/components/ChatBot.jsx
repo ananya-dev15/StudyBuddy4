@@ -252,7 +252,7 @@ export default function ChatBot({ standalone = false }) {
                   <div className="mt-2 flex justify-end">
                     <button
                       type="button"
-                      onClick={() => speakText(m.text)}
+                      onClick={() => speakText(m.speechText || m.text, m.detected_language)}
                       className="text-xs text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1 cursor-pointer"
                     >
                       🔊 Listen
@@ -406,7 +406,7 @@ export default function ChatBot({ standalone = false }) {
                   <div className="mt-1 flex justify-end">
                     <button
                       type="button"
-                      onClick={() => speakText(m.text)}
+                      onClick={() => speakText(m.speechText || m.text, m.detected_language)}
                       className="text-[10px] text-purple-400 hover:text-purple-300 font-medium flex items-center gap-0.5 cursor-pointer"
                     >
                       🔊 Listen

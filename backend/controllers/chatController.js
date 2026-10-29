@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 import axios from "axios";
 import { synthesizeNeuralSpeech } from "../utils/neuralTTSHelper.js";
 import { synthesizeCloudSpeech } from "../utils/cloudTTSHelper.js";
+import { normalizeSpeechText } from "../utils/speechNormalizer.js";
 
 // Cache quota exhaustion state to eliminate delay on consecutive TTS requests
 let sarvamQuotaExhaustedUntil = 0;
@@ -377,7 +378,40 @@ Your primary role is to act as a dedicated personal tutor for students across ac
   - Marathi -> Natural Marathi.
   - Gujarati -> Natural Gujarati.
 - Formulate your answers so they sound fluid, expressive, and conversational when read aloud by text-to-speech.
+
+### 6. INTELLIGENT ANSWER LENGTH & ADAPTIVE EXPLANATION DEPTH:
+- **Default Mode (Concise & Focused by default):**
+  - By default, provide direct, concise, and helpful answers without unnecessary fluff or multi-page lectures.
+  - For ordinary conceptual study doubts, aim for approximately **100–120 words maximum** when that much explanation is appropriate.
+  - Simple questions MUST receive short, direct answers:
+    * "What is Java?" -> 1–2 sentences explaining what it is, its primary purpose, and a key feature.
+    * "What is polymorphism?" -> 1–2 sentences giving a direct definition and a minimal code or conceptual cue.
+    * "What is the difference between let and const?" -> 2–3 sentences or a compact comparison.
+    * "What is the time complexity of binary search?" -> Direct answer stating O(log n) time and O(1) auxiliary space with the reason in 1–2 sentences.
+  - Do not generate unsolicited essays, redundant conclusions, or repetitive filler. Answer the student's actual question directly and stop when answered adequately.
+- **Detailed Mode (When explicitly requested by the student):**
+  - If the student explicitly asks to "explain in detail", "explain step by step", "explain from basics", "give a complete explanation", "explain with examples and code", "teach thoroughly", or "explain every point":
+    * Do NOT enforce the 100–120 word guideline.
+    * Provide a comprehensive, well-structured, step-by-step tutorial covering the concept from the basics, with detailed code examples, line-by-line explanations, common pitfalls, and practical applications.
+    * Structure clearly with headings and bullet points.
+- **Strict Follow-up & Summarization Commands:**
+  - If the student asks to "explain it in two sentences", produce EXACTLY two sentences.
+  - If the student asks for "a simple example", give ONLY the focused example without repeating prior background.
+  - Build directly on previous conversation turns using conversational memory without starting over.
 `;
+
+/**
+ * Intelligent detector for detailed explanation requests.
+ */
+export const isDetailedRequest = (prompt) => {
+  if (!prompt) return false;
+  const p = prompt.toLowerCase().trim();
+  return (
+    /\b(in detail|detail mein|vistar|step by step|from basics|complete explanation|thoroughly|every point|poora samjhao|deep dive|in-depth|with full code|sabhi types|poora detail|vistar se)\b/i.test(p) ||
+    /\b(explain.*detail|teach.*thoroughly|properly.*explain)\b/i.test(p) ||
+    /\b(har point|saare points|pura samjhao|pura explain)\b/i.test(p)
+  );
+};
 
 /**
  * Handles incoming chat messages with continuous conversation memory,
@@ -400,10 +434,12 @@ export const handleChat = async (req, res) => {
     // 1. Fast-path intent check for blatantly unrelated non-educational requests
     const boundaryRefusal = checkUnrelatedQuery(cleanMessage, detectedLang);
     if (boundaryRefusal) {
+      const cleanBoundary = cleanTextForTTS(boundaryRefusal);
+      const speechBoundary = normalizeSpeechText(cleanBoundary, detectedLang);
       return res.json({
         success: true,
         reply: boundaryRefusal,
-        speechText: cleanTextForTTS(boundaryRefusal),
+        speechText: speechBoundary,
         detected_language: detectedLang,
         is_boundary_refusal: true,
       });
@@ -415,13 +451,13 @@ export const handleChat = async (req, res) => {
       try {
         const genAI = new GoogleGenerativeAI(apiKey);
 
-        // Standard canonical Google Gemini model candidates
+        // Standard canonical Google Gemini model candidates (prioritizing high-quota, token-efficient models)
         const candidateModels = [
-          "gemini-2.5-flash",
-          "gemini-2.0-flash",
-          "gemini-1.5-flash",
-          "gemini-1.5-pro",
+          "gemini-flash-lite-latest",
           "gemini-flash-latest",
+          "gemini-2.5-flash-lite",
+          "gemini-2.5-flash",
+          "gemini-pro-latest",
         ];
 
         // Format multi-turn conversation history
@@ -457,11 +493,19 @@ export const handleChat = async (req, res) => {
           parts: [{ text: contextualUserPrompt }],
         });
 
+        // Determine adaptive token budget based on whether user requested detailed explanation
+        const detailedMode = isDetailedRequest(cleanMessage);
+        const maxTokens = detailedMode ? 2048 : 500;
+
         for (const modelName of candidateModels) {
           try {
             const model = genAI.getGenerativeModel({
               model: modelName,
               systemInstruction: STUDYBUDDY_SYSTEM_INSTRUCTION,
+              generationConfig: {
+                maxOutputTokens: maxTokens,
+                temperature: 0.7,
+              },
             });
 
             const result = await model.generateContent({ contents });
@@ -471,7 +515,8 @@ export const handleChat = async (req, res) => {
             if (reply && reply.trim()) {
               const trimmedReply = reply.trim();
               const responseLang = detectLanguageCode(trimmedReply) || detectedLang;
-              const speechText = cleanTextForTTS(trimmedReply);
+              const cleanSpeech = cleanTextForTTS(trimmedReply);
+              const speechText = normalizeSpeechText(cleanSpeech, responseLang);
 
               return res.json({
                 success: true,
@@ -506,10 +551,12 @@ export const handleChat = async (req, res) => {
       fallbackReply = "बहुत बढ़िया सवाल है! अपनी पढ़ाई पर ध्यान बनाए रखें। किसी भी टॉपिक में डाउट हो तो बेझिझक पूछिए, मैं पूरा कॉन्सेप्ट स्टेप-बाय-स्टेप समझाऊंगा!";
     }
 
+    const cleanFallback = cleanTextForTTS(fallbackReply);
+    const speechFallback = normalizeSpeechText(cleanFallback, detectedLang);
     return res.json({
       success: true,
       reply: fallbackReply,
-      speechText: cleanTextForTTS(fallbackReply),
+      speechText: speechFallback,
       detected_language: detectedLang,
       is_fallback: true,
     });
@@ -546,7 +593,8 @@ export const handleTextToSpeech = async (req, res) => {
     }
 
     const targetLangCode = language_code || detectLanguageCode(cleanText);
-    const sentenceChunks = splitIntoSpeechSentences(cleanText, 350);
+    const speechNormalized = normalizeSpeechText(cleanText, targetLangCode);
+    const sentenceChunks = splitIntoSpeechSentences(speechNormalized, 350);
 
     const apiKey = process.env.SARVAM_API_KEY ? process.env.SARVAM_API_KEY.trim() : null;
 
@@ -614,7 +662,7 @@ export const handleTextToSpeech = async (req, res) => {
 
     // 2. Secondary: High-Fidelity Neural AI Voice Engine
     try {
-      const neuralResult = await synthesizeNeuralSpeech(cleanText, targetLangCode);
+      const neuralResult = await synthesizeNeuralSpeech(speechNormalized, targetLangCode);
       if (neuralResult && neuralResult.audio) {
         return res.json({
           success: true,
@@ -631,7 +679,7 @@ export const handleTextToSpeech = async (req, res) => {
 
     // 3. Tertiary: Zero-Dependency Universal Cloud Neural Speech Engine
     try {
-      const cloudResult = await synthesizeCloudSpeech(cleanText, targetLangCode);
+      const cloudResult = await synthesizeCloudSpeech(speechNormalized, targetLangCode);
       if (cloudResult && cloudResult.audio) {
         return res.json({
           success: true,

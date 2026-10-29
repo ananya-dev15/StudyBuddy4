@@ -125,7 +125,7 @@ process.on("SIGINT", () => { cleanupChildren(); process.exit(0); });
 process.on("SIGTERM", () => { cleanupChildren(); process.exit(0); });
 
 // CORS configuration
-const allowedOrigins = ["http://localhost:5173", "http://localhost:5174", process.env.FRONTEND_URL].filter(Boolean);
+const allowedOrigins = ["http://localhost:5173", "http://localhost:5174", "https://localhost", process.env.FRONTEND_URL].filter(Boolean);
 
 const httpServer = createServer(app);
 const io = new SocketIOServer(httpServer, {

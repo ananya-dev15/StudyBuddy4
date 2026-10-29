@@ -472,10 +472,18 @@ export const AppProvider = ({ children }) => {
 
       const data = await res.json();
       const botReply = data.reply || "I couldn't process that. Please try asking again!";
-      setChatMessages((prev) => [...prev, { sender: "bot", text: botReply }]);
+      const speechToPlay = data.speechText || botReply;
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          sender: "bot",
+          text: botReply,
+          speechText: speechToPlay,
+          detected_language: data.detected_language,
+        },
+      ]);
       
       // Use speech-optimized representation if provided by backend, else clean reply
-      const speechToPlay = data.speechText || botReply;
       speakText(speechToPlay, data.detected_language);
     } catch (err) {
       console.error("Chat error:", err);
