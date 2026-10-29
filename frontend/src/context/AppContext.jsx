@@ -125,6 +125,7 @@ export const AppProvider = ({ children }) => {
   const activeRecognitionRef = useRef(null);
   const activeAudioRef = useRef(null);
   const allAudiosRef = useRef(new Set());
+  const activeBlobUrlRef = useRef(null);
   const activeUtteranceRef = useRef(null);
   const currentSpeechIdRef = useRef(0);
   const isVoiceStartingRef = useRef(false);
@@ -207,9 +208,35 @@ export const AppProvider = ({ children }) => {
     return clean.replace(/\s+/g, " ").trim();
   };
 
+  const revokeActiveBlobUrl = () => {
+    if (activeBlobUrlRef.current) {
+      try {
+        URL.revokeObjectURL(activeBlobUrlRef.current);
+      } catch (e) {}
+      activeBlobUrlRef.current = null;
+    }
+  };
+
+  const base64ToBlobUrl = (base64, mimeType = "audio/wav") => {
+    try {
+      const byteCharacters = atob(base64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: mimeType });
+      return URL.createObjectURL(blob);
+    } catch (e) {
+      console.warn("base64ToBlobUrl error, falling back to data URI:", e);
+      return `data:${mimeType};base64,${base64}`;
+    }
+  };
+
   const stopSpeakingText = () => {
     // 1. Invalidate any pending TTS fetch or delayed audio play
     currentSpeechIdRef.current++;
+    revokeActiveBlobUrl();
 
     // 2. Stop and purge all active HTML5 Audio instances
     if (activeAudioRef.current) {
@@ -395,7 +422,12 @@ export const AppProvider = ({ children }) => {
         if (currentSpeechIdRef.current !== thisSpeechId) return;
 
         if (data.success && data.audio) {
-          const audio = new Audio(`data:audio/${data.format || "mp3"};base64,${data.audio}`);
+          revokeActiveBlobUrl();
+          const mimeType = data.format === "wav" ? "audio/wav" : "audio/mpeg";
+          const blobUrl = base64ToBlobUrl(data.audio, mimeType);
+          activeBlobUrlRef.current = blobUrl.startsWith("blob:") ? blobUrl : null;
+
+          const audio = new Audio(blobUrl);
           activeAudioRef.current = audio;
           allAudiosRef.current.add(audio);
 
@@ -404,12 +436,14 @@ export const AppProvider = ({ children }) => {
               audio.pause();
               audio.src = "";
               allAudiosRef.current.delete(audio);
+              revokeActiveBlobUrl();
               return;
             }
             setIsSpeaking(true);
           };
           audio.onended = () => {
             allAudiosRef.current.delete(audio);
+            revokeActiveBlobUrl();
             if (currentSpeechIdRef.current === thisSpeechId) {
               setIsSpeaking(false);
               activeAudioRef.current = null;
@@ -417,6 +451,7 @@ export const AppProvider = ({ children }) => {
           };
           audio.onerror = (e) => {
             allAudiosRef.current.delete(audio);
+            revokeActiveBlobUrl();
             if (currentSpeechIdRef.current === thisSpeechId) {
               speakWithSpeechSynthesis(textToSpeak, langCode);
             }

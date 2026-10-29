@@ -569,6 +569,21 @@ export const handleChat = async (req, res) => {
   }
 };
 
+// Official Sarvam Bulbul v3 Male Speakers mapped by language code
+export const SARVAM_MALE_SPEAKERS = {
+  "hi-IN": "shubh",
+  "pa-IN": "mani",
+  "en-IN": "ratan",
+  "bn-IN": "rehan",
+  "mr-IN": "ratan",
+  "ta-IN": "gokul",
+  "te-IN": "vijay",
+  "gu-IN": "shubh",
+  "kn-IN": "vijay",
+  "ml-IN": "vijay",
+  "od-IN": "shubh",
+};
+
 /**
  * Text-to-Speech synthesis with sentence-aware segmentation,
  * full audio buffer concatenation, and smooth natural pacing.
@@ -598,12 +613,12 @@ export const handleTextToSpeech = async (req, res) => {
 
     const apiKey = process.env.SARVAM_API_KEY ? process.env.SARVAM_API_KEY.trim() : null;
 
-    // 1. Primary: Sarvam AI Text-to-Speech (when configured & quota available)
+    // 1. Primary: Sarvam AI Bulbul v3 with authentic Indian Male voices
     if (apiKey && Date.now() > sarvamQuotaExhaustedUntil && sentenceChunks.length > 0) {
+      const primarySpeaker = SARVAM_MALE_SPEAKERS[targetLangCode] || "shubh";
       const modelsToTry = [
-        { model: "bulbul:v3", speaker: "simran" },
-        { model: "bulbul:v3", speaker: "kavya" },
-        { model: "bulbul:v2", speaker: "meera" },
+        { model: "bulbul:v3", speaker: primarySpeaker },
+        { model: "bulbul:v3", speaker: "ratan" },
       ];
 
       for (const cfg of modelsToTry) {
@@ -649,7 +664,7 @@ export const handleTextToSpeech = async (req, res) => {
           const status = err.response?.status;
           const errCode = err.response?.data?.error?.code;
 
-          // If insufficient quota (402), mark exhausted for 10 mins and route instantly to neural engine
+          // If insufficient quota (402), mark exhausted for 10 mins and route instantly to studio neural engine
           if (status === 402 || errCode === "insufficient_quota_error") {
             sarvamQuotaExhaustedUntil = Date.now() + 10 * 60 * 1000;
             console.log("⚡ Sarvam AI quota exhausted (402). Instantly routing to High-Fidelity Studio Neural TTS.");

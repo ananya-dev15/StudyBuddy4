@@ -1,7 +1,12 @@
 /**
- * Speech Normalizer for Multilingual & Hinglish Code-Switching Speech Synthesis.
- * Transforms spoken text into an internal phonetic representation for TTS engines
- * while keeping the displayed written response 100% intact.
+ * Comprehensive Multilingual & Indic Script Speech Normalizer for Text-to-Speech Engines.
+ * 
+ * Transforms Romanized/transliterated Indian speech into authentic native scripts
+ * (Hindi -> Devanagari, Punjabi -> Gurmukhi, Bengali -> Bengali script, Marathi -> Devanagari)
+ * while keeping English technical terms and programming keywords strictly preserved.
+ * 
+ * The student-visible UI response is NEVER touched; only the internal spoken TTS audio
+ * uses this normalized phonetic representation.
  */
 
 // Multi-word common Hinglish idioms & collocations mapped to phonetic Devanagari
@@ -15,6 +20,7 @@ export const HINGLISH_PHRASES = [
   { regex: /\breal\s+time\b/gi, replacement: "रियल टाइम" },
   { regex: /\bdhyan\s+se\b/gi, replacement: "ध्यान से" },
   { regex: /\bke\s+baare\s+mein\b/gi, replacement: "के बारे में" },
+  { regex: /\bke\s+bare\s+mein\b/gi, replacement: "के बारे में" },
   { regex: /\bke\s+liye\b/gi, replacement: "के लिए" },
   { regex: /\bke\s+saath\b/gi, replacement: "के साथ" },
   { regex: /\bke\s+baad\b/gi, replacement: "के बाद" },
@@ -53,9 +59,9 @@ export const HINGLISH_PHRASES = [
   { regex: /\bhote\s+hain\b/gi, replacement: "होते हैं" },
   { regex: /\baaj\s+hum\b/gi, replacement: "आज हम" },
   { regex: /\baaj\s+ham\b/gi, replacement: "आज हम" },
-  { regex: /\b(main|mai)\s+use\b/gi, replacement: "मैं उसे" },
-  { regex: /\b(hum|ham)\s+use\b/gi, replacement: "हम उसे" },
-  { regex: /\b(tum|aap)\s+use\b/gi, replacement: "आप उसे" },
+  { regex: /\b(main|mai)\s+use\b/gi, replacement: "मैं use" },
+  { regex: /\b(hum|ham)\s+use\b/gi, replacement: "हम use" },
+  { regex: /\b(tum|aap)\s+use\b/gi, replacement: "आप use" },
   { regex: /\bka\s+use\b/gi, replacement: "का use" },
   { regex: /\bki\s+use\b/gi, replacement: "की use" },
   { regex: /\bke\s+use\b/gi, replacement: "के use" },
@@ -68,7 +74,6 @@ export const HINGLISH_PHRASES = [
 ];
 
 // Single Romanized Hindi words dictionary mapped to Devanagari
-// Case-insensitive mapping for standard and colloquial spellings
 export const HINGLISH_WORDS = {
   // Pronouns & Demonstratives
   main: "मैं",
@@ -148,9 +153,28 @@ export const HINGLISH_WORDS = {
   karta: "करता",
   karti: "करती",
   karte: "करते",
+  karke: "करके",
+  karkar: "करके",
   kiya: "किया",
   kiye: "किए",
   kijiye: "कीजिए",
+  hua: "हुआ",
+  hue: "हुए",
+  huye: "हुए",
+  wala: "वाला",
+  wali: "वाली",
+  wale: "वाले",
+  diya: "दिया",
+  diye: "दिए",
+  liya: "लिया",
+  liye: "लिए",
+  chahta: "चाहता",
+  chahti: "चाहती",
+  chahte: "चाहते",
+  chaho: "चाहो",
+  chahunga: "चाहूँगा",
+  chahungi: "चाहूँगी",
+  chahiye: "चाहिए",
   samajh: "समझ",
   samjho: "समझो",
   samjhe: "समझें",
@@ -162,6 +186,7 @@ export const HINGLISH_WORDS = {
   samjhati: "समझती",
   samjhate: "समझते",
   samajhna: "समझना",
+  samajhne: "समझने",
   seekho: "सीखो",
   seekhein: "सीखें",
   seekhna: "सीखना",
@@ -197,6 +222,11 @@ export const HINGLISH_WORDS = {
   aana: "आना",
   jao: "जाओ",
   jaye: "जाएं",
+  jata: "जाता",
+  jati: "जाती",
+  jate: "जाते",
+  jaata: "जाता",
+  jaati: "जाती",
   jaate: "जाते",
   jaana: "जाना",
   raha: "रहा",
@@ -205,7 +235,6 @@ export const HINGLISH_WORDS = {
   sakta: "सकता",
   sakti: "सकती",
   sakte: "सकते",
-  chahiye: "चाहिए",
   rakho: "रखो",
   rakhein: "रखें",
   rakhna: "रखना",
@@ -223,6 +252,7 @@ export const HINGLISH_WORDS = {
   ko: "को",
   se: "से",
   mein: "में",
+  me: "में",
   par: "पर",
   pe: "पर",
   tak: "तक",
@@ -285,6 +315,9 @@ export const HINGLISH_WORDS = {
   dhyan: "ध्यान",
   zarur: "ज़रूर",
   zaroor: "ज़रूर",
+  zaruri: "ज़रूरी",
+  zaroori: "ज़रूरी",
+  kaam: "काम",
   bilkul: "बिल्कुल",
   bohot: "बहुत",
   bahut: "बहुत",
@@ -323,87 +356,344 @@ export const HINGLISH_WORDS = {
   das: "दस",
 };
 
-// Reserved English technical terms that MUST remain in English script
-// or are pronounced by modern Indian TTS seamlessly as English terms
-const ENGLISH_TECHNICAL_PRESERVE = new Set([
-  "java", "python", "c", "c++", "javascript", "typescript", "react", "node", "express",
-  "html", "css", "sql", "nosql", "mongodb", "postgres", "mysql", "api", "apis", "rest",
-  "json", "xml", "dom", "props", "state", "usestate", "useeffect", "hook", "hooks",
-  "class", "object", "objects", "inheritance", "polymorphism", "abstraction", "encapsulation",
-  "function", "functions", "method", "methods", "variable", "variables", "constant", "loop",
-  "loops", "for", "while", "if", "else", "switch", "array", "arrays", "string", "strings",
-  "integer", "boolean", "pointer", "pointers", "stack", "stacks", "queue", "queues",
-  "tree", "trees", "graph", "graphs", "algorithm", "algorithms", "dsa", "complexity",
-  "time", "space", "auxiliary", "big", "linear", "constant", "logarithmic", "quadratic",
-  "git", "github", "commit", "push", "pull", "merge", "branch", "branching", "clone",
-  "compiler", "interpreter", "runtime", "compile", "debug", "debugging", "bug", "bugs",
-  "framework", "library", "libraries", "package", "module", "modules", "server", "client",
-  "database", "query", "queries", "table", "schema", "key", "keys", "foreign", "primary",
-  "index", "indexing", "network", "http", "https", "request", "response", "status",
-  "syntax", "statement", "expression", "scope", "closure", "async", "await", "promise",
-  "callback", "thread", "threads", "process", "memory", "allocation", "garbage", "collection",
-  "leetcode", "viva", "semester", "exam", "assignment", "project", "code", "coding",
-  "use", "uses", "used", "using", "hide", "details", "implementation"
+// Punjabi multi-word phrases mapped to Gurmukhi script
+export const PUNJABI_PHRASES = [
+  { regex: /\bsat\s+sri\s+akal\b/gi, replacement: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ" },
+  { regex: /\bsat\s+shri\s+akal\b/gi, replacement: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ" },
+  { regex: /\bki\s+haal\s+hai\b/gi, replacement: "ਕੀ ਹਾਲ ਹੈ" },
+  { regex: /\bmadad\s+kar\s+sakda\s+haan\b/gi, replacement: "ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ" },
+  { regex: /\bmadad\s+kar\s+sakdi\s+haan\b/gi, replacement: "ਮਦਦ ਕਰ ਸਕਦੀ ਹਾਂ" },
+  { regex: /\bmadad\s+kar\s+sakde\s+haan\b/gi, replacement: "ਮਦਦ ਕਰ ਸਕਦੇ ਹਾਂ" },
+  { regex: /\bstep\s+by\s+step\b/gi, replacement: "ਸਟੈਪ ਬਾਏ ਸਟੈਪ" },
+  { regex: /\bline\s+by\s+line\b/gi, replacement: "ਲਾਈਨ ਬਾਏ ਲਾਈਨ" },
+  { regex: /\brabb\s+rakha\b/gi, replacement: "ਰੱਬ ਰਾਖਾ" },
+];
+
+// Single Romanized Punjabi words mapped to Gurmukhi script
+export const PUNJABI_WORDS = {
+  tusi: "ਤੁਸੀਂ",
+  tussi: "ਤੁਸੀਂ",
+  tuhanu: "ਤੁਹਾਨੂੰ",
+  tuhada: "ਤੁਹਾਡਾ",
+  tuhadi: "ਤੁਹਾਡੀ",
+  tuhade: "ਤੁਹਾਡੇ",
+  main: "ਮੈਂ",
+  mai: "ਮੈਂ",
+  mainu: "ਮੈਨੂੰ",
+  mera: "ਮੇਰਾ",
+  meri: "ਮੇਰੀ",
+  mere: "ਮੇਰੇ",
+  sanu: "ਸਾਨੂੰ",
+  saada: "ਸਾਡਾ",
+  saadi: "ਸਾਡੀ",
+  saade: "ਸਾਡੇ",
+  asi: "ਅਸੀਂ",
+  assi: "ਅਸੀਂ",
+  kiven: "ਕਿਵੇਂ",
+  kive: "ਕਿਵੇਂ",
+  kiwe: "ਕਿਵੇਂ",
+  kiddan: "ਕਿੱਦਾਂ",
+  kidda: "ਕਿੱਦਾਂ",
+  ho: "ਹੋ",
+  haan: "ਹਾਂ",
+  han: "ਹਾਂ",
+  hai: "ਹੈ",
+  hain: "ਹਨ",
+  si: "ਸੀ",
+  san: "ਸਨ",
+  madad: "ਮਦਦ",
+  sahayata: "ਸਹਾਇਤਾ",
+  kar: "ਕਰ",
+  sakda: "ਸਕਦਾ",
+  sakdi: "ਸਕਦੀ",
+  sakde: "ਸਕਦੇ",
+  karda: "ਕਰਦਾ",
+  kardi: "ਕਰਦੀ",
+  karde: "ਕਰਦੇ",
+  karna: "ਕਰਨਾ",
+  karo: "ਕਰੋ",
+  ajj: "ਅੱਜ",
+  aj: "ਅੱਜ",
+  kal: "ਕੱਲ੍ਹ",
+  ethe: "ਇੱਥੇ",
+  othe: "ਉੱਥੇ",
+  changa: "ਚੰਗਾ",
+  changi: "ਚੰਗੀ",
+  change: "ਚੰਗੇ",
+  vadiya: "ਵਧੀਆ",
+  vadia: "ਵਧੀਆ",
+  sohna: "ਸੋਹਣਾ",
+  sohni: "ਸੋਹਣੀ",
+  ki: "ਕੀ",
+  kyun: "ਕਿਉਂ",
+  kadon: "ਕਦੋਂ",
+  kithe: "ਕਿੱਥੇ",
+  kihda: "ਕਿਹਦਾ",
+  daso: "ਦੱਸੋ",
+  dasso: "ਦੱਸੋ",
+  pucho: "ਪੁੱਛੋ",
+  padhna: "ਪੜ੍ਹਨਾ",
+  parhna: "ਪੜ੍ਹਨਾ",
+  samajh: "ਸਮਝ",
+  samjho: "ਸਮਝੋ",
+  dhanwad: "ਧੰਨਵਾਦ",
+  dhanyawad: "ਧੰਨਵਾਦ",
+  shukriya: "ਸ਼ੁਕਰੀਆ",
+  rabb: "ਰੱਬ",
+  rakha: "ਰਾਖਾ",
+  haanji: "ਹਾਂਜੀ",
+  aaho: "ਆਹੋ",
+  te: "ਤੇ",
+  vich: "ਵਿੱਚ",
+  lai: "ਲਈ",
+  naal: "ਨਾਲ",
+  to: "ਤੋਂ",
+  ton: "ਤੋਂ",
+  nahi: "ਨਹੀਂ",
+  nahin: "ਨਹੀਂ",
+  ni: "ਨਹੀਂ",
+  chahida: "ਚਾਹੀਦਾ",
+  chahidi: "ਚਾਹੀਦੀ",
+  chahide: "ਚਾਹੀਦੇ",
+  ik: "ਇੱਕ",
+  do: "ਦੋ",
+  tin: "ਤਿੰਨ",
+  char: "ਚਾਰ",
+  panj: "ਪੰਜ",
+};
+
+// Bengali multi-word phrases mapped to Bengali script
+export const BENGALI_PHRASES = [
+  { regex: /\bstep\s+by\s+step\b/gi, replacement: "স্টেপ বাই স্টেপ" },
+  { regex: /\bsahajyo\s+korte\s+pari\b/gi, replacement: "সাহায্য করতে পারি" },
+  { regex: /\bsahajyo\s+korte\s+parbo\b/gi, replacement: "সাহায্য করতে পারবো" },
+  { regex: /\bkemon\s+aacho\b/gi, replacement: "কেমন আছো" },
+  { regex: /\bkemon\s+achen\b/gi, replacement: "কেমন আছেন" },
+];
+
+// Single Romanized Bengali words mapped to Bengali script
+export const BENGALI_WORDS = {
+  tumi: "তুমি",
+  apni: "আপনি",
+  aami: "আমি",
+  ami: "আমি",
+  amra: "আমরা",
+  amake: "আমাকে",
+  amar: "আমার",
+  tomar: "তোমার",
+  apnar: "আপনার",
+  tomake: "তোমাকে",
+  kemon: "কেমন",
+  aacho: "আছো",
+  acho: "আছো",
+  aachen: "আছেন",
+  achen: "আছেন",
+  aachi: "আছি",
+  achi: "আছি",
+  bhalo: "ভালো",
+  sahajyo: "সাহায্য",
+  korte: "করতে",
+  kori: "করি",
+  korbo: "করবো",
+  pari: "পারি",
+  parbo: "পারবো",
+  ki: "কী",
+  keno: "কেন",
+  kothay: "কোথায়",
+  kokhon: "কখন",
+  kivabe: "কীভাবে",
+  dhonnobad: "ধন্যবাদ",
+  shob: "সব",
+  shikhbo: "শিখবো",
+  porashona: "পড়াশোনা",
+  bujhte: "বুঝতে",
+  hobe: "হবে",
+  hoy: "হয়",
+  na: "না",
+  ebong: "এবং",
+  ba: "বা",
+  ek: "এক",
+  dui: "দুই",
+  tin: "তিন",
+  char: "চার",
+  paanch: "পাঁচ",
+};
+
+// Marathi multi-word phrases mapped to Devanagari script
+export const MARATHI_PHRASES = [
+  { regex: /\bstep\s+by\s+step\b/gi, replacement: "स्टेप बाय स्टेप" },
+  { regex: /\bmadat\s+karu\s+shakto\b/gi, replacement: "मदत करू शकतो" },
+  { regex: /\bmadat\s+karu\s+shakte\b/gi, replacement: "मदत करू शकते" },
+  { regex: /\bkase\s+aahat\b/gi, replacement: "कसे आहात" },
+  { regex: /\bkasa\s+aahes\b/gi, replacement: "कसा आहेस" },
+];
+
+// Single Romanized Marathi words mapped to Marathi Devanagari script
+export const MARATHI_WORDS = {
+  tumhi: "तुम्ही",
+  me: "मी",
+  mi: "मी",
+  amhi: "आम्ही",
+  aapan: "आपण",
+  tumhala: "तुम्हाला",
+  mala: "मला",
+  mazhe: "माझे",
+  tumche: "तुमचे",
+  kase: "कसे",
+  kasa: "कसा",
+  kashi: "कशी",
+  aahat: "आहात",
+  aahe: "आहे",
+  aahet: "आहेत",
+  ahes: "आहेस",
+  hote: "होते",
+  hoti: "होती",
+  madat: "मदत",
+  karu: "करू",
+  shakto: "शकतो",
+  shakte: "शकते",
+  shaktat: "शकतात",
+  karto: "करतो",
+  karte: "करते",
+  karave: "करावे",
+  kara: "करा",
+  kay: "काय",
+  kashala: "कशाला",
+  kuthe: "कुठे",
+  kevha: "केव्हा",
+  kiti: "किती",
+  dhanyawad: "धन्यवाद",
+  namaskar: "नमस्कार",
+  abhyas: "अभ्यास",
+  samajla: "समजले",
+  samjun: "समझून",
+  ghya: "घ्या",
+  nahi: "नाही",
+  ani: "आणि",
+  pan: "पण",
+  ek: "एक",
+  don: "दोन",
+  teen: "तीन",
+  char: "चार",
+  paach: "पाच",
+};
+
+// Reserved English technical terms that MUST remain in English Latin script
+export const ENGLISH_TECHNICAL_PRESERVE = new Set([
+  "java", "python", "c", "c++", "cpp", "csharp", "javascript", "typescript", "js", "ts",
+  "react", "angular", "vue", "nextjs", "node", "nodejs", "express", "fastify", "django",
+  "flask", "spring", "springboot", "html", "css", "tailwind", "sql", "nosql", "mongodb",
+  "postgres", "postgresql", "mysql", "sqlite", "redis", "api", "apis", "rest", "restful",
+  "graphql", "json", "xml", "dom", "props", "state", "usestate", "useeffect", "usememo",
+  "usecallback", "hook", "hooks", "component", "components", "jsx", "tsx", "class", "classes",
+  "object", "objects", "oop", "oops", "inheritance", "polymorphism", "abstraction", "encapsulation",
+  "interface", "interfaces", "function", "functions", "method", "methods", "variable", "variables",
+  "constant", "constants", "loop", "loops", "for", "while", "if", "else", "switch", "case",
+  "break", "return", "array", "arrays", "string", "strings", "integer", "boolean", "float",
+  "double", "pointer", "pointers", "reference", "stack", "stacks", "queue", "queues", "dequeue",
+  "tree", "trees", "binary", "bst", "heap", "graph", "graphs", "node", "vertices", "vertex",
+  "edge", "edges", "bfs", "dfs", "algorithm", "algorithms", "dsa", "complexity", "time", "space",
+  "auxiliary", "big", "linear", "constant", "logarithmic", "quadratic", "git", "github", "gitlab",
+  "commit", "push", "pull", "merge", "branch", "branching", "clone", "repo", "repository",
+  "compiler", "interpreter", "runtime", "compile", "debug", "debugging", "debugger", "bug", "bugs",
+  "test", "testing", "framework", "library", "libraries", "package", "packages", "npm", "pip",
+  "maven", "module", "modules", "server", "servers", "client", "clients", "backend", "frontend",
+  "fullstack", "database", "databases", "query", "queries", "table", "tables", "schema", "schemas",
+  "key", "keys", "foreign", "primary", "index", "indexing", "transaction", "acid", "network",
+  "http", "https", "tcp", "ip", "udp", "request", "requests", "response", "responses", "header",
+  "headers", "payload", "status", "syntax", "statement", "statements", "expression", "expressions",
+  "scope", "closure", "closures", "async", "await", "promise", "promises", "callback", "callbacks",
+  "event", "events", "listener", "thread", "threads", "threading", "concurrency", "process",
+  "processes", "memory", "allocation", "garbage", "collection", "collector", "leetcode", "viva",
+  "semester", "exam", "assignment", "project", "projects", "code", "coding", "use", "uses",
+  "used", "using", "hide", "details", "implementation", "design", "pattern", "patterns",
+  "singleton", "factory", "the", "to", "do", "an", "is", "of", "and", "in", "on", "it"
+]);
+
+// Distinct Hindi/Hinglish vocabulary (excluding English homographs like to, do, the, me)
+const DISTINCT_HINGLISH_WORDS = new Set([
+  "aap", "aapka", "aapki", "aapke", "aapko", "tum", "tumhara", "tumhari", "tumhare", "tumhe", "tumko",
+  "mujhe", "mujhko", "mera", "meri", "mere", "humara", "humari", "humare", "humein", "humko",
+  "kaise", "kyun", "kyon", "kahan", "kaha", "kitna", "kitni", "kitne", "kaun", "kiska", "kiski",
+  "karna", "karo", "kare", "karein", "karte", "karta", "karti", "karke", "karkar", "kiya", "kiye", "kijiye",
+  "chahta", "chahti", "chahte", "chaho", "chahiye",
+  "hai", "hain", "hoga", "hogi", "honge", "hota", "hoti", "hote", "hona", "hone", "hoon", "hu",
+  "nahi", "nahin", "nhi", "mat",
+  "samajh", "samjho", "samjhe", "samajhna", "samjhata", "samjhati", "samjhate", "samjhenge",
+  "seekho", "seekhna", "seekhein", "padho", "padhna", "padhai", "padhaai",
+  "dekho", "bolo", "batao", "bataiye", "pucho", "puchiye", "chalo", "chalein", "aao", "jao",
+  "accha", "achha", "acchi", "acche", "bahut", "bohot", "thoda", "thodi", "zyada", "jyada",
+  "shukriya", "dhanyawad", "namaste", "dost", "bhai", "yaar",
+  "lekin", "kyunki", "isliye", "aur", "pehle", "baad", "hamesha", "kabhi", "aaj", "kal", "abhi"
 ]);
 
 /**
- * Checks whether a sentence or text chunk contains prominent Hinglish/Hindi content.
+ * Checks whether a text chunk contains prominent Hinglish/Hindi content.
  */
 export const isHinglishText = (text) => {
   if (!text) return false;
-  // If Devanagari is present, it is definitely Hindi
+  // If Devanagari script is present, it is already Hindi
   if (/[\u0900-\u097F]/.test(text)) return true;
 
   const words = text.toLowerCase().split(/[^a-zA-Z]+/);
-  let hinglishCount = 0;
+  let matchCount = 0;
 
   for (const w of words) {
     if (!w) continue;
-    if (Object.prototype.hasOwnProperty.call(HINGLISH_WORDS, w)) {
-      hinglishCount++;
+    if (DISTINCT_HINGLISH_WORDS.has(w)) {
+      matchCount++;
     }
   }
 
-  // If at least 2 words match the Romanized Hindi vocabulary
-  return hinglishCount >= 2;
+  return matchCount >= 2;
+};
+
+// Distinct Punjabi-only words (excluding cognates shared with Hindi like main, mera, kar, etc.)
+const DISTINCT_PUNJABI_WORDS = new Set([
+  "tusi", "tussi", "kiven", "kive", "kiwe", "kiddan", "kidda", "tuhanu", "tuhada", "tuhadi", "tuhade",
+  "mainu", "sanu", "saada", "saadi", "saade", "asi", "assi", "ethe", "othe", "changa", "changi", "change",
+  "vadiya", "vadia", "sohna", "sohni", "kadon", "kithe", "kihda", "daso", "dasso", "parhna", "dhanwad",
+  "aaho", "chahida", "chahidi", "chahide", "panj", "karde", "kardi", "kehnde", "satsriakal", "satsriakaal"
+]);
+
+/**
+ * Checks whether text contains transliterated Punjabi.
+ */
+export const isTransliteratedPunjabi = (text) => {
+  if (!text) return false;
+  if (/[\u0A00-\u0A7F]/.test(text)) return true; // Gurmukhi
+
+  const words = text.toLowerCase().split(/[^a-zA-Z]+/);
+  let matchCount = 0;
+  for (const w of words) {
+    if (!w) continue;
+    if (DISTINCT_PUNJABI_WORDS.has(w)) {
+      matchCount++;
+    }
+  }
+  return matchCount >= 1;
 };
 
 /**
- * Normalizes Romanized Hindi into native Devanagari representation for TTS,
- * while preserving English technical terms in standard English script.
+ * Normalizes Romanized Hindi into native Devanagari representation.
  */
-export const normalizeSpeechText = (text, detectedLang = "en-IN") => {
-  if (!text || !text.trim()) return "";
-
-  // If text is in regional Indic scripts (Punjabi, Bengali, Tamil, etc.), preserve as-is
-  if (/[\u0A00-\u0A7F\u0980-\u09FF\u0B80-\u0BFF\u0C00-\u0C7F\u0C80-\u0CFF\u0D00-\u0D7F]/.test(text)) {
-    return text;
-  }
-
-  // If language is explicitly detected as pure English and has no Hinglish words, return as-is
-  const isHinglish = detectedLang === "hi-IN" || isHinglishText(text);
-  if (!isHinglish) {
-    return text;
-  }
-
+export const normalizeHindiDevanagari = (text) => {
   let normalized = text;
 
-  // 1. Multi-word phrase substitutions first (e.g. "step by step" -> "स्टेप बाय स्टेप")
+  // 1. Multi-word phrase substitutions
   for (const { regex, replacement } of HINGLISH_PHRASES) {
     normalized = normalized.replace(regex, replacement);
   }
 
-  // 2. Tokenize preserving words, punctuation, and whitespace
-  // Replace Romanized Hindi tokens that match HINGLISH_WORDS unless they are in ENGLISH_TECHNICAL_PRESERVE
+  // 2. Tokenize and replace Hindi words while preserving technical English terms
   normalized = normalized.replace(/\b([a-zA-Z]+)\b/g, (match, word) => {
     const lower = word.toLowerCase();
 
-    // If word is in technical preserve set, keep it as-is
+    // Preserve technical vocabulary
     if (ENGLISH_TECHNICAL_PRESERVE.has(lower)) {
       return word;
     }
 
-    // Check if word is a Romanized Hindi word
     if (Object.prototype.hasOwnProperty.call(HINGLISH_WORDS, lower)) {
       return HINGLISH_WORDS[lower];
     }
@@ -411,7 +701,120 @@ export const normalizeSpeechText = (text, detectedLang = "en-IN") => {
     return word;
   });
 
-  // Ensure full-stop at end of Hindi sentence is a period or danda for natural pause
-  normalized = normalized.replace(/\s*([,.:;!?।])\s*/g, "$1 ");
-  return normalized.trim();
+  return normalized;
+};
+
+/**
+ * Normalizes Romanized Punjabi into native Gurmukhi representation.
+ */
+export const normalizePunjabiGurmukhi = (text) => {
+  let normalized = text;
+
+  // 1. Multi-word phrase substitutions
+  for (const { regex, replacement } of PUNJABI_PHRASES) {
+    normalized = normalized.replace(regex, replacement);
+  }
+
+  // 2. Tokenize and replace Punjabi words while preserving technical English terms
+  normalized = normalized.replace(/\b([a-zA-Z]+)\b/g, (match, word) => {
+    const lower = word.toLowerCase();
+
+    if (ENGLISH_TECHNICAL_PRESERVE.has(lower)) {
+      return word;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(PUNJABI_WORDS, lower)) {
+      return PUNJABI_WORDS[lower];
+    }
+
+    return word;
+  });
+
+  return normalized;
+};
+
+/**
+ * Normalizes Romanized Bengali into native Bengali script.
+ */
+export const normalizeBengaliScript = (text) => {
+  let normalized = text;
+
+  for (const { regex, replacement } of BENGALI_PHRASES) {
+    normalized = normalized.replace(regex, replacement);
+  }
+
+  normalized = normalized.replace(/\b([a-zA-Z]+)\b/g, (match, word) => {
+    const lower = word.toLowerCase();
+
+    if (ENGLISH_TECHNICAL_PRESERVE.has(lower)) {
+      return word;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(BENGALI_WORDS, lower)) {
+      return BENGALI_WORDS[lower];
+    }
+
+    return word;
+  });
+
+  return normalized;
+};
+
+/**
+ * Normalizes Romanized Marathi into native Devanagari script.
+ */
+export const normalizeMarathiDevanagari = (text) => {
+  let normalized = text;
+
+  for (const { regex, replacement } of MARATHI_PHRASES) {
+    normalized = normalized.replace(regex, replacement);
+  }
+
+  normalized = normalized.replace(/\b([a-zA-Z]+)\b/g, (match, word) => {
+    const lower = word.toLowerCase();
+
+    if (ENGLISH_TECHNICAL_PRESERVE.has(lower)) {
+      return word;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(MARATHI_WORDS, lower)) {
+      return MARATHI_WORDS[lower];
+    }
+
+    return word;
+  });
+
+  return normalized;
+};
+
+/**
+ * Main Speech Normalizer dispatcher.
+ * Selects the proper native script transformer based on the target language code,
+ * ensuring high naturalness for Indian language voice models like Sarvam Bulbul.
+ */
+export const normalizeSpeechText = (text, detectedLang = "en-IN") => {
+  if (!text || !text.trim()) return "";
+
+  let result = text;
+
+  if (detectedLang === "pa-IN") {
+    result = normalizePunjabiGurmukhi(result);
+  } else if (detectedLang === "bn-IN") {
+    result = normalizeBengaliScript(result);
+  } else if (detectedLang === "mr-IN") {
+    result = normalizeMarathiDevanagari(result);
+  } else if (detectedLang === "hi-IN") {
+    result = normalizeHindiDevanagari(result);
+  } else {
+    // If language is en-IN or unspecified, check if it actually contains transliterated Indian language
+    if (isTransliteratedPunjabi(result)) {
+      result = normalizePunjabiGurmukhi(result);
+    } else if (isHinglishText(result)) {
+      result = normalizeHindiDevanagari(result);
+    }
+  }
+
+  // Ensure sentence pauses have clean spacing around punctuation (.,;:!?।)
+  result = result.replace(/\s*([,.:;!?।])\s*/g, "$1 ");
+  return result.trim();
 };
