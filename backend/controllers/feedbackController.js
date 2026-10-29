@@ -1,4 +1,5 @@
 import Feedback from "../models/Feedback.js";
+import Notification from "../models/Notification.js";
 
 // Vibrant milestone colors palette for auto-assignment if none provided
 const MILESTONE_COLORS = [
@@ -14,10 +15,10 @@ const MILESTONE_COLORS = [
   "#14b8a6", // Teal
 ];
 
-// Fetch all community feedbacks
+// Fetch all APPROVED community feedbacks for the public journey roadmap
 export const getAllFeedbacks = async (req, res) => {
   try {
-    const feedbacks = await Feedback.find().sort({ createdAt: 1 });
+    const feedbacks = await Feedback.find({ status: "approved" }).sort({ createdAt: 1 });
     return res.status(200).json({ success: true, feedbacks });
   } catch (error) {
     console.error("Error fetching feedbacks:", error);
@@ -25,7 +26,7 @@ export const getAllFeedbacks = async (req, res) => {
   }
 };
 
-// Create a new feedback
+// Create a new feedback (defaults to status='pending' and notifies Admin)
 export const createFeedback = async (req, res) => {
   try {
     const user = req.user;
@@ -70,11 +71,21 @@ export const createFeedback = async (req, res) => {
       color: chosenColor,
       badge: formattedBadge,
       tag: formattedTag,
+      status: "pending",
+    });
+
+    // Notify Admin in MongoDB
+    await Notification.create({
+      type: "feedback",
+      title: "New Feedback Request",
+      message: `"${feedback.milestone}" submitted by ${feedback.name} (${feedback.stars}⭐)`,
+      relatedRecordId: feedback._id,
+      isRead: false,
     });
 
     return res.status(201).json({
       success: true,
-      message: "Milestone feedback added successfully!",
+      message: "Your feedback has been submitted for admin verification. It will appear on the roadmap once approved!",
       feedback,
     });
   } catch (error) {

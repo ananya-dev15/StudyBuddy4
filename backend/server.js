@@ -23,15 +23,20 @@ import quizRoutes from "./routes/quizRoutes.js";
 import chatRoutes from "./routes/chatRoutes.js";
 import blogRoutes from "./routes/blogRoutes.js";
 import feedbackRoutes from "./routes/feedbackRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
+import faqRoutes from "./routes/faqRoutes.js";
 
 import connectDB from "./config/db.js";
+import seedInitialAdminAndData from "./utils/seedAdmin.js";
 
-// Initialize environment variables
-dotenv.config();
-
-const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Initialize environment variables from backend/.env (robust to execution directory)
+dotenv.config({ path: path.join(__dirname, ".env") });
+dotenv.config(); // fallback for root .env if present
+
+const app = express();
 
 // ========================================================
 // Auto-launch Python processes (OpenCV + Streamlit Dashboard)
@@ -163,6 +168,8 @@ app.use("/api/quiz", quizRoutes);
 app.use("/api/chat", chatRoutes);
 app.use("/api/blogs", blogRoutes);
 app.use("/api/feedbacks", feedbackRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/faqs", faqRoutes);
 
 // Start server
 const PORT = process.env.PORT || 6000;
@@ -170,6 +177,10 @@ const startServer = async () => {
   try {
     await connectDB();
     console.log("✅ MongoDB Connected");
+
+    // Initialize default Admin, migrate feedback statuses & initial FAQs
+    await seedInitialAdminAndData();
+
     httpServer.listen(PORT, () => {
       console.log(`✅ Server running on http://localhost:${PORT}`);
       // Auto-launch Python processes after server is ready

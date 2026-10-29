@@ -75,14 +75,26 @@ const AuthModal = ({ isOpen, onClose }) => {
             </button>
           </div>
 
-          <button
-            onClick={onClose}
-            className={`mt-6 text-sm font-semibold transition-colors cursor-pointer ${
-              isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"
-            }`}
-          >
-            Cancel
-          </button>
+          <div className="mt-5 flex items-center justify-center gap-4 text-xs font-semibold">
+            <button
+              onClick={onClose}
+              className={`transition-colors cursor-pointer ${
+                isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Cancel
+            </button>
+            <span className="text-slate-400">•</span>
+            <button
+              onClick={() => {
+                onClose();
+                navigate('/login?role=admin');
+              }}
+              className="text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+            >
+              Login as Admin &rarr;
+            </button>
+          </div>
         </div>
       </div>
     </div>

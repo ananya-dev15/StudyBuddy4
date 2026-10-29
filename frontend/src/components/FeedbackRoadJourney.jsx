@@ -860,42 +860,14 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
         throw new Error(data.message || "Failed to submit feedback.");
       }
 
-      const fb = data.feedback;
-      const nextIndex = feedbacksList.length;
-      const milestoneNum = nextIndex + 1;
-      const newMilestone = {
-        id: fb._id || `db-${Date.now()}`,
-        name: fb.name || user?.name || "Student",
-        role: fb.role || role || "Student",
-        milestone: fb.milestone || milestone.trim(),
-        review: fb.review || review.trim(),
-        stars: fb.stars || stars,
-        avatar: fb.avatar || user?.profileImage || null,
-        color: fb.color || selectedColor,
-        badge: fb.badge || String(milestoneNum).padStart(2, "0"),
-        tag: fb.tag || `Milestone ${milestoneNum}`,
-      };
-
-      setFeedbacksList((prev) => [...prev, newMilestone]);
       setSubmitting(false);
       setIsModalOpen(false);
       setMilestone("");
       setReview("");
       setStars(5);
 
-      setToastMessage("🎉 Milestone added to your Study Journey Roadmap!");
-      setTimeout(() => setToastMessage(""), 5000);
-
-      // Smooth scroll to the end of the roadmap to reveal the newly created milestone!
-      setTimeout(() => {
-        const el = viewportRef.current;
-        if (el) {
-          el.scrollTo({
-            left: el.scrollWidth,
-            behavior: "smooth",
-          });
-        }
-      }, 400);
+      setToastMessage("🎉 Thank you! Your feedback has been submitted for admin verification. It will appear on the roadmap once approved!");
+      setTimeout(() => setToastMessage(""), 6000);
     } catch (err) {
       console.error("Error creating feedback:", err);
       setFormError(err.message || "Failed to post feedback.");
@@ -990,21 +962,6 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
               Student Milestones ({feedbacksList.length})
             </span>
           </div>
-
-          {/* Auto-scroll toggle pill */}
-          <button
-            type="button"
-            onClick={handleTogglePause}
-            className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border transition-all duration-300 shadow-sm cursor-pointer ${
-              isPaused
-                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 shadow-amber-500/10"
-                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 shadow-emerald-500/10"
-            }`}
-            title={isPaused ? "Tap to play auto-scroll" : "Tap to pause auto-scroll"}
-          >
-            <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-amber-400" : "bg-emerald-400 animate-ping"}`} />
-            <span>{isPaused ? "⏸ Paused (Tap to play)" : "▶ Auto-scrolling (Tap to pause)"}</span>
-          </button>
         </div>
         <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           Student's Feedback
@@ -1438,18 +1395,15 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             <span>Add Your Feedback</span>
-            <span className="text-[10px] sm:text-xs bg-emerald-950/70 border border-emerald-400/30 text-emerald-300 px-2 py-0.5 rounded-full font-semibold ml-1">
-              + Milestone {feedbacksList.length + 1}
-            </span>
           </button>
 
           <p className="text-[11px] text-white/60 text-center font-medium">
             {isLoggedIn ? (
               <span>
-                Logged in as <strong className="text-purple-300">{user?.name || "Student"}</strong>. Share your milestone to appear on the road!
+                Logged in as <strong className="text-purple-300">{user?.name || "Student"}</strong>. Share your milestone to appear on the journey!
               </span>
             ) : (
-              <span>Sign in with your StudyBuddy account to post your feedback and milestone to the roadmap.</span>
+              <span>Sign in with your StudyBuddy account to post your feedback and milestone to the journey.</span>
             )}
           </p>
         </div>

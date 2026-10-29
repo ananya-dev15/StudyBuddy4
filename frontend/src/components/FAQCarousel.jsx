@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import API_BASE from "../services/apiBase";
 
 const DEFAULT_INTRO = {
   isIntro: true,
@@ -28,6 +29,83 @@ const FAQCarousel = ({
   intro = DEFAULT_INTRO,
   faqs = DEFAULT_FAQS,
 }) => {
+  // Live dynamic FAQs fetched from backend MongoDB
+  const [liveFaqs, setLiveFaqs] = useState(faqs);
+
+  // Ask a Question Modal state
+  const [isAskModalOpen, setIsAskModalOpen] = useState(false);
+  const [askQuestion, setAskQuestion] = useState("");
+  const [askName, setAskName] = useState("");
+  const [askEmail, setAskEmail] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  // Fetch published FAQs from backend
+  const fetchPublishedFAQs = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/faqs/published`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.faqs) && data.faqs.length > 0) {
+          const formatted = data.faqs.map((f) => ({
+            q: f.question,
+            a: f.answer,
+            _id: f._id,
+          }));
+          setLiveFaqs(formatted);
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch published FAQs from API, using default fallback:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPublishedFAQs();
+  }, [fetchPublishedFAQs]);
+
+  // Handle Question Submission
+  const handleQuestionSubmit = async (e) => {
+    e.preventDefault();
+    if (!askQuestion.trim()) return;
+
+    setIsSubmitting(true);
+    setSubmitError("");
+    setSubmitSuccess(false);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/faqs/question`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: askQuestion.trim(),
+          userName: askName.trim() || undefined,
+          userEmail: askEmail.trim() || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setSubmitSuccess(true);
+        setAskQuestion("");
+        setAskName("");
+        setAskEmail("");
+        setTimeout(() => {
+          setIsAskModalOpen(false);
+          setSubmitSuccess(false);
+        }, 2200);
+      } else {
+        setSubmitError(data.message || "Failed to submit question. Please try again.");
+      }
+    } catch (err) {
+      console.error("Error submitting question:", err);
+      setSubmitError("Network error. Please try again later.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   // Combine into structured slides: Slide 1 = Introduction, Slide 2..N = FAQs
   const slides = useMemo(() => {
     return [
@@ -35,7 +113,7 @@ const FAQCarousel = ({
         ...intro,
         isIntro: true,
       },
-      ...faqs.map((faq, idx) => ({
+      ...liveFaqs.map((faq, idx) => ({
         isIntro: false,
         faqIndex: idx + 1,
         title: faq.q,
@@ -43,7 +121,7 @@ const FAQCarousel = ({
         ...faq,
       })),
     ];
-  }, [intro, faqs]);
+  }, [intro, liveFaqs]);
 
   const [currentIndex, setCurrentIndex] = useState(0);
   const [slideStage, setSlideStage] = useState("active"); // "entering" | "active" | "exiting"
@@ -52,7 +130,7 @@ const FAQCarousel = ({
   const [isPressed, setIsPressed] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const isPaused = isHovered || isPressed;
+  const isPaused = isHovered || isPressed || isAskModalOpen;
   const isPausedRef = useRef(isPaused);
   isPausedRef.current = isPaused;
 
@@ -121,102 +199,103 @@ const FAQCarousel = ({
     [triggerTransition]
   );
 
-  // Direct dot click navigation
+  // Jump to specific dot
   const handleDotClick = useCallback(
-    (index) => {
-      if (index === currentIndex || isTransitioningRef.current) return;
+    (idx) => {
+      if (idx === currentIndex || isTransitioningRef.current) return;
+      const dir = idx > currentIndex ? "next" : "prev";
       elapsedRef.current = 0;
       setProgress(0);
-      const dir = index > currentIndex ? "next" : "prev";
-      triggerTransition(dir, index);
+      triggerTransition(dir, idx);
     },
     [currentIndex, triggerTransition]
   );
 
-  // Main animation timer loop via requestAnimationFrame
+  // Keyboard navigation (ArrowLeft / ArrowRight)
+  const handleKeyDown = useCallback(
+    (e) => {
+      if (isAskModalOpen) return;
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        handleManualNav("prev");
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        handleManualNav("next");
+      }
+    },
+    [handleManualNav, isAskModalOpen]
+  );
+
+  // Autoplay ticker via requestAnimationFrame
   useEffect(() => {
     lastTimeRef.current = performance.now();
 
-    const tick = (now) => {
-      const delta = now - lastTimeRef.current;
+    const loop = (now) => {
+      const delta = now - (lastTimeRef.current || now);
       lastTimeRef.current = now;
 
+      // Only increment if not paused and not currently transitioning
       if (!isPausedRef.current && !isTransitioningRef.current) {
         elapsedRef.current += delta;
-        const pct = Math.min(100, (elapsedRef.current / SLIDE_DURATION) * 100);
-        setProgress(pct);
+        const currentProgress = Math.min(
+          100,
+          (elapsedRef.current / SLIDE_DURATION) * 100
+        );
+        setProgress(currentProgress);
 
         if (elapsedRef.current >= SLIDE_DURATION) {
           elapsedRef.current = 0;
           setProgress(0);
           triggerTransition("next");
-          return;
         }
       }
 
-      rafIdRef.current = requestAnimationFrame(tick);
+      rafIdRef.current = requestAnimationFrame(loop);
     };
 
-    rafIdRef.current = requestAnimationFrame(tick);
+    rafIdRef.current = requestAnimationFrame(loop);
 
     return () => {
       if (rafIdRef.current) {
         cancelAnimationFrame(rafIdRef.current);
       }
     };
-  }, [triggerTransition, currentIndex]);
+  }, [triggerTransition]);
 
-  // Global window listeners for mouseup and touchend to ensure release always resumes
+  // Adjust currentIndex if slides shrink
   useEffect(() => {
-    const handleGlobalRelease = () => {
-      setIsPressed(false);
-    };
-    window.addEventListener("mouseup", handleGlobalRelease);
-    window.addEventListener("touchend", handleGlobalRelease);
-    window.addEventListener("touchcancel", handleGlobalRelease);
-
-    return () => {
-      window.removeEventListener("mouseup", handleGlobalRelease);
-      window.removeEventListener("touchend", handleGlobalRelease);
-      window.removeEventListener("touchcancel", handleGlobalRelease);
-    };
-  }, []);
+    if (currentIndex >= slides.length) {
+      setCurrentIndex(0);
+      elapsedRef.current = 0;
+      setProgress(0);
+    }
+  }, [slides.length, currentIndex]);
 
   const currentSlide = slides[currentIndex] || slides[0];
 
-  // Helper classes for animation stages
+  // Helper classes for sliding animation
   const getQuestionAnimClass = () => {
-    if (prefersReducedMotion) {
-      if (slideStage === "exiting") return "opacity-0 transition-opacity duration-200";
-      if (slideStage === "entering") return "opacity-0";
-      return "opacity-100 transition-opacity duration-300";
-    }
-
+    if (prefersReducedMotion) return "";
     if (slideStage === "exiting") {
       return direction === "next"
-        ? "opacity-0 -translate-x-8 scale-[0.98] transition-all duration-200 ease-in"
-        : "opacity-0 translate-x-8 scale-[0.98] transition-all duration-200 ease-in";
+        ? "opacity-0 -translate-x-8 transition-all duration-200 ease-in"
+        : "opacity-0 translate-x-8 transition-all duration-200 ease-in";
     }
     if (slideStage === "entering") {
       return direction === "next"
-        ? "opacity-0 translate-x-10 scale-[0.98]"
-        : "opacity-0 -translate-x-10 scale-[0.98]";
+        ? "opacity-0 translate-x-8"
+        : "opacity-0 -translate-x-8";
     }
     // "active"
-    return "opacity-100 translate-x-0 scale-100 transition-all duration-400 ease-out";
+    return "opacity-100 translate-x-0 transition-all duration-350 ease-out";
   };
 
   const getAnswerAnimClass = () => {
-    if (prefersReducedMotion) {
-      if (slideStage === "exiting") return "opacity-0 transition-opacity duration-200";
-      if (slideStage === "entering") return "opacity-0";
-      return "opacity-100 transition-opacity duration-300";
-    }
-
+    if (prefersReducedMotion) return "";
     if (slideStage === "exiting") {
       return direction === "next"
-        ? "opacity-0 -translate-x-6 transition-all duration-200 ease-in"
-        : "opacity-0 translate-x-6 transition-all duration-200 ease-in";
+        ? "opacity-0 -translate-x-6 transition-all duration-150 ease-in"
+        : "opacity-0 translate-x-6 transition-all duration-150 ease-in";
     }
     if (slideStage === "entering") {
       return direction === "next"
@@ -250,6 +329,11 @@ const FAQCarousel = ({
       onTouchStart={() => setIsPressed(true)}
       onTouchEnd={() => setIsPressed(false)}
       onTouchCancel={() => setIsPressed(false)}
+      onKeyDown={handleKeyDown}
+      tabIndex={0}
+      role="region"
+      aria-roledescription="carousel"
+      aria-label="Frequently Asked Questions Carousel"
     >
       <div
         className={`relative rounded-3xl p-6 sm:p-8 backdrop-blur-2xl transition-all duration-300 border overflow-hidden select-none ${
@@ -258,15 +342,15 @@ const FAQCarousel = ({
             : "bg-gradient-to-b from-white/70 via-white/55 to-white/65 hover:from-white/85 hover:via-white/70 hover:to-white/80 border-white/70 hover:border-white shadow-[0_8px_25px_rgba(0,0,0,0.08),inset_0_1px_1px_rgba(255,255,255,0.95)] hover:shadow-[0_14px_35px_rgba(31,38,135,0.15)] text-slate-800"
         }`}
       >
-        {/* Top bar with slide index & pause badge */}
-        <div className="flex items-center justify-between mb-5">
+        {/* Top bar with slide index, Ask a Question button, & controls */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-2">
             <span
               className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
                 theme === "dark"
                   ? currentSlide.isIntro
-                    ? "bg-purple-500/15 border-purple-400/30 text-purple-200"
-                    : "bg-white/5 border-white/10 text-purple-300"
+                    ? "bg-purple-500/20 border-purple-400/40 text-purple-200"
+                    : "bg-white/10 border-white/20 text-indigo-300"
                   : currentSlide.isIntro
                   ? "bg-indigo-50 border-indigo-200 text-indigo-800"
                   : "bg-black/5 border-black/10 text-indigo-700"
@@ -292,8 +376,24 @@ const FAQCarousel = ({
             </span>
           </div>
 
-          {/* Navigation Controls (Arrows) */}
+          {/* Right Action: Ask a Question & Navigation Controls */}
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setIsAskModalOpen(true)}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-200 transform hover:scale-105 active:scale-95 cursor-pointer shadow-sm ${
+                theme === "dark"
+                  ? "bg-gradient-to-r from-indigo-500/30 to-purple-500/30 hover:from-indigo-500/40 hover:to-purple-500/40 border-indigo-400/30 text-indigo-200"
+                  : "bg-indigo-50 hover:bg-indigo-100 border-indigo-200 text-indigo-700"
+              }`}
+              title="Submit a question to the team"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Ask a Question</span>
+            </button>
+
             <button
               type="button"
               onClick={() => handleManualNav("prev")}
@@ -427,6 +527,148 @@ const FAQCarousel = ({
           />
         </div>
       </div>
+
+      {/* Ask a Question Modal */}
+      {isAskModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn"
+          onClick={() => setIsAskModalOpen(false)}
+        >
+          <div
+            className={`w-full max-w-lg rounded-2xl p-6 sm:p-7 shadow-2xl border transition-all ${
+              theme === "dark"
+                ? "bg-slate-900 border-slate-800 text-white"
+                : "bg-white border-slate-200 text-slate-900"
+            }`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Ask a Question</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Submit your query to the StudyBuddy team.
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsAskModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition p-1"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Success message */}
+            {submitSuccess && (
+              <div className="mt-4 p-4 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-600 dark:text-emerald-400 text-sm flex items-center gap-2">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                <span>
+                  Thank you! Your question has been submitted to the admin team. It will appear on the FAQ section once answered.
+                </span>
+              </div>
+            )}
+
+            {/* Error message */}
+            {submitError && (
+              <div className="mt-4 p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-600 dark:text-rose-400 text-sm flex items-center gap-2">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{submitError}</span>
+              </div>
+            )}
+
+            {/* Form */}
+            {!submitSuccess && (
+              <form onSubmit={handleQuestionSubmit} className="mt-4 space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                    Your Question <span className="text-rose-500">*</span>
+                  </label>
+                  <textarea
+                    required
+                    rows={4}
+                    value={askQuestion}
+                    onChange={(e) => setAskQuestion(e.target.value)}
+                    placeholder="e.g. How do I sync assignments with Google Calendar?"
+                    className="w-full p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                      Your Name <span className="text-slate-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={askName}
+                      onChange={(e) => setAskName(e.target.value)}
+                      placeholder="e.g. Rahul Sharma"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5">
+                      Your Email <span className="text-slate-400 font-normal">(optional)</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={askEmail}
+                      onChange={(e) => setAskEmail(e.target.value)}
+                      placeholder="e.g. rahul@example.com"
+                      className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-300 dark:border-slate-700 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsAskModalOpen(false)}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitting || !askQuestion.trim()}
+                    className="px-5 py-2.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white shadow-md shadow-indigo-500/25 transition disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                        <span>Submitting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Submit Question</span>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                        </svg>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

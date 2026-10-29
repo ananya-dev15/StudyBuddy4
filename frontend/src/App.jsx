@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, Navigate } from "react-router-dom";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
@@ -22,15 +22,30 @@ import ThemeBackground from "./components/ThemeBackground";
 import PageTransitionLoader from "./components/PageTransitionLoader";
 import GlobalReminderAlarmModal from "./components/GlobalReminderAlarmModal";
 
+// Admin Imports
+import { AdminProvider } from "./context/AdminContext";
+import AdminProtectedRoute from "./components/admin/AdminProtectedRoute";
+import AdminLayout from "./components/admin/AdminLayout";
+import AdminLogin from "./pages/admin/AdminLogin";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminFeedbackRequests from "./pages/admin/AdminFeedbackRequests";
+import AdminApprovedFeedback from "./pages/admin/AdminApprovedFeedback";
+import AdminRejectedFeedback from "./pages/admin/AdminRejectedFeedback";
+import AdminFAQQuestions from "./pages/admin/AdminFAQQuestions";
+import AdminPublishedFAQs from "./pages/admin/AdminPublishedFAQs";
+import AdminNotifications from "./pages/admin/AdminNotifications";
+
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
 function AppContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Play intro only on fresh link open (NOT on page refresh, and NOT on /intro or /verify-email)
+  const isAdminRoute = location.pathname.startsWith("/admin");
+
+  // Play intro only on fresh link open (NOT on page refresh, NOT on /intro, /verify-email, or /admin)
   const [showFreshIntro, setShowFreshIntro] = useState(() => {
-    if (["/intro", "/verify-email"].includes(location.pathname)) {
+    if (["/intro", "/verify-email"].includes(location.pathname) || location.pathname.startsWith("/admin")) {
       return false;
     }
 
@@ -73,15 +88,17 @@ function AppContent() {
   return (
     <>
       <ThemeBackground />
-      <PageTransitionLoader />
-      <GlobalReminderAlarmModal />
-      {showFreshIntro && (
+      {!isAdminRoute && <PageTransitionLoader />}
+      {!isAdminRoute && <GlobalReminderAlarmModal />}
+      {showFreshIntro && !isAdminRoute && (
         <IntroAnimation
           onComplete={handleFreshIntroComplete}
           destination={location.pathname}
         />
       )}
+
       <Routes>
+        {/* Public Student Routes */}
         <Route path="/" element={<HomePage />} />
         <Route path="/intro" element={<IntroPage />} />
         <Route path="/login" element={<Login />} />
@@ -98,8 +115,32 @@ function AppContent() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/verify-email" element={<VerifyEmail />} />
+
+        {/* Admin Login redirects to unified card with Admin tab selected */}
+        <Route path="/admin/login" element={<Navigate to="/login?role=admin" replace />} />
+
+        {/* Protected Admin Routes */}
+        <Route
+          path="/admin"
+          element={
+            <AdminProtectedRoute>
+              <AdminLayout />
+            </AdminProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboard />} />
+          <Route path="feedback-requests" element={<AdminFeedbackRequests />} />
+          <Route path="approved-feedback" element={<AdminApprovedFeedback />} />
+          <Route path="rejected-feedback" element={<AdminRejectedFeedback />} />
+          <Route path="faq-questions" element={<AdminFAQQuestions />} />
+          <Route path="published-faqs" element={<AdminPublishedFAQs />} />
+          <Route path="notifications" element={<AdminNotifications />} />
+        </Route>
       </Routes>
-      <ChatBot />
+
+      {/* Floating Chatbot only for student pages */}
+      {!isAdminRoute && <ChatBot />}
     </>
   );
 }
@@ -107,9 +148,11 @@ function AppContent() {
 function App() {
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <AdminProvider>
+        <BrowserRouter>
+          <AppContent />
+        </BrowserRouter>
+      </AdminProvider>
     </GoogleOAuthProvider>
   );
 }

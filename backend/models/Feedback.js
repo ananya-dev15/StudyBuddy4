@@ -12,6 +12,12 @@ const feedbackSchema = new mongoose.Schema(
     color: { type: String, default: "#6366f1" },
     badge: { type: String, default: "" },
     tag: { type: String, default: "" },
+    status: {
+      type: String,
+      enum: ["pending", "approved", "rejected"],
+      default: "pending",
+      index: true,
+    },
   },
   { timestamps: true }
 );
