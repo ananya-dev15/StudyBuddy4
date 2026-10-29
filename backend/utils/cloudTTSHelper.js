@@ -17,7 +17,7 @@ function fetchAudioChunk(text, lang) {
   return new Promise((resolve, reject) => {
     const encoded = encodeURIComponent(text);
     const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${lang}&client=tw-ob`;
-    
+
     const req = https.get(
       url,
       {
@@ -49,14 +49,14 @@ function fetchAudioChunk(text, lang) {
 
 /**
  * Universal Zero-Dependency Cloud Neural TTS
- * Runs in pure Node.js on Render, Vercel, Railway, Heroku, or local without Python or edge-tts.
+ * Splits strictly at sentence or clause boundaries to ensure natural cadence.
  */
 export async function synthesizeCloudSpeech(text, langCode = "en-IN") {
   if (!text || !text.trim()) return null;
 
   const targetLang = LANG_MAP[langCode] || "hi";
 
-  // Split text into natural chunks <= 180 characters to respect HTTP TTS limits
+  // Match sentences ending in punctuation
   const sentences = text.match(/[^.!?।\n]+[.!?।\n]*/g) || [text];
   const audioParts = [];
 
@@ -65,16 +65,36 @@ export async function synthesizeCloudSpeech(text, langCode = "en-IN") {
     if (!trimmed) continue;
 
     if (trimmed.length > 180) {
-      const subParts = trimmed.match(/.{1,180}(\s|$)/g) || [trimmed];
-      for (const piece of subParts) {
-        if (piece.trim()) {
-          const chunk = await fetchAudioChunk(piece.trim(), targetLang);
-          if (chunk && chunk.length > 0) audioParts.push(chunk);
+      // Split compound sentences at clause boundaries (, ; : )
+      const clauses = trimmed.match(/[^,;:]+[,;:]*/g) || [trimmed];
+      let subPart = "";
+
+      for (const clause of clauses) {
+        const cTrim = clause.trim();
+        if ((subPart + " " + cTrim).trim().length <= 180) {
+          subPart = subPart ? `${subPart} ${cTrim}` : cTrim;
+        } else {
+          if (subPart) {
+            try {
+              const chunk = await fetchAudioChunk(subPart, targetLang);
+              if (chunk && chunk.length > 0) audioParts.push(chunk);
+            } catch (e) {}
+          }
+          subPart = cTrim;
         }
       }
+
+      if (subPart) {
+        try {
+          const chunk = await fetchAudioChunk(subPart.slice(0, 180), targetLang);
+          if (chunk && chunk.length > 0) audioParts.push(chunk);
+        } catch (e) {}
+      }
     } else {
-      const chunk = await fetchAudioChunk(trimmed, targetLang);
-      if (chunk && chunk.length > 0) audioParts.push(chunk);
+      try {
+        const chunk = await fetchAudioChunk(trimmed, targetLang);
+        if (chunk && chunk.length > 0) audioParts.push(chunk);
+      } catch (e) {}
     }
   }
 

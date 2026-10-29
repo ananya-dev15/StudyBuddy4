@@ -82,13 +82,42 @@ export const AppProvider = ({ children }) => {
     }
   }, [theme]);
 
-  // --- Global Chatbot State ---
+  // --- Global Chatbot State with Continuous Memory Persistence ---
+  const DEFAULT_CHAT_MESSAGES = [
+    { sender: "bot", text: "Hey there! I’m StudyBuddy AI 🤖, your personal study mentor." },
+    { sender: "bot", text: "I'm here to help you understand academic concepts, solve coding & math problems, and prepare for exams and interviews." },
+    { sender: "bot", text: "What would you like to learn today? Type a question or ask by voice!" },
+  ];
+
+  const chatStorageKey = `studybuddy_chat_history_${userId || "guest"}`;
+
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [chatMessages, setChatMessages] = useState([
-    { sender: "bot", text: "Hey there! I’m StudyBuddy AI 🤖, your personal study companion." },
-    { sender: "bot", text: "My goal is to help you stay organized, focused, and answer any doubt while studying." },
-    { sender: "bot", text: "What's on your mind? Type a question or ask by voice!" },
-  ]);
+  const [chatMessages, setChatMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem(`studybuddy_chat_history_${userId || "guest"}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_CHAT_MESSAGES;
+  });
+
+  // Persist conversation history across refreshes
+  useEffect(() => {
+    try {
+      localStorage.setItem(chatStorageKey, JSON.stringify(chatMessages.slice(-50)));
+    } catch (e) {}
+  }, [chatMessages, chatStorageKey]);
+
+  const clearChatHistory = () => {
+    stopSpeakingText();
+    setChatMessages(DEFAULT_CHAT_MESSAGES);
+    try {
+      localStorage.removeItem(chatStorageKey);
+    } catch (e) {}
+  };
+
   const [chatLoading, setChatLoading] = useState(false);
   const [isVoiceListening, setIsVoiceListening] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -112,25 +141,68 @@ export const AppProvider = ({ children }) => {
   const cleanTextForSpeech = (rawText) => {
     if (!rawText) return "";
     let clean = rawText;
-    clean = clean.replace(/```[\s\S]*?```/g, " code snippet ");
+
+    // 1. Convert code blocks into natural spoken cues rather than reading code verbatim
+    clean = clean.replace(/```(?:[a-zA-Z0-9_-]+)?\s*([\s\S]*?)```/g, (match, code) => {
+      const lines = code.trim().split("\n");
+      if (lines.length <= 2 && code.length < 60) {
+        return `, as shown: ${lines.join(" ")}, `;
+      }
+      return ", as shown in the code on your screen, ";
+    });
+
+    // 2. Inline code
     clean = clean.replace(/`([^`]+)`/g, "$1");
-    clean = clean.replace(/^#+\s+/gm, "");
+
+    // 3. Mathematical / algorithmic complexity notations
+    clean = clean.replace(/\bO\(\s*1\s*\)/gi, "O of 1 constant time");
+    clean = clean.replace(/\bO\(\s*n\s*\)/gi, "O of n linear time");
+    clean = clean.replace(/\bO\(\s*n\^2\s*\)/gi, "O of n squared");
+    clean = clean.replace(/\bO\(\s*log\s*n\s*\)/gi, "O of log n");
+    clean = clean.replace(/\bO\(\s*n\s*log\s*n\s*\)/gi, "O of n log n");
+
+    // 4. Programming operators to natural spoken words (put negation first)
+    clean = clean.replace(/!==?/g, " is not equal to ");
+    clean = clean.replace(/===?/g, " equals ");
+    clean = clean.replace(/<=/g, " is less than or equal to ");
+    clean = clean.replace(/>=/g, " is greater than or equal to ");
+    clean = clean.replace(/&&/g, " and ");
+    clean = clean.replace(/\|\|/g, " or ");
+    clean = clean.replace(/\\rightarrow|->/g, " leads to ");
+
+    // 5. Numbered lists into natural spoken sequences with cadence
+    clean = clean.replace(/(?:^|\n)\s*1\.\s+/g, ". First, ");
+    clean = clean.replace(/(?:^|\n)\s*2\.\s+/g, ". Second, ");
+    clean = clean.replace(/(?:^|\n)\s*3\.\s+/g, ". Third, ");
+    clean = clean.replace(/(?:^|\n)\s*4\.\s+/g, ". Fourth, ");
+    clean = clean.replace(/(?:^|\n)\s*5\.\s+/g, ". Fifth, ");
+    clean = clean.replace(/(?:^|\n)\s*\d+\.\s+/g, ". Next, ");
+
+    // 6. Bullet points
+    clean = clean.replace(/(?:^|\n)\s*[-*•]\s+/g, ". ");
+
+    // 7. Headings: add period for natural breathing pause
+    clean = clean.replace(/^#+\s*(.+)$/gm, "$1. ");
+
+    // 8. Markdown formatting
     clean = clean.replace(/\*\*([^*]+)\*\*/g, "$1");
     clean = clean.replace(/\*([^*]+)\*/g, "$1");
     clean = clean.replace(/__([^_]+)__/g, "$1");
     clean = clean.replace(/_([^_]+)_/g, "$1");
     clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-    clean = clean.replace(/^[\s*-]+\s+/gm, "");
-    
-    // Remove all Emojis & Pictographs so TTS reads only text
+    clean = clean.replace(/<[^>]*>/g, " ");
+
+    // 9. Remove emojis (keep digits intact)
     try {
-      clean = clean.replace(/[\p{Extended_Pictographic}\p{Emoji_Component}]/gu, "");
+      clean = clean.replace(/\p{Extended_Pictographic}/gu, "");
     } catch (e) {
       clean = clean.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}]/gu, "");
     }
 
-    clean = clean.replace(/\\rightarrow/g, "leads to");
+    // 10. Math & Punctuation
     clean = clean.replace(/[\$\\]/g, "");
+    clean = clean.replace(/\.{2,}/g, ".");
+    clean = clean.replace(/\s*([,.:;!?])\s*/g, "$1 ");
 
     return clean.replace(/\s+/g, " ").trim();
   };
@@ -177,51 +249,114 @@ export const AppProvider = ({ children }) => {
     try {
       window.speechSynthesis.pause();
       window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(textToSpeak);
-      activeUtteranceRef.current = utterance;
-
-      utterance.onstart = () => setIsSpeaking(true);
-      utterance.onend = () => {
-        setIsSpeaking(false);
-        activeUtteranceRef.current = null;
-      };
-      utterance.onerror = () => {
-        setIsSpeaking(false);
-        activeUtteranceRef.current = null;
-      };
 
       const containsHindiScript = /[\u0900-\u097F]/.test(textToSpeak);
       const isHindi = containsHindiScript || langCode === "hi-IN";
       const isPunjabi = /[\u0A00-\u0A7F]/.test(textToSpeak) || langCode === "pa-IN";
-      utterance.lang = isPunjabi ? "pa-IN" : isHindi ? "hi-IN" : "en-IN";
+      const isBengali = /[\u0980-\u09FF]/.test(textToSpeak) || langCode === "bn-IN";
+      const isTamil = /[\u0B80-\u0BFF]/.test(textToSpeak) || langCode === "ta-IN";
+      const isTelugu = /[\u0C00-\u0C7F]/.test(textToSpeak) || langCode === "te-IN";
+      const isMarathi = /[\u0900-\u097F]/.test(textToSpeak) && langCode === "mr-IN";
 
-      try {
-        const voices = window.speechSynthesis.getVoices() || [];
-        const femaleVoice = voices.find((v) => {
-          const vName = v.name.toLowerCase();
-          const matchesLang = isPunjabi
-            ? v.lang.startsWith("pa") || v.lang.startsWith("hi")
-            : isHindi
-            ? v.lang.startsWith("hi")
-            : v.lang.startsWith("en") || v.lang.startsWith("hi");
-          return (
-            matchesLang &&
-            (vName.includes("female") ||
-              vName.includes("samantha") ||
-              vName.includes("lekha") ||
-              vName.includes("zira") ||
-              vName.includes("veena") ||
-              vName.includes("kavya") ||
-              vName.includes("shruti"))
+      const targetLang = isPunjabi
+        ? "pa-IN"
+        : isBengali
+        ? "bn-IN"
+        : isTamil
+        ? "ta-IN"
+        : isTelugu
+        ? "te-IN"
+        : isMarathi
+        ? "mr-IN"
+        : isHindi
+        ? "hi-IN"
+        : "en-IN";
+
+      // Split into sentence chunks to avoid Chrome's 15-second speech cutoff bug
+      const rawSentences = textToSpeak.match(/[^.!?।\n]+[.!?।\n]*/g) || [textToSpeak];
+      const sentences = rawSentences.map((s) => s.trim()).filter(Boolean);
+
+      if (sentences.length === 0) {
+        setIsSpeaking(false);
+        return;
+      }
+
+      setIsSpeaking(true);
+
+      const voices = window.speechSynthesis.getVoices() || [];
+
+      // Find the highest fidelity natural voice
+      const selectBestVoice = () => {
+        const voicePriority = isHindi
+          ? ["google हिन्दी", "swara", "madhur", "lekha", "kalpana", "neerja", "hi-in", "hindi"]
+          : isPunjabi
+          ? ["pa-in", "punjabi", "gurmukhi", "google हिन्दी", "hi-in"]
+          : [
+              "google us english",
+              "google uk english female",
+              "microsoft jenny",
+              "microsoft aria",
+              "microsoft guy",
+              "samantha",
+              "victoria",
+              "karen",
+              "moira",
+              "zira",
+              "en-us",
+              "en-in",
+              "en-gb",
+            ];
+
+        for (const preferred of voicePriority) {
+          const matched = voices.find(
+            (v) =>
+              v.name.toLowerCase().includes(preferred) ||
+              v.lang.toLowerCase().replace("_", "-").includes(preferred)
           );
-        });
-        if (femaleVoice) utterance.voice = femaleVoice;
-      } catch (_) {}
+          if (matched) return matched;
+        }
 
-      utterance.rate = 1.0;
-      utterance.pitch = 1.15;
-      window.speechSynthesis.speak(utterance);
+        return (
+          voices.find((v) => v.lang.toLowerCase().startsWith(targetLang.slice(0, 2))) ||
+          voices[0] ||
+          null
+        );
+      };
+
+      const selectedVoice = selectBestVoice();
+      let currentIndex = 0;
+
+      const speakNextSentence = () => {
+        if (currentIndex >= sentences.length) {
+          setIsSpeaking(false);
+          activeUtteranceRef.current = null;
+          return;
+        }
+
+        const sentence = sentences[currentIndex++];
+        const utterance = new SpeechSynthesisUtterance(sentence);
+        activeUtteranceRef.current = utterance;
+        utterance.lang = targetLang;
+        if (selectedVoice) utterance.voice = selectedVoice;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0; // Natural human conversational pitch (1.0) instead of high-pitched robotic (1.15)
+
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => {
+          speakNextSentence();
+        };
+        utterance.onerror = (e) => {
+          console.warn("SpeechSynthesis error on sentence:", e);
+          setIsSpeaking(false);
+          activeUtteranceRef.current = null;
+        };
+
+        window.speechSynthesis.speak(utterance);
+      };
+
+      speakNextSentence();
     } catch (e) {
+      console.warn("SpeechSynthesis exception:", e);
       setIsSpeaking(false);
     }
   };
@@ -312,6 +447,15 @@ export const AppProvider = ({ children }) => {
 
     stopSpeakingText();
 
+    // Prepare multi-turn history including recent turns for continuous conversational memory
+    const historyToSend = chatMessages
+      .filter((m) => m && m.text && typeof m.text === "string")
+      .slice(-14)
+      .map((m) => ({
+        role: m.sender === "bot" ? "assistant" : "user",
+        content: m.text,
+      }));
+
     setChatMessages((prev) => [...prev, { sender: "user", text: cleanText }]);
     setChatLoading(true);
 
@@ -321,6 +465,7 @@ export const AppProvider = ({ children }) => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: cleanText,
+          history: historyToSend,
           context: overrideContext || activeVideoContext,
         }),
       });
@@ -328,12 +473,15 @@ export const AppProvider = ({ children }) => {
       const data = await res.json();
       const botReply = data.reply || "I couldn't process that. Please try asking again!";
       setChatMessages((prev) => [...prev, { sender: "bot", text: botReply }]);
-      speakText(botReply, data.detected_language);
+      
+      // Use speech-optimized representation if provided by backend, else clean reply
+      const speechToPlay = data.speechText || botReply;
+      speakText(speechToPlay, data.detected_language);
     } catch (err) {
       console.error("Chat error:", err);
       setChatMessages((prev) => [
         ...prev,
-        { sender: "bot", text: "Sorry, I had trouble reaching the server. Please try again!" },
+        { sender: "bot", text: "Sorry, I had trouble reaching the server. Please check your connection and try again!" },
       ]);
     } finally {
       setChatLoading(false);
@@ -1208,6 +1356,7 @@ export const AppProvider = ({ children }) => {
         setIsVoiceListening,
         isSpeaking,
         stopSpeakingText,
+        clearChatHistory,
         activeVideoContext,
         setActiveVideoContext,
         sendMessageToChatbot,

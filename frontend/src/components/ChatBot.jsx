@@ -8,6 +8,131 @@ import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
 import focusCompanionIcon from "../assets/icons/focus companion.png";
 
+function renderInlineFormatting(text, isDark) {
+  if (!text) return null;
+  const parts = [];
+  const regex = /(\*\*[^*]+\*\*|`[^`]+`)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.substring(lastIndex, match.index));
+    }
+    const token = match[0];
+    if (token.startsWith("**") && token.endsWith("**")) {
+      parts.push(
+        <strong key={match.index} className="font-semibold text-purple-900 dark:text-purple-200">
+          {token.slice(2, -2)}
+        </strong>
+      );
+    } else if (token.startsWith("`") && token.endsWith("`")) {
+      parts.push(
+        <code
+          key={match.index}
+          className={`px-1.5 py-0.5 rounded font-mono text-[11px] ${
+            isDark ? "bg-purple-900/40 text-purple-300" : "bg-purple-100 text-purple-800"
+          }`}
+        >
+          {token.slice(1, -1)}
+        </code>
+      );
+    }
+    lastIndex = match.index + token.length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.substring(lastIndex));
+  }
+
+  return parts.length > 0 ? parts : text;
+}
+
+function parseMessageSegments(content) {
+  if (!content) return [];
+  const segments = [];
+  const codeBlockRegex = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = codeBlockRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({
+        type: "text",
+        content: content.substring(lastIndex, match.index),
+      });
+    }
+    segments.push({
+      type: "code",
+      language: match[1] || "code",
+      code: match[2].trim(),
+    });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    segments.push({
+      type: "text",
+      content: content.substring(lastIndex),
+    });
+  }
+
+  return segments;
+}
+
+function CodeSnippet({ code, language, isDark }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    try {
+      navigator.clipboard?.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {}
+  };
+
+  return (
+    <div className="my-2 rounded-xl overflow-hidden border border-purple-500/30 text-xs font-mono shadow-md text-left">
+      <div className="flex justify-between items-center px-3 py-1 bg-slate-900 text-slate-300 text-[10px] border-b border-slate-700/60">
+        <span className="uppercase font-semibold tracking-wider text-purple-400">
+          {language || "code"}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="hover:text-white transition-colors cursor-pointer text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded"
+          title="Copy code to clipboard"
+        >
+          {copied ? "✓ Copied" : "📋 Copy"}
+        </button>
+      </div>
+      <pre className="p-3 bg-slate-950 text-emerald-400 overflow-x-auto leading-relaxed select-text">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+function FormattedMessage({ text, isDark }) {
+  if (!text) return null;
+  const segments = parseMessageSegments(text);
+
+  return (
+    <div className="space-y-1.5 break-words">
+      {segments.map((seg, i) => {
+        if (seg.type === "code") {
+          return <CodeSnippet key={i} code={seg.code} language={seg.language} isDark={isDark} />;
+        }
+        return (
+          <div key={i} className="whitespace-pre-wrap leading-relaxed">
+            {renderInlineFormatting(seg.content, isDark)}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function ChatBot({ standalone = false }) {
   const {
     isChatOpen,
@@ -17,6 +142,7 @@ export default function ChatBot({ standalone = false }) {
     isVoiceListening,
     isSpeaking,
     stopSpeakingText,
+    clearChatHistory,
     sendMessageToChatbot,
     toggleVoiceRecognition,
     activeVideoContext,
@@ -91,11 +217,21 @@ export default function ChatBot({ standalone = false }) {
                 </button>
               )}
             </div>
-            {activeVideoContext && (
-              <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium truncate max-w-[200px]">
-                📺 Video: {activeVideoContext.videoTitle || activeVideoContext.videoId}
-              </span>
-            )}
+            <div className="flex items-center gap-3">
+              {activeVideoContext && (
+                <span className="text-xs bg-white/20 px-3 py-1 rounded-full font-medium truncate max-w-[200px]">
+                  📺 Video: {activeVideoContext.videoTitle || activeVideoContext.videoId}
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => clearChatHistory()}
+                className="bg-white/15 hover:bg-white/25 active:scale-95 text-white px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                title="Start a fresh conversation (resets context memory)"
+              >
+                🔄 New Topic
+              </button>
+            </div>
           </div>
 
           {/* Messages */}
@@ -111,7 +247,7 @@ export default function ChatBot({ standalone = false }) {
                     : "bg-gradient-to-r from-purple-600 to-indigo-600 text-white self-end ml-auto shadow-md"
                 }`}
               >
-                <div>{m.text}</div>
+                <FormattedMessage text={m.text} isDark={isDark} />
                 {m.sender === "bot" && !isSpeaking && (
                   <div className="mt-2 flex justify-end">
                     <button
@@ -227,8 +363,16 @@ export default function ChatBot({ standalone = false }) {
                 </button>
               )}
               <button
+                type="button"
+                onClick={() => clearChatHistory()}
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-bold text-xs transition-colors cursor-pointer"
+                title="Start a fresh conversation (resets context memory)"
+              >
+                🔄
+              </button>
+              <button
                 onClick={() => setIsChatOpen(false)}
-                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-bold text-sm transition-colors"
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center font-bold text-sm transition-colors cursor-pointer"
               >
                 ✕
               </button>
@@ -257,7 +401,7 @@ export default function ChatBot({ standalone = false }) {
                     : "bg-gradient-to-r from-purple-600 to-indigo-600 text-white self-end rounded-br-none ml-auto shadow-sm"
                 }`}
               >
-                <div>{m.text}</div>
+                <FormattedMessage text={m.text} isDark={isDark} />
                 {m.sender === "bot" && !isSpeaking && (
                   <div className="mt-1 flex justify-end">
                     <button

@@ -7,8 +7,8 @@ const __dirname = path.dirname(__filename);
 const SCRIPT_PATH = path.join(__dirname, "neural_tts.py");
 
 /**
- * Generates speech using Microsoft Neural AI voices via python edge-tts.
- * Supports authentic regional Indian female accents (Hindi, English, Bengali, Tamil, Telugu, Marathi, Gujarati, etc.).
+ * Generates speech using Microsoft Neural AI voices via edge-tts if python environment supports it.
+ * Fails safely and gracefully if edge-tts is not available.
  */
 export const synthesizeNeuralSpeech = (text, languageCode = "en-IN") => {
   return new Promise((resolve, reject) => {
@@ -28,7 +28,6 @@ export const synthesizeNeuralSpeech = (text, languageCode = "en-IN") => {
 
       pyProcess.on("close", (code) => {
         if (code !== 0) {
-          console.warn("Neural TTS python exited with code:", code, stderrData);
           return reject(new Error(stderrData || `Neural TTS exited with code ${code}`));
         }
 
