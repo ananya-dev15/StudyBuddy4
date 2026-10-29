@@ -14,3 +14,4 @@ router.post("/update-profile-photo", updateProfilePhoto);
 router.post("/update-profile", updateProfile);
 
 export default router;
+

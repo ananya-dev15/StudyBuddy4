@@ -16,6 +16,12 @@ import anshika from "../assets/anshika1.jpeg"
 import ananya from "../assets/ananya1.jpeg"
 import setu from "../assets/Setu1.jpeg"
 import yash from "../assets/yash.jpeg"
+import videoTrackerIcon from "../assets/icons/video tracker.png";
+import monitoringDashboardIcon from "../assets/icons/monitoring dashboard.png";
+import leaderboardIcon from "../assets/icons/leaderboard.png";
+import performanceDashboardIcon from "../assets/good-feedback.png";
+import analyticsIcon from "../assets/icons/analytics.png";
+import assignmentsIcon from "../assets/icons/assignments.png";
 import heroBgVideo from "../assets/fourth.mp4";
 import FAQCarousel from "../components/FAQCarousel";
 import FeedbackRoadJourney from "../components/FeedbackRoadJourney";
@@ -513,12 +519,12 @@ const HomePage = () => {
       <section className="py-24 relative z-10">
         <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-3 gap-10 text-center">
           {[
-            { icon: "🎥", title: "Video Tracker", desc: "Log study videos and monitor progress effortlessly.", link: "/videos" },
-            { icon: "🎯", title: "Monitoring Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/monitoring" },
-            { icon: "🔥", title: "Leaderboard", desc: "Maintain daily study streaks and boost motivation.", link: "/leaderboard" },
-            { icon: "📈", title: "Performance Dashboard", desc: "Track your study streaks, activity heatmaps, and session metrics.", link: "/dashboard" },
-            { icon: "📊", title: "Analytics", desc: "Download and access all monitoring dashboard reports, focus logs, and learning trends.", link: "/analytics" },
-            { icon: "📝", title: "Assignments", desc: "Organize, track, and submit assignments on time.", link: "/assignments" },
+            { image: videoTrackerIcon, title: "Video Tracker", desc: "Log study videos and monitor progress effortlessly.", link: "/videos" },
+            { image: monitoringDashboardIcon, title: "Monitoring Dashboard", desc: "Track your real-time focus analytics and session insights.", link: "/monitoring" },
+            { image: leaderboardIcon, title: "Leaderboard", desc: "Maintain daily study streaks and boost motivation.", link: "/leaderboard" },
+            { image: performanceDashboardIcon, title: "Performance Dashboard", desc: "Track your study streaks, activity heatmaps, and session metrics.", link: "/dashboard" },
+            { image: analyticsIcon, title: "Analytics", desc: "Download and access all monitoring dashboard reports, focus logs, and learning trends.", link: "/analytics" },
+            { image: assignmentsIcon, title: "Assignments", desc: "Organize, track, and submit assignments on time.", link: "/assignments" },
           ].map((f, idx) => (
             <Link
               to={f.link}
@@ -535,13 +541,24 @@ const HomePage = () => {
               {theme !== "dark" && (
                 <div className="absolute top-0 inset-x-0 h-[2px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
               )}
-              <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-5 transition-transform duration-300 group-hover:scale-110 ${
-                theme === "dark"
-                  ? "bg-purple-900/40 border border-purple-500/30 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.25)] group-hover:shadow-[0_0_25px_rgba(168,85,247,0.45)]"
-                  : "bg-white/80 border border-white/90 text-indigo-600 shadow-sm group-hover:bg-white group-hover:shadow-md"
-              }`}>
-                {f.icon}
-              </div>
+              {f.image ? (
+                <div className="w-16 h-16 flex items-center justify-center mb-5 transition-transform duration-300 group-hover:scale-110">
+                  <img
+                    src={f.image}
+                    alt={f.title}
+                    className="w-full h-full object-contain select-none"
+                    draggable={false}
+                  />
+                </div>
+              ) : (
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-3xl mb-5 transition-transform duration-300 group-hover:scale-110 ${
+                  theme === "dark"
+                    ? "bg-purple-900/40 border border-purple-500/30 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.25)] group-hover:shadow-[0_0_25px_rgba(168,85,247,0.45)]"
+                    : "bg-white/80 border border-white/90 text-indigo-600 shadow-sm group-hover:bg-white group-hover:shadow-md"
+                }`}>
+                  {f.icon}
+                </div>
+              )}
               <h3 className={`text-xl font-bold tracking-tight ${theme === "dark" ? "text-white drop-shadow-[0_2px_4px_rgba(0,0,0,0.3)]" : "text-slate-900"}`}>
                 {f.title}
               </h3>
@@ -758,7 +775,7 @@ const HomePage = () => {
             <div className="bg-gradient-to-r from-indigo-700 via-purple-700 to-indigo-800 p-4 md:p-6 text-white flex justify-between items-center shadow-md">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl shrink-0">
-                  🎯
+                  <img src={monitoringDashboardIcon} alt="Monitoring Dashboard" className="w-6 h-6 object-contain" />
                 </div>
                 <div>
                   <h2 className="text-lg md:text-2xl font-bold flex items-center gap-2">
@@ -807,8 +824,8 @@ const HomePage = () => {
               {/* Graceful Fallback Overlay if Iframe took too long on production */}
               {iframeTimedOut && !iframeLoaded && !STREAMLIT_URL.includes("localhost") && (
                 <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center text-white z-10 animate-in fade-in duration-300">
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-3xl mb-4 shadow-inner border border-indigo-500/30">
-                    📊
+                  <div className="w-16 h-16 flex items-center justify-center mb-4">
+                    <img src={analyticsIcon} alt="Analytics" className="w-12 h-12 object-contain" />
                   </div>
                   <h3 className="text-xl md:text-2xl font-bold mb-2">
                     Cross-Site Cookie Notice

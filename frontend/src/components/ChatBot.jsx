@@ -6,6 +6,7 @@ import { useAppContext } from "../context/AppContext";
 import ThemeToggle from "./ThemeToggle";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
+import focusCompanionIcon from "../assets/icons/focus companion.png";
 
 export default function ChatBot({ standalone = false }) {
   const {
@@ -74,7 +75,8 @@ export default function ChatBot({ standalone = false }) {
           {/* Header */}
           <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white p-4 font-bold text-xl flex justify-between items-center shadow-md">
             <div className="flex items-center gap-2">
-              <span>🤖 StudyBuddy AI Assistant</span>
+              <img src={focusCompanionIcon} alt="AI Assistant" className="w-6 h-6 object-contain inline-block" />
+              <span>StudyBuddy AI Assistant</span>
               {isSpeaking && (
                 <button
                   type="button"
@@ -207,7 +209,7 @@ export default function ChatBot({ standalone = false }) {
           {/* Header */}
           <div className="bg-gradient-to-r from-purple-700 via-pink-600 to-indigo-700 text-white p-3.5 font-bold flex justify-between items-center text-sm shadow-md">
             <div className="flex items-center gap-2">
-              <span className="text-xl">🤖</span>
+              <img src={focusCompanionIcon} alt="AI Assistant" className="w-5 h-5 object-contain inline-block" />
               <span>StudyBuddy AI</span>
             </div>
             <div className="flex items-center gap-2">

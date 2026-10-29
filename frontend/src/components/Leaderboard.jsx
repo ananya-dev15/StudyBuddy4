@@ -13,6 +13,9 @@ import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
 import API_BASE from "../services/apiBase";
+import evaluationDateIcon from "../assets/icons/evaluation date.png";
+import coinIcon from "../assets/icons/coin.png";
+import videosIcon from "../assets/icons/videos.png";
 import { getAllMonitoringLogs } from "../services/monitoringDB";
 import {
   calculateLeaderboardScore,
@@ -214,8 +217,9 @@ const Leaderboard = () => {
           isDark ? 'bg-slate-900/60 border-purple-500/20' : 'bg-[#fbf9f3] border-[#eee8de]'
         }">
           <div className="flex items-center gap-3">
-            <span className={`text-xs sm:text-sm font-bold uppercase tracking-wider ${isDark ? "text-purple-300" : "text-slate-700"}`}>
-              📅 Evaluation Date:
+            <span className={`text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? "text-purple-300" : "text-slate-700"}`}>
+              <img src={evaluationDateIcon} alt="Evaluation Date" className="w-4 h-4 object-contain inline-block select-none" />
+              <span>Evaluation Date:</span>
             </span>
             <select
               value={selectedDate}
@@ -300,11 +304,17 @@ const Leaderboard = () => {
                   }`}>
                     <div className="text-center">
                       <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Coins</div>
-                      <div className="text-base font-black text-amber-500">🪙 {s.coins}</div>
+                      <div className="text-base font-black text-amber-500 flex items-center justify-center gap-1">
+                        <img src={coinIcon} alt="Coins" className="w-4 h-4 object-contain inline-block select-none" />
+                        <span>{s.coins}</span>
+                      </div>
                     </div>
                     <div className="text-center">
                       <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Videos</div>
-                      <div className="text-base font-black">🎬 {s.videos}</div>
+                      <div className="text-base font-black flex items-center justify-center gap-1">
+                        <img src={videosIcon} alt="Videos" className="w-4 h-4 object-contain inline-block select-none" />
+                        <span>{s.videos}</span>
+                      </div>
                     </div>
                     <div className="text-center">
                       <div className={`text-xs font-semibold ${isDark ? "text-slate-400" : "text-slate-500"}`}>Score</div>
@@ -370,7 +380,12 @@ const Leaderboard = () => {
                         {i === 0 ? "🥇 1" : i === 1 ? "🥈 2" : i === 2 ? "🥉 3" : `#${i + 1}`}
                       </td>
                       <td className={`py-4 px-6 font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{s.name}</td>
-                      <td className="py-4 px-6 text-amber-500 font-bold">🪙 {s.coins}</td>
+                      <td className="py-4 px-6 text-amber-500 font-bold">
+                        <span className="inline-flex items-center gap-1">
+                          <img src={coinIcon} alt="Coins" className="w-4 h-4 object-contain inline-block select-none" />
+                          <span>{s.coins}</span>
+                        </span>
+                      </td>
                       <td className="py-4 px-6 font-semibold">{s.videos}</td>
                       <td className="py-4 px-6 text-rose-500 font-semibold">{s.tabs}</td>
                       <td className="py-4 px-6">

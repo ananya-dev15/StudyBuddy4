@@ -5,6 +5,7 @@ import API_BASE from "../services/apiBase";
 import ThemeToggle from "./ThemeToggle";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
+import activeRemindersIcon from "../assets/icons/active reminders.png";
 
 const RemindersPanel = () => {
   const {
@@ -126,7 +127,9 @@ const RemindersPanel = () => {
             <div className={`p-8 text-center rounded-2xl backdrop-blur-xl border ${
               isDark ? "bg-slate-900/60 border-purple-500/10 text-slate-400" : "bg-white/60 border-white/60 text-slate-500"
             }`}>
-              <span className="text-4xl mb-2 block">🔔</span>
+              <div className="flex justify-center mb-2">
+                <img src={activeRemindersIcon} alt="Active Reminders" className="w-12 h-12 object-contain select-none" />
+              </div>
               <p className="font-medium text-sm">No reminders active right now.</p>
             </div>
           ) : (

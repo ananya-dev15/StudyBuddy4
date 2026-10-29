@@ -4,6 +4,11 @@ import { useAppContext } from "../context/AppContext";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
 import API_BASE from "../services/apiBase";
+import totalAssignmentsIcon from "../assets/icons/total assignments.png";
+import activeRemindersIcon from "../assets/icons/active reminders.png";
+import newTaskIcon from "../assets/icons/new task.png";
+import smartAlarmIcon from "../assets/icons/smart alarm.png";
+import upcomingDeadlinesIcon from "../assets/icons/upcoming deadlines.png";
 
 const AssignmentCard = () => {
   const {
@@ -745,7 +750,7 @@ const AssignmentCard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
                 Total Assignments
               </span>
-              <span className="text-2xl select-none">📚</span>
+              <img src={totalAssignmentsIcon} alt="Total Assignments" className="w-7 h-7 object-contain select-none" />
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black tracking-tight text-purple-600">
@@ -765,7 +770,7 @@ const AssignmentCard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
                 Active Reminders
               </span>
-              <span className="text-2xl select-none">⏰</span>
+              <img src={activeRemindersIcon} alt="Active Reminders" className="w-7 h-7 object-contain select-none" />
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black tracking-tight text-emerald-600">
@@ -786,7 +791,7 @@ const AssignmentCard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
                 New Task
               </span>
-              <span className="text-2xl select-none group-hover:scale-110 transition-transform">📝</span>
+              <img src={newTaskIcon} alt="New Task" className="w-7 h-7 object-contain select-none group-hover:scale-110 transition-transform" />
             </div>
             <div>
               <div className="text-base sm:text-lg font-bold tracking-tight text-blue-600 flex items-center justify-between">
@@ -808,7 +813,7 @@ const AssignmentCard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase text-slate-600">
                 Smart Alarm
               </span>
-              <span className="text-2xl select-none group-hover:scale-110 transition-transform">🔔</span>
+              <img src={smartAlarmIcon} alt="Smart Alarm" className="w-7 h-7 object-contain select-none group-hover:scale-110 transition-transform" />
             </div>
             <div>
               <div className="text-base sm:text-lg font-bold tracking-tight text-rose-500 flex items-center justify-between">
@@ -830,11 +835,8 @@ const AssignmentCard = () => {
               {/* Header */}
               <div className="flex items-center justify-between mb-4 pb-3 border-b border-[#eee8de] shrink-0">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl flex items-center justify-center bg-amber-100 text-amber-700">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
+                  <div className="w-8 h-8 flex items-center justify-center">
+                    <img src={upcomingDeadlinesIcon} alt="Upcoming Deadlines" className="w-7 h-7 object-contain select-none" />
                   </div>
                   <div>
                     <h3 className="font-bold text-sm md:text-base text-slate-900">

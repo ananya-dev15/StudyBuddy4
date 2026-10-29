@@ -7,6 +7,10 @@ import { Link, useNavigate } from "react-router-dom";
 import profileIcon from '../assets/profile_icon.png';
 import studyBannerBg from '../assets/study_banner_bg.jpg';
 import streakCardBg from '../assets/streak_card_bg.jpg';
+import watchHistoryIcon from "../assets/icons/watch history.png";
+import viewPdfIcon from "../assets/icons/view pdf.png";
+import downloadIcon from "../assets/icons/download.png";
+import coinIcon from "../assets/icons/coin.png";
 import AuthModal from "./AuthModal";
 import UserProfileModal from "./UserProfileModal";
 import API_BASE, { STREAMLIT_URL, DETECTOR_URL } from "../services/apiBase";
@@ -406,10 +410,16 @@ export default function VideoTracker() {
   const [playerReady, setPlayerReady] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
-  const [sessionPlayedSeconds, setSessionPlayedSeconds] = useState(0);
+  const [sessionPlayedSeconds, setSessionPlayedSeconds] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.sessionPlayedSeconds || 0;
+  });
   const [sessionViewsTaken, setSessionViewsTaken] = useState(0);
 
-  const [tabSwitches, setTabSwitches] = useState(0);
+  const [tabSwitches, setTabSwitches] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.tabSwitches || 0;
+  });
   const [sessionTabSwitches, setSessionTabSwitches] = useState(0);
 
   const [noteText, setNoteText] = useState("");
@@ -422,8 +432,23 @@ export default function VideoTracker() {
   const videoSliderRef = useRef(null);
   const [selectedVideoForLogs, setSelectedVideoForLogs] = useState(null);
   const [showTimerPopup, setShowTimerPopup] = useState(false);
-  const [focusMinutes, setFocusMinutes] = useState(25);
-  const [focusRemaining, setFocusRemaining] = useState(null);
+  const [focusMinutes, setFocusMinutes] = useState(() => {
+    const saved = getSavedActiveVideo();
+    if (saved?.focusDuration && saved.focusDuration > 0) {
+      return Math.round(saved.focusDuration / 60);
+    }
+    return 25;
+  });
+  const [focusRemaining, setFocusRemaining] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return typeof saved?.focusRemaining === "number" && saved.focusRemaining > 0
+      ? saved.focusRemaining
+      : null;
+  });
+  const [focusDuration, setFocusDuration] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return saved?.focusDuration || null;
+  });
 
   // 🔍 YouTube In-App Search States
   const [searchMode, setSearchMode] = useState("search"); // "search" | "url"
@@ -498,6 +523,23 @@ export default function VideoTracker() {
   useEffect(() => {
     tabSwitchesRef.current = tabSwitches;
   }, [tabSwitches]);
+
+  const videoIdRef = useRef(videoId);
+  useEffect(() => {
+    videoIdRef.current = videoId;
+  }, [videoId]);
+
+  const localVideoFileRef = useRef(localVideoFile);
+  useEffect(() => {
+    localVideoFileRef.current = localVideoFile;
+  }, [localVideoFile]);
+
+  const focusDurationRef = useRef(null);
+  useEffect(() => {
+    focusDurationRef.current = focusDuration;
+  }, [focusDuration]);
+
+  const isFirstTimeVideoLoadRef = useRef(false);
 
   const handleStopSaveRef = useRef(null);
 
@@ -578,12 +620,15 @@ export default function VideoTracker() {
   const [userAnswers, setUserAnswers] = useState([]);
   const [quizCompleted, setQuizCompleted] = useState(false);
   const [quizResult, setQuizResult] = useState(null);
+  const [isVideoEnded, setIsVideoEnded] = useState(false);
 
 
   // State for starting timer on play
-  const [focusDuration, setFocusDuration] = useState(null);
   const [isFocusTimerPending, setIsFocusTimerPending] = useState(false);
-  const [hasPlaybackStarted, setHasPlaybackStarted] = useState(false);
+  const [hasPlaybackStarted, setHasPlaybackStarted] = useState(() => {
+    const saved = getSavedActiveVideo();
+    return Boolean(saved?.hasPlaybackStarted || (saved?.focusRemaining && saved.focusRemaining > 0));
+  });
 
   // --- ON-DEVICE BROWSER CAMERA / DETECTOR INTEGRATION ---
   const [showCameraAnalysis, setShowCameraAnalysis] = useState(false);
@@ -1317,6 +1362,11 @@ export default function VideoTracker() {
   // Focus timer countdown & session watched timer - checks native video playback
   useEffect(() => {
     const timerInterval = setInterval(() => {
+      // Freeze timer countdown immediately if tab is hidden in background
+      if (typeof document !== "undefined" && (document.hidden || document.visibilityState === "hidden")) {
+        return;
+      }
+
       // Check native HTML5 video element state
       const isLocalActive = Boolean(
         localVideoRef.current &&
@@ -1325,15 +1375,16 @@ export default function VideoTracker() {
         localVideoRef.current.readyState >= 2
       );
 
-      // Check YouTube player state
+      // Check YouTube player state (1 = YT.PlayerState.PLAYING)
       const isYtActive = Boolean(
         youtubePlayerRef.current?.getPlayerState &&
         youtubePlayerRef.current.getPlayerState() === 1
       );
 
-      const active = isLocalActive || isYtActive || isPlaying;
+      const isVideoActuallyPlaying = isLocalActive || isYtActive;
 
-      if (!active) return;
+      // Only tick when video is actively playing! Never tick when paused!
+      if (!isVideoActuallyPlaying) return;
 
       // 1. Live Watched Time increment every second
       setSessionPlayedSeconds((prev) => prev + 1);
@@ -1537,11 +1588,36 @@ export default function VideoTracker() {
 
     setPlayerReady(false);
     setIsPlaying(false);
-    setSessionPlayedSeconds(0);
-    setTabSwitches(0);
+
+    // Check if restoring an active session from persistent storage
+    const saved = getSavedActiveVideo();
+    const isRestoringSession = saved && (saved.videoId === videoId || (saved.isLocal && localVideoObjectUrl));
+    if (isRestoringSession && (saved.sessionPlayedSeconds || saved.tabSwitches || saved.focusRemaining)) {
+      if (typeof saved.sessionPlayedSeconds === "number") {
+        setSessionPlayedSeconds(saved.sessionPlayedSeconds);
+        sessionPlayedSecondsRef.current = saved.sessionPlayedSeconds;
+      }
+      if (typeof saved.tabSwitches === "number") {
+        setTabSwitches(saved.tabSwitches);
+        tabSwitchesRef.current = saved.tabSwitches;
+      }
+      if (typeof saved.focusRemaining === "number" && saved.focusRemaining > 0) {
+        setFocusRemaining(saved.focusRemaining);
+        focusRemainingRef.current = saved.focusRemaining;
+        setHasPlaybackStarted(true);
+      }
+      if (saved.focusDuration) {
+        setFocusDuration(saved.focusDuration);
+        focusDurationRef.current = saved.focusDuration;
+      }
+    } else {
+      setSessionPlayedSeconds(0);
+      setTabSwitches(0);
+      setHasPlaybackStarted(false);
+    }
+
     setSessionViewsTaken(0);
     setEarnedThisSessionCoins(false);
-    setHasPlaybackStarted(false);
     const currentVideoKey = videoId || localVideoFile?.name;
     setNoteText(""); // 📓 Running notebook: start with empty textarea for new entries
     setTagText(appState.tags?.[currentVideoKey] || "");
@@ -1562,37 +1638,61 @@ export default function VideoTracker() {
           youtubePlayerRef.current = null;
         }
 
+        const saved = getSavedActiveVideo();
+        const isReturningSession = Boolean(
+          saved && (
+            (typeof saved.sessionPlayedSeconds === "number" && saved.sessionPlayedSeconds > 0) ||
+            (typeof saved.position === "number" && saved.position > 0) ||
+            (typeof saved.focusRemaining === "number" && saved.focusRemaining > 0) ||
+            (typeof saved.tabSwitches === "number" && saved.tabSwitches > 0)
+          )
+        );
+        // Play automatically ONLY when video is loaded for the first time!
+        const shouldAutoPlay = isFirstTimeVideoLoadRef.current || !isReturningSession;
+
         const p = new window.YT.Player("vt-youtube-player", {
           videoId,
-          playerVars: { controls: 1, rel: 0, modestbranding: 1 },
+          playerVars: {
+            controls: 1,
+            rel: 0,
+            modestbranding: 1,
+            autoplay: shouldAutoPlay ? 1 : 0,
+            start: Math.floor(resumePosition || 0),
+          },
           events: {
             onReady: (e) => {
               setPlayerReady(true);
               setYoutubePlayerInstance(p);
-              lastSampleRef.current = p.getCurrentTime() || 0;
+              lastSampleRef.current = resumePosition || 0;
               const dur = Math.round(p.getDuration?.() || 0);
               if (dur > 0) {
                 setVideoMeta((prev) => (prev ? { ...prev, duration: dur } : { duration: dur }));
               }
-              // Resume from saved position if available
-              if (resumePosition > 0 && !hasResumedRef.current) {
-                p.seekTo(resumePosition, true);
-                hasResumedRef.current = true;
+              if (shouldAutoPlay) {
+                // Auto-play immediately on fresh first load!
+                try {
+                  p.playVideo();
+                } catch (err) {}
+                isFirstTimeVideoLoadRef.current = false;
+              } else {
+                // Keep paused when returning from other tab or webpage
+                try {
+                  p.pauseVideo();
+                } catch (err) {}
               }
+              hasResumedRef.current = true;
             },
             onStateChange: (e) => {
               const state = e.data;
               if (state === window.YT.PlayerState.PLAYING) {
+                setIsVideoEnded(false);
                 setIsPlaying(true);
                 startPolling();
                 const dur = Math.round(p.getDuration?.() || 0);
                 if (dur > 0) {
                   setVideoMeta((prev) => (prev ? { ...prev, duration: dur } : { duration: dur }));
                 }
-                if (resumePosition > 0 && !hasResumedRef.current) {
-                  p.seekTo(resumePosition, true);
-                  hasResumedRef.current = true;
-                }
+                hasResumedRef.current = true;
                 if (isFocusTimerPending && !hasPlaybackStarted) {
                   setFocusRemaining(focusDuration);
                   setIsFocusTimerPending(false);
@@ -1608,6 +1708,7 @@ export default function VideoTracker() {
                 }
                 if (state === window.YT.PlayerState.ENDED) {
                   isVideoEndingRef.current = true;
+                  setIsVideoEnded(true);
                   saveResumeProgress(videoId, 0); // Reset position on completion
                   finalizeSession(true);
                   updateVideosWatched(userId);
@@ -1642,6 +1743,7 @@ export default function VideoTracker() {
       if (!videoElement) return;
 
       const onPlay = () => {
+        setIsVideoEnded(false);
         setIsPlaying(true);
         startPolling();
         if (isFocusTimerPending && !hasPlaybackStarted) {
@@ -1658,6 +1760,7 @@ export default function VideoTracker() {
       };
       const onEnded = () => {
         isVideoEndingRef.current = true;
+        setIsVideoEnded(true);
         setIsPlaying(false);
         stopPolling();
         if (sessionPlayedSeconds >= 5) {
@@ -1675,7 +1778,28 @@ export default function VideoTracker() {
       };
       const onReady = () => {
         setPlayerReady(true);
-        lastSampleRef.current = videoElement.currentTime || 0;
+        if (resumePosition > 0) {
+          videoElement.currentTime = resumePosition;
+        }
+        const saved = getSavedActiveVideo();
+        const isReturningSession = Boolean(
+          saved && (
+            (typeof saved.sessionPlayedSeconds === "number" && saved.sessionPlayedSeconds > 0) ||
+            (typeof saved.position === "number" && saved.position > 0) ||
+            (typeof saved.focusRemaining === "number" && saved.focusRemaining > 0) ||
+            (typeof saved.tabSwitches === "number" && saved.tabSwitches > 0)
+          )
+        );
+        const shouldAutoPlay = isFirstTimeVideoLoadRef.current || !isReturningSession;
+        if (shouldAutoPlay) {
+          try {
+            videoElement.play().catch(() => {});
+          } catch (err) {}
+          isFirstTimeVideoLoadRef.current = false;
+        } else {
+          videoElement.pause();
+        }
+        lastSampleRef.current = resumePosition || videoElement.currentTime || 0;
       };
 
 
@@ -1726,29 +1850,109 @@ export default function VideoTracker() {
     };
   }, [videoId, isPlaying]);
 
-  // Save progress and active video on unmount so returning to tracker preserves the video
+  // Save progress, active video, and session state on unmount so returning to tracker preserves video, focus time, and watched time
   useEffect(() => {
     return () => {
+      // 1. Check if video was actively playing
+      const isLocalActive = Boolean(
+        localVideoRef.current &&
+        !localVideoRef.current.paused &&
+        !localVideoRef.current.ended &&
+        localVideoRef.current.readyState >= 2
+      );
+      const isYtActive = Boolean(
+        youtubePlayerRef.current?.getPlayerState &&
+        youtubePlayerRef.current.getPlayerState() === 1
+      );
+      const isVideoPlaying = isLocalActive || isYtActive || isPlayingRef.current;
+
+      // 2. STOP / PAUSE the video immediately when leaving the webpage!
+      try {
+        if (youtubePlayerRef.current?.pauseVideo) {
+          youtubePlayerRef.current.pauseVideo();
+        } else if (youtubePlayerInstance?.pauseVideo) {
+          youtubePlayerInstance.pauseVideo();
+        }
+        if (localVideoRef.current && !localVideoRef.current.paused) {
+          localVideoRef.current.pause();
+        }
+        const iframe = document.querySelector("#vt-youtube-player") || document.querySelector("iframe[src*='youtube']");
+        if (iframe && iframe.contentWindow) {
+          iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func: "pauseVideo", args: [] }), "*");
+        }
+      } catch (e) {}
+
+      // 3. Get latest playback position
       let pos = 0;
       try {
-        if (videoId && youtubePlayerRef.current?.getCurrentTime) {
+        if (videoIdRef.current && youtubePlayerRef.current?.getCurrentTime) {
           pos = youtubePlayerRef.current.getCurrentTime();
         } else if (localVideoRef.current) {
           pos = localVideoRef.current.currentTime || 0;
         }
       } catch (e) {}
+      const floorPos = Math.floor(pos);
 
-      if (videoId) {
-        const floorPos = Math.floor(pos);
-        if (floorPos > 0) {
-          saveResumeProgress(videoId, floorPos);
-          saveActiveVideoToStorage({ videoId, position: floorPos });
+      // 4. If video was playing when leaving to another page, COUNT TAB SWITCH!
+      let currentTabSwitches = tabSwitchesRef.current || 0;
+      if (isVideoPlaying && !isVideoEndingRef.current) {
+        currentTabSwitches += 1;
+        tabSwitchesRef.current = currentTabSwitches;
+
+        const deducted = TAB_SWITCH_COST; // 5 coins
+
+        // Optimistically deduct 5 coins from global state
+        setAppState((prev) => {
+          const newCoins = Math.max((prev.coins || 0) - deducted, 0);
+          return { ...prev, coins: newCoins };
+        });
+
+        // Deduct coins in backend with keepalive
+        const token = localStorage.getItem("token");
+        if (token) {
+          try {
+            fetch(`${API_BASE}/api/tracking/coins-loss`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
+              credentials: "include",
+              keepalive: true,
+              body: JSON.stringify({ loss: deducted }),
+            }).catch(() => {});
+          } catch (e) {}
         }
-      } else if (localVideoFile) {
-        saveActiveVideoToStorage({ isLocal: true, position: Math.floor(pos) });
+      }
+
+      // 5. Persist the complete session state so focus time and watched time stay as is!
+      const currentVideoId = videoIdRef.current;
+      if (currentVideoId) {
+        if (floorPos > 0) {
+          saveResumeProgress(currentVideoId, floorPos);
+        }
+        saveActiveVideoToStorage({
+          videoId: currentVideoId,
+          position: floorPos,
+          focusRemaining: focusRemainingRef.current,
+          focusDuration: focusDurationRef.current,
+          sessionPlayedSeconds: sessionPlayedSecondsRef.current || 0,
+          tabSwitches: currentTabSwitches,
+          hasPlaybackStarted: Boolean(focusRemainingRef.current && focusRemainingRef.current > 0),
+        });
+      } else if (localVideoFileRef.current) {
+        saveActiveVideoToStorage({
+          isLocal: true,
+          position: floorPos,
+          focusRemaining: focusRemainingRef.current,
+          focusDuration: focusDurationRef.current,
+          sessionPlayedSeconds: sessionPlayedSecondsRef.current || 0,
+          tabSwitches: currentTabSwitches,
+          hasPlaybackStarted: Boolean(focusRemainingRef.current && focusRemainingRef.current > 0),
+        });
       }
     };
-  }, [videoId, localVideoFile]);
+  }, []);
 
   // Ensure metadata & playlist are loaded if a video was restored from persistent storage
   useEffect(() => {
@@ -2028,6 +2232,25 @@ export default function VideoTracker() {
 
         tabSwitchTriggered = true;
 
+        // STOP / PAUSE the video immediately on tab switch!
+        try {
+          if (youtubePlayerRef.current?.pauseVideo) {
+            youtubePlayerRef.current.pauseVideo();
+          } else if (youtubePlayerInstance?.pauseVideo) {
+            youtubePlayerInstance.pauseVideo();
+          }
+          if (localVideoRef.current && !localVideoRef.current.paused) {
+            localVideoRef.current.pause();
+          }
+          const iframe = document.querySelector("#vt-youtube-player") || document.querySelector("iframe[src*='youtube']");
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func: "pauseVideo", args: [] }), "*");
+          }
+        } catch (e) {}
+
+        setIsPlaying(false);
+        stopPolling();
+
         const deducted = TAB_SWITCH_COST; // 5 coins
 
         // ✅ Optimistically deduct 5 coins once and increment tab switch counter
@@ -2037,7 +2260,29 @@ export default function VideoTracker() {
           return { ...prev, coins: newCoins };
         });
 
-        setTabSwitches((prev) => prev + 1);
+        const newSwitches = (tabSwitchesRef.current || 0) + 1;
+        setTabSwitches(newSwitches);
+        tabSwitchesRef.current = newSwitches;
+
+        // Save progress & session state to persistent storage
+        let pos = 0;
+        try {
+          if (videoIdRef.current && youtubePlayerRef.current?.getCurrentTime) {
+            pos = youtubePlayerRef.current.getCurrentTime();
+          } else if (localVideoRef.current) {
+            pos = localVideoRef.current.currentTime || 0;
+          }
+        } catch (e) {}
+        const floorPos = Math.floor(pos);
+
+        saveActiveVideoToStorage({
+          position: floorPos,
+          focusRemaining: focusRemainingRef.current,
+          focusDuration: focusDurationRef.current,
+          sessionPlayedSeconds: sessionPlayedSecondsRef.current || 0,
+          tabSwitches: newSwitches,
+          hasPlaybackStarted: true,
+        });
 
         try {
           await updateBackendCoins(deducted);
@@ -2049,8 +2294,24 @@ export default function VideoTracker() {
       }
 
       // 2. When returning to this tab:
-      // Wapas aane par kuch nahi karna, sirf flag unlock karna hai next switch ke liye
+      // Guarantee video stays PAUSED when returning! Never auto-play!
       if (document.visibilityState === "visible") {
+        try {
+          if (youtubePlayerRef.current?.pauseVideo) {
+            youtubePlayerRef.current.pauseVideo();
+          }
+          if (localVideoRef.current && !localVideoRef.current.paused) {
+            localVideoRef.current.pause();
+          }
+          const iframe = document.querySelector("#vt-youtube-player") || document.querySelector("iframe[src*='youtube']");
+          if (iframe && iframe.contentWindow) {
+            iframe.contentWindow.postMessage(JSON.stringify({ event: "command", func: "pauseVideo", args: [] }), "*");
+          }
+        } catch (e) {}
+
+        setIsPlaying(false);
+        stopPolling();
+
         clearTimeout(timeoutId);
         timeoutId = setTimeout(() => {
           tabSwitchTriggered = false;
@@ -2300,6 +2561,7 @@ export default function VideoTracker() {
       ? `https://www.youtube.com/watch?v=${vid}&list=${currentPlId}`
       : `https://www.youtube.com/watch?v=${vid}`;
 
+    isFirstTimeVideoLoadRef.current = true;
     setInputUrl(newUrl);
     setVideoId(vid);
     setLocalVideoFile(null);
@@ -2374,6 +2636,7 @@ export default function VideoTracker() {
       return;
     }
     const pos = historyEntry.lastWatchedPosition || historyEntry.secondsWatched || 0;
+    isFirstTimeVideoLoadRef.current = true;
     setInputUrl(`https://youtu.be/${vid}`);
     setVideoId(vid);
     setLocalVideoFile(null);
@@ -2837,6 +3100,7 @@ export default function VideoTracker() {
         return;
       }
 
+      isFirstTimeVideoLoadRef.current = true;
       // Set video ID and reset local file
       setVideoId(id);
       setInputUrl(effectiveUrl);
@@ -2870,6 +3134,7 @@ export default function VideoTracker() {
       if (sessionPlayedSeconds >= 5) {
         handleStopSave();
       }
+      isFirstTimeVideoLoadRef.current = true;
       setVideoId(null);
       setVideoMeta(null);
       setInputUrl(""); // Clear any YouTube link
@@ -2922,6 +3187,7 @@ export default function VideoTracker() {
     }
     setTabSwitches(0);
     setFocusRemaining(null);
+    setIsVideoEnded(false);
     setIsFocusTimerPending(false);
     setHasPlaybackStarted(false);
     setPlayerError(null);
@@ -2961,9 +3227,13 @@ export default function VideoTracker() {
       }, 3000);
 
       // 1. Instant Player Pause & Resume Save
-      if (youtubePlayerInstance?.pauseVideo) youtubePlayerInstance.pauseVideo();
-      else if (localVideoRef.current && !localVideoRef.current.paused)
+      if (youtubePlayerRef.current?.pauseVideo) {
+        youtubePlayerRef.current.pauseVideo();
+      } else if (youtubePlayerInstance?.pauseVideo) {
+        youtubePlayerInstance.pauseVideo();
+      } else if (localVideoRef.current && !localVideoRef.current.paused) {
         localVideoRef.current.pause();
+      }
 
       const currentVideoKey = videoId || localVideoFile?.name;
       const currentVideoTitle = videoMeta?.title || localVideoFile?.name || currentVideoKey || "Study Video";
@@ -3082,6 +3352,14 @@ export default function VideoTracker() {
       setIsFocusTimerPending(false);
       setHasPlaybackStarted(false);
       finalizeSession(true);
+
+      saveActiveVideoToStorage({
+        focusRemaining: null,
+        focusDuration: null,
+        sessionPlayedSeconds: 0,
+        tabSwitches: 0,
+        hasPlaybackStarted: false,
+      });
 
       const currentPlaybackPos = Math.round(
         (videoId && youtubePlayerRef.current?.getCurrentTime ? youtubePlayerRef.current.getCurrentTime() : localVideoRef.current?.currentTime) ||
@@ -3479,29 +3757,6 @@ export default function VideoTracker() {
 
 
 
-  // const handleStartFocusTimer = () => {
-  //   if (!focusMinutes || focusMinutes <= 0) {
-  //     alert("Please enter a valid focus time!");
-  //     return;
-  //   }
-
-  //   // ⏱️ Start the focus timer
-  //   setFocusRemaining(focusMinutes * 60);
-
-  //   // 🔒 Close the popup
-  //   setShowTimerPopup(false);
-
-  //   // 🎬 Start video automatically after popup closes
-  //   setTimeout(() => {
-  //     if (playerRef.current && playerRef.current.playVideo) {
-  //       playerRef.current.playVideo(); // for YouTube
-  //     } else if (localVideoRef.current) {
-  //       localVideoRef.current.play(); // for local file
-  //     }
-  //   }, 500);
-  // };
-
-
   const handleStartFocusTimer = () => {
     if (!focusMinutes || focusMinutes <= 0) {
       triggerNotification({
@@ -3516,22 +3771,37 @@ export default function VideoTracker() {
       return;
     }
 
-    setFocusRemaining(focusMinutes * 60);
-    setFocusDuration(focusMinutes * 60);
+    const durationSec = focusMinutes * 60;
+    setFocusRemaining(durationSec);
+    focusRemainingRef.current = durationSec;
+    setFocusDuration(durationSec);
     setIsFocusTimerPending(false);
     setHasPlaybackStarted(true);
+    setIsVideoEnded(false);
     setShowTimerPopup(false);
 
     setTimeout(() => {
-      if (youtubePlayerRef.current?.playVideo) {
-        youtubePlayerRef.current.playVideo();
+      const ytPlayer = youtubePlayerRef.current || youtubePlayerInstance;
+      if (ytPlayer?.playVideo) {
+        try {
+          const ytTime = typeof ytPlayer.getCurrentTime === "function" ? ytPlayer.getCurrentTime() : 0;
+          if (ytTime === 0 && currentTime > 0) {
+            ytPlayer.seekTo(currentTime, true);
+          }
+        } catch (e) {
+          console.warn("Seek error:", e);
+        }
+        ytPlayer.playVideo();
       } else if (localVideoRef.current) {
+        if (localVideoRef.current.currentTime === 0 && currentTime > 0) {
+          localVideoRef.current.currentTime = currentTime;
+        }
         localVideoRef.current.play().catch(() => { });
       }
     }, 300);
   };
 
-  // ─── Render Panels for YouTube Metadata, Transcript, Playlist ──────
+    // ─── Render Panels for YouTube Metadata, Transcript, Playlist ──────
 
   const formatDuration = (totalSeconds) => {
     if (!totalSeconds) return '';
@@ -4161,8 +4431,8 @@ export default function VideoTracker() {
                           }`}>
                           Your<br />Study<br />Coins
                         </div>
-                        <div className="text-xl leading-none drop-shadow-xs">
-                          🪙
+                        <div className="w-6 h-6 flex items-center justify-center">
+                          <img src={coinIcon} alt="Coins" className="w-5 h-5 object-contain select-none" />
                         </div>
                       </div>
 
@@ -5294,9 +5564,11 @@ export default function VideoTracker() {
                 <button
                   onClick={() => {
                     setShowTimerPopup(false);
-                    setVideoId(null);
-                    setLocalVideoFile(null);
-                    setLocalVideoObjectUrl(null);
+                    if (!hasPlaybackStarted && sessionPlayedSeconds === 0 && currentTime === 0) {
+                      setVideoId(null);
+                      setLocalVideoFile(null);
+                      setLocalVideoObjectUrl(null);
+                    }
                     setIsFocusTimerPopupMaximized(false);
                   }}
                   style={{
@@ -5817,8 +6089,8 @@ export default function VideoTracker() {
 
               </div>
 
-              {/* 3. Action Buttons: Stop & Save and Reset player at bottom-left */}
-              <div className="flex items-center justify-start gap-3 pt-1">
+              {/* 3. Action Buttons: Stop & Save, Reset player, and Focus Timer button at bottom-left */}
+              <div className="flex flex-wrap items-center justify-start gap-3 pt-1">
                 <button
                   type="button"
                   onClick={() => handleStopSave(false)}
@@ -5840,6 +6112,24 @@ export default function VideoTracker() {
                   <span className="text-sm">⟲</span>
                   <span>Reset player</span>
                 </button>
+                {Boolean(videoId || localVideoFile || localVideoObjectUrl) &&
+                  (!focusRemaining || focusRemaining <= 0) &&
+                  !isVideoEnded &&
+                  (!videoMeta?.duration || currentTime < videoMeta.duration - 2) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowTimerPopup(true)}
+                      className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 border shadow-sm ${
+                        isDark
+                          ? "bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white border-indigo-500/40 shadow-indigo-500/25"
+                          : "bg-[#1b3f30] hover:bg-[#143024] text-white border-[#1b3f30] shadow-emerald-950/20"
+                      }`}
+                      title="Set a new focus timer and continue study session"
+                    >
+                      <span>⏱️</span>
+                      <span>Focus Timer</span>
+                    </button>
+                )}
               </div>
 
             </div>
@@ -6002,6 +6292,7 @@ export default function VideoTracker() {
                       }
                     }}
                     onPlaying={() => {
+                      setIsVideoEnded(false);
                       setIsPlaying(true);
                       startPolling();
                     }}
@@ -6011,6 +6302,7 @@ export default function VideoTracker() {
                     }}
                     onEnded={() => {
                       isVideoEndingRef.current = true;
+                      setIsVideoEnded(true);
                       setIsPlaying(false);
                       stopPolling();
                       if (sessionPlayedSeconds >= 5) {
@@ -6807,7 +7099,8 @@ export default function VideoTracker() {
                     : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
                 }`}
               >
-                View Watch History →
+                <img src={watchHistoryIcon} alt="Watch History" className="w-4 h-4 object-contain inline-block select-none" />
+                <span>View Watch History →</span>
               </button>
 
               {/* Slider Arrow Buttons */}
@@ -7041,7 +7334,8 @@ export default function VideoTracker() {
                               : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                             }`}
                         >
-                          📄 View PDF
+                          <img src={viewPdfIcon} alt="View PDF" className="w-3.5 h-3.5 object-contain inline-block" />
+                          <span>View PDF</span>
                         </button>
                         <button
                           onClick={(e) => {
@@ -7063,7 +7357,8 @@ export default function VideoTracker() {
                               : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                             }`}
                         >
-                          📥 Download PDF
+                          <img src={downloadIcon} alt="Download PDF" className="w-3.5 h-3.5 object-contain inline-block" />
+                          <span>Download PDF</span>
                         </button>
                       </div>
                     </div>
@@ -7293,8 +7588,9 @@ export default function VideoTracker() {
               }}
             >
               <div>
-                <h3 style={{ margin: "0 0 2px 0", fontSize: "1.2rem", fontWeight: "700" }}>
-                  📜 Study Video Watch History
+                <h3 style={{ margin: "0 0 2px 0", fontSize: "1.2rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <img src={watchHistoryIcon} alt="Watch History" style={{ width: "22px", height: "22px", objectFit: "contain" }} />
+                  <span>Study Video Watch History</span>
                 </h3>
                 <p style={{ margin: 0, fontSize: "0.82rem", opacity: 0.9 }}>
                   All saved video sessions & study stats
@@ -7543,7 +7839,8 @@ export default function VideoTracker() {
                                     : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                                   }`}
                               >
-                                📄 View PDF
+                                <img src={viewPdfIcon} alt="View PDF" className="w-3.5 h-3.5 object-contain inline-block" />
+                                <span>View PDF</span>
                               </button>
                               <button
                                 onClick={(e) => {
@@ -7565,7 +7862,8 @@ export default function VideoTracker() {
                                     : "bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed"
                                   }`}
                               >
-                                📥 Download PDF
+                                <img src={downloadIcon} alt="Download PDF" className="w-3.5 h-3.5 object-contain inline-block" />
+                                <span>Download PDF</span>
                               </button>
                             </div>
                           </div>
@@ -7861,9 +8159,13 @@ export default function VideoTracker() {
                   fontWeight: "600",
                   color: selectedNote ? "#4f46e5" : "#9ca3af",
                   cursor: selectedNote ? "pointer" : "not-allowed",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
-                📄 View PDF
+                <img src={viewPdfIcon} alt="View PDF" style={{ width: "16px", height: "16px", objectFit: "contain" }} />
+                <span>View PDF</span>
               </button>
               <button
                 onClick={(e) => {
@@ -7880,9 +8182,13 @@ export default function VideoTracker() {
                   fontWeight: "500",
                   color: selectedNote ? "#ffffff" : "#9ca3af",
                   cursor: selectedNote ? "pointer" : "not-allowed",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
                 }}
               >
-                📥 Download PDF
+                <img src={downloadIcon} alt="Download PDF" style={{ width: "16px", height: "16px", objectFit: "contain" }} />
+                <span>Download PDF</span>
               </button>
               <button
                 onClick={() => setShowNoteModal(false)}

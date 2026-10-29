@@ -4,6 +4,9 @@ import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
+import savedReportsIcon from "../assets/icons/saved monitoring and focus reports.png";
+import viewPdfIcon from "../assets/icons/view pdf.png";
+import downloadIcon from "../assets/icons/download.png";
 
 const Analytics = () => {
   const { theme } = useAppContext();
@@ -82,7 +85,7 @@ const Analytics = () => {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
             <div>
               <h2 className="text-xl sm:text-2xl font-black mb-1 flex items-center gap-2.5">
-                <span className="text-2xl sm:text-3xl">📑</span>
+                <img src={savedReportsIcon} alt="Saved Reports" className="w-8 h-8 object-contain select-none" />
                 <span className={isDark ? "text-white" : "text-slate-900"}>
                   Saved Monitoring & Focus Reports
                 </span>
@@ -114,7 +117,9 @@ const Analytics = () => {
           {/* Empty State */}
           {!loading && reports.length === 0 && (
             <div className="text-center py-20 px-4">
-              <span className="text-5xl mb-3 block">📑</span>
+              <div className="flex justify-center mb-3">
+                <img src={savedReportsIcon} alt="Saved Reports" className="w-16 h-16 object-contain select-none" />
+              </div>
               <p className="text-base font-bold mb-1">No saved reports found yet.</p>
               <p className={`text-xs sm:text-sm max-w-md mx-auto mb-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 When you export or download reports from your Monitoring Dashboard, they will automatically appear here.
@@ -183,7 +188,7 @@ const Analytics = () => {
                               : "bg-[#eaf3ee] text-[#1b3f30] border border-[#1b3f30]/30 hover:bg-[#d4e7dd]"
                           }`}
                         >
-                          <span>👁️</span>
+                          <img src={viewPdfIcon} alt="View PDF" className="w-3.5 h-3.5 object-contain" />
                           <span>View PDF</span>
                         </a>
                         <a
@@ -195,7 +200,7 @@ const Analytics = () => {
                               : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
                           }`}
                         >
-                          <span>⬇️</span>
+                          <img src={downloadIcon} alt="Download" className="w-3.5 h-3.5 object-contain" />
                           <span>Download</span>
                         </a>
                       </div>

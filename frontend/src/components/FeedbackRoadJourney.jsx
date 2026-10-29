@@ -193,161 +193,174 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     };
   }, []);
 
-  // Geometry Constants
-  const R = 45; // Smooth rounded 90-degree corner radius
-  const Y_TOP = 75;
-  const Y_BOTTOM = 250;
-  const ROAD_CANVAS_HEIGHT = 510;
+  // Geometry Constants for Curved Winding Highway
+  const Y_TOP = 205;
+  const Y_BOTTOM = 385;
+  const R = 50; // Smooth 90-degree corner radius
+  const ROAD_CANVAS_HEIGHT = 600;
+  const CARD_WIDTH = 210;
+  const CARD_HEIGHT = 165;
+  const CARD_GAP = 190; // Distance between card centers on the same horizontal segment
 
-  // Compute road path & milestone positions for all feedbacks (defaults + newly added)
-  const { pathD, milestonePositions, totalTrackWidth, endBadgePos } = useMemo(() => {
-    let x = 30;
-    const path = [`M 0 ${Y_BOTTOM}`, `L ${x} ${Y_BOTTOM}`];
+  // Auto-scroll & interaction state
+  const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+  isPausedRef.current = isPaused;
+
+  const isUserInteractingRef = useRef(false);
+  const resumeTimeoutRef = useRef(null);
+  const scrollSubpixelRef = useRef(0);
+
+  // Compute curved road path & milestone positions (alternating above and below, duplicated for seamless loop)
+  const {
+    displayPositions,
+    cycleWidth,
+    totalTrackWidth,
+    pathD,
+    startBadges,
+    loopBadges,
+  } = useMemo(() => {
+    // Generate curved roadmap for 2 complete cycles of feedbacksList
+    const doubled = [...feedbacksList, ...feedbacksList];
     const positions = [];
+    const path = [];
+    const starts = [];
+    const loops = [];
 
-    let idx = 0;
-    let endX = x;
-    let endY = Y_BOTTOM;
+    let currentX = 0;
+    let currentY = Y_TOP;
+    let isTopLevel = true;
+    let itemIdx = 0;
+    let globalCardIdx = 0;
+    let cycle1Width = 0;
 
-    while (idx < feedbacksList.length) {
-      // Phase 1: Lower horizontal road with up to 2 milestones
-      const x1 = x + 130;
-      positions.push({
-        idx,
-        roadX: x1,
-        roadY: Y_BOTTOM,
-        cardX: x1 - 102,
-        cardY: 274,
-        stemType: "down",
-        pinDir: "down",
-        pinX: x1,
-        pinY: Y_BOTTOM - 2,
-      });
-      idx++;
-      if (idx >= feedbacksList.length) {
-        endX = x1 + 180;
-        endY = Y_BOTTOM;
-        path.push(`L ${endX} ${Y_BOTTOM}`);
-        break;
+    path.push(`M 0 ${Y_TOP}`);
+    currentX = 30;
+    path.push(`L ${currentX} ${Y_TOP}`);
+
+    // Place items along curved road
+    while (itemIdx < doubled.length) {
+      const segStartX = currentX;
+      const segLevelY = currentY;
+
+      // START badge at beginning of cycle 1 and cycle 2
+      if (itemIdx === 0) {
+        starts.push({ x: segStartX + 10, y: segLevelY });
+      } else if (itemIdx === feedbacksList.length) {
+        starts.push({ x: segStartX + 10, y: segLevelY });
       }
 
-      const x2 = x + 380;
-      positions.push({
-        idx,
-        roadX: x2,
-        roadY: Y_BOTTOM,
-        cardX: x2 - 102,
-        cardY: 274,
-        stemType: "down",
-        pinDir: "down",
-        pinX: x2,
-        pinY: Y_BOTTOM - 2,
-      });
-      idx++;
-      if (idx >= feedbacksList.length) {
-        endX = x2 + 180;
-        endY = Y_BOTTOM;
-        path.push(`L ${endX} ${Y_BOTTOM}`);
-        break;
+      // We place up to 3 cards per segment
+      const cardsInSeg = Math.min(3, doubled.length - itemIdx);
+      const segPositions = [];
+
+      for (let c = 0; c < cardsInSeg; c++) {
+        const item = doubled[itemIdx];
+        const isTop = globalCardIdx % 2 === 1; // Strict alternation 0=Bottom, 1=Top, 2=Bottom, 3=Top...
+        const roadX = segStartX + 130 + c * CARD_GAP;
+        const cardX = roadX - CARD_WIDTH / 2;
+        // If top: sits above road level; if bottom: sits below road level
+        const cardY = isTop ? segLevelY - 21 - 14 - CARD_HEIGHT : segLevelY + 21 + 14;
+
+        segPositions.push({
+          item,
+          originalIdx: itemIdx % feedbacksList.length,
+          displayId: `${item.id}-dup-${itemIdx}`,
+          isTop,
+          roadX,
+          roadY: segLevelY,
+          cardX,
+          cardY,
+          pinX: roadX,
+          pinY: segLevelY,
+        });
+
+        itemIdx++;
+        globalCardIdx++;
       }
 
-      // Curve UP to top horizontal
-      const turn1X = x + 500;
-      path.push(`L ${turn1X} ${Y_BOTTOM}`);
-      path.push(`A ${R} ${R} 0 0 0 ${turn1X + R} ${Y_BOTTOM - R}`);
-      path.push(`L ${turn1X + R} ${Y_TOP + R}`);
-      path.push(`A ${R} ${R} 0 0 1 ${turn1X + 2 * R} ${Y_TOP}`);
+      positions.push(...segPositions);
 
-      // Phase 2: Top horizontal road with 1 milestone
-      const topStart = turn1X + 2 * R;
-      const topEnd = topStart + 330;
-      const x3 = topStart + 165;
-      positions.push({
-        idx,
-        roadX: x3,
-        roadY: Y_TOP,
-        cardX: x3 - 102,
-        cardY: 98,
-        stemType: "top_hanging",
-        pinDir: "down",
-        pinX: x3,
-        pinY: Y_TOP - 2,
-      });
-      idx++;
-      if (idx >= feedbacksList.length) {
-        path.push(`L ${topEnd} ${Y_TOP}`);
-        path.push(`A ${R} ${R} 0 0 1 ${topEnd + R} ${Y_TOP + R}`);
-        path.push(`L ${topEnd + R} ${Y_BOTTOM - R}`);
-        path.push(`A ${R} ${R} 0 0 0 ${topEnd + 2 * R} ${Y_BOTTOM}`);
-        endX = topEnd + 2 * R + 140;
-        endY = Y_BOTTOM;
-        path.push(`L ${endX} ${Y_BOTTOM}`);
-        break;
+      // Horizontal segment road length
+      const segContentWidth = 130 + (cardsInSeg - 1) * CARD_GAP + 130;
+      const segEndX = segStartX + segContentWidth;
+      path.push(`L ${segEndX} ${segLevelY}`);
+
+      if (itemIdx === feedbacksList.length) {
+        cycle1Width = segEndX + 2 * R;
+        loops.push({ x: segEndX - 35, y: segLevelY });
+      } else if (itemIdx >= doubled.length) {
+        loops.push({ x: segEndX - 35, y: segLevelY });
       }
 
-      // Curve DOWN to vertical drop
-      path.push(`L ${topEnd} ${Y_TOP}`);
-      path.push(`A ${R} ${R} 0 0 1 ${topEnd + R} ${Y_TOP + R}`);
-      path.push(`L ${topEnd + R} ${Y_BOTTOM - R}`);
-
-      // Phase 3: Vertical segment with 2 side milestones
-      const vertX = topEnd + R;
-      const y4 = Y_TOP + R + 30;
-      positions.push({
-        idx,
-        roadX: vertX,
-        roadY: y4,
-        cardX: vertX + 28,
-        cardY: y4 - 45,
-        stemType: "right",
-        pinDir: "left",
-        pinX: vertX + 2,
-        pinY: y4,
-      });
-      idx++;
-      if (idx >= feedbacksList.length) {
-        path.push(`A ${R} ${R} 0 0 0 ${vertX + R} ${Y_BOTTOM}`);
-        endX = vertX + R + 140;
-        endY = Y_BOTTOM;
-        path.push(`L ${endX} ${Y_BOTTOM}`);
-        break;
+      // If more items remain, curve to the other level
+      if (itemIdx < doubled.length) {
+        if (isTopLevel) {
+          // Curve DOWN from Y_TOP to Y_BOTTOM
+          path.push(`A ${R} ${R} 0 0 1 ${segEndX + R} ${Y_TOP + R}`);
+          path.push(`L ${segEndX + R} ${Y_BOTTOM - R}`);
+          path.push(`A ${R} ${R} 0 0 0 ${segEndX + 2 * R} ${Y_BOTTOM}`);
+          currentX = segEndX + 2 * R;
+          currentY = Y_BOTTOM;
+          isTopLevel = false;
+        } else {
+          // Curve UP from Y_BOTTOM to Y_TOP
+          path.push(`A ${R} ${R} 0 0 0 ${segEndX + R} ${Y_BOTTOM - R}`);
+          path.push(`L ${segEndX + R} ${Y_TOP + R}`);
+          path.push(`A ${R} ${R} 0 0 1 ${segEndX + 2 * R} ${Y_TOP}`);
+          currentX = segEndX + 2 * R;
+          currentY = Y_TOP;
+          isTopLevel = true;
+        }
+      } else {
+        currentX = segEndX + 160;
+        path.push(`L ${currentX} ${segLevelY}`);
       }
-
-      const y5 = Y_TOP + R + 105;
-      positions.push({
-        idx,
-        roadX: vertX,
-        roadY: y5,
-        cardX: vertX - 232,
-        cardY: y5 - 45,
-        stemType: "left",
-        pinDir: "right",
-        pinX: vertX - 2,
-        pinY: y5,
-      });
-      idx++;
-      if (idx >= feedbacksList.length) {
-        path.push(`A ${R} ${R} 0 0 0 ${vertX + R} ${Y_BOTTOM}`);
-        endX = vertX + R + 140;
-        endY = Y_BOTTOM;
-        path.push(`L ${endX} ${Y_BOTTOM}`);
-        break;
-      }
-
-      // Curve RIGHT back to bottom
-      path.push(`A ${R} ${R} 0 0 0 ${vertX + R} ${Y_BOTTOM}`);
-      x = vertX + R;
-      endX = x + 140;
-      endY = Y_BOTTOM;
     }
 
+    const calculatedCycleWidth = cycle1Width || currentX / 2;
+
     return {
+      displayPositions: positions,
+      cycleWidth: calculatedCycleWidth,
+      totalTrackWidth: currentX + 80,
       pathD: path.join(" "),
-      milestonePositions: positions,
-      totalTrackWidth: endX + 80,
-      endBadgePos: { x: endX - 35, y: endY },
+      startBadges: starts,
+      loopBadges: loops,
     };
-  }, [feedbacksList.length, R, Y_BOTTOM, Y_TOP]);
+  }, [feedbacksList]);
+
+  // Continuous loop auto-scroll (slow, smooth, seamless wrap-around)
+  useEffect(() => {
+    let animId;
+    const speed = 0.65; // ~39px per second at 60fps - gentle reading speed
+
+    const step = () => {
+      const el = viewportRef.current;
+      if (el && !isPausedRef.current && !isUserInteractingRef.current) {
+        scrollSubpixelRef.current += speed;
+        if (scrollSubpixelRef.current >= 1) {
+          const moveBy = Math.floor(scrollSubpixelRef.current);
+          scrollSubpixelRef.current -= moveBy;
+
+          el.scrollLeft += moveBy;
+          // Seamless infinite wrap-around
+          if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
+            el.scrollLeft -= cycleWidth;
+          }
+        }
+      }
+      animId = requestAnimationFrame(step);
+    };
+
+    animId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(animId);
+  }, [cycleWidth]);
+
+  // Toggle pause on tap/click
+  const handleTogglePause = () => {
+    setIsPaused((prev) => !prev);
+  };
 
   // Sync scroll state on viewport scroll
   const handleScrollUpdate = useCallback(() => {
@@ -355,8 +368,8 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     if (!el) return;
 
     const maxScroll = el.scrollWidth - el.clientWidth;
-    setCanScrollLeft(el.scrollLeft > 10);
-    setCanScrollRight(el.scrollLeft < maxScroll - 10);
+    setCanScrollLeft(true);
+    setCanScrollRight(true);
 
     if (maxScroll > 0) {
       setScrollProgress(el.scrollLeft / maxScroll);
@@ -379,13 +392,18 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     if (!el) return;
 
     if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      const maxScroll = el.scrollWidth - el.clientWidth;
-      const atStart = el.scrollLeft <= 5;
-      const atEnd = el.scrollLeft >= maxScroll - 5;
+      e.preventDefault();
+      isUserInteractingRef.current = true;
+      if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+      resumeTimeoutRef.current = setTimeout(() => {
+        isUserInteractingRef.current = false;
+      }, 1800);
 
-      if ((e.deltaY > 0 && !atEnd) || (e.deltaY < 0 && !atStart)) {
-        e.preventDefault();
-        el.scrollLeft += e.deltaY * 1.5;
+      el.scrollLeft += e.deltaY * 1.5;
+      if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
+        el.scrollLeft -= cycleWidth;
+      } else if (el.scrollLeft <= 0 && cycleWidth > 0) {
+        el.scrollLeft += cycleWidth;
       }
     }
   };
@@ -399,6 +417,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     const el = viewportRef.current;
     if (!el) return;
     isDraggingRef.current = true;
+    isUserInteractingRef.current = true;
     startXRef.current = e.pageX - el.offsetLeft;
     startScrollLeftRef.current = el.scrollLeft;
   };
@@ -411,30 +430,63 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     const x = e.pageX - el.offsetLeft;
     const walk = (x - startXRef.current) * 1.6;
     el.scrollLeft = startScrollLeftRef.current - walk;
+
+    if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
+      el.scrollLeft -= cycleWidth;
+      startXRef.current = x;
+      startScrollLeftRef.current = el.scrollLeft;
+    } else if (el.scrollLeft <= 0 && cycleWidth > 0) {
+      el.scrollLeft += cycleWidth;
+      startXRef.current = x;
+      startScrollLeftRef.current = el.scrollLeft;
+    }
   };
 
   const handleMouseUp = () => {
     isDraggingRef.current = false;
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    resumeTimeoutRef.current = setTimeout(() => {
+      isUserInteractingRef.current = false;
+    }, 1800);
   };
 
   // Button navigation helper (Left/Right)
   const scrollByDirection = (dir) => {
     const el = viewportRef.current;
     if (!el) return;
-    const step = el.clientWidth < 640 ? 260 : 360;
-    el.scrollBy({
-      left: dir === "next" ? step : -step,
+
+    isUserInteractingRef.current = true;
+    if (resumeTimeoutRef.current) clearTimeout(resumeTimeoutRef.current);
+    resumeTimeoutRef.current = setTimeout(() => {
+      isUserInteractingRef.current = false;
+    }, 2000);
+
+    const step = 360;
+    const newLeft = dir === "next" ? el.scrollLeft + step : el.scrollLeft - step;
+    el.scrollTo({
+      left: newLeft,
       behavior: "smooth",
     });
+
+    setTimeout(() => {
+      if (el.scrollLeft >= cycleWidth && cycleWidth > 0) {
+        el.scrollLeft -= cycleWidth;
+      } else if (el.scrollLeft <= 0 && cycleWidth > 0) {
+        el.scrollLeft += cycleWidth;
+      }
+    }, 400);
   };
 
   // Jump directly to milestone
   const scrollToMilestone = (milestoneIdx) => {
     const el = viewportRef.current;
-    const pos = milestonePositions[milestoneIdx];
-    if (!el || !pos) return;
+    if (!el) return;
 
-    const targetX = Math.max(0, pos.roadX - el.clientWidth / 2 + 100);
+    setIsPaused(true);
+    const targetPos = displayPositions.find((p) => p.originalIdx === milestoneIdx);
+    if (!targetPos) return;
+
+    const targetX = Math.max(0, targetPos.roadX - el.clientWidth / 2);
     el.scrollTo({
       left: targetX,
       behavior: "smooth",
@@ -535,41 +587,29 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
     }
   };
 
-  // Render a teardrop map pin
-  const renderPin = (item, pos) => {
-    const { pinDir, pinX, pinY } = pos;
+  // Render a teardrop map pin seated on the road
+  const renderPin = (pos) => {
+    const { item, pinX, pinY, isTop, displayId, originalIdx } = pos;
     const color = item.color || "#6366f1";
-
-    let rotation = 0;
-    let offsetX = 0;
-    let offsetY = 0;
-
-    if (pinDir === "down") {
-      rotation = 0;
-      offsetX = 0;
-      offsetY = -22;
-    } else if (pinDir === "left") {
-      rotation = 90;
-      offsetX = 22;
-      offsetY = 0;
-    } else if (pinDir === "right") {
-      rotation = -90;
-      offsetX = -22;
-      offsetY = 0;
-    }
+    // For top card, pin points UP towards the card (rotate 180)
+    // For bottom card, pin points DOWN towards the card (rotate 0)
+    const rotation = isTop ? 180 : 0;
 
     return (
       <g
-        key={`pin-${item.id}`}
+        key={`pin-${displayId}`}
         transform={`translate(${pinX}, ${pinY})`}
-        className="cursor-pointer transition-transform duration-300 hover:scale-110"
-        onClick={() => scrollToMilestone(pos.idx)}
+        className="cursor-pointer pointer-events-auto transition-opacity hover:opacity-90"
+        onClick={(e) => {
+          e.stopPropagation();
+          scrollToMilestone(originalIdx);
+        }}
       >
         {/* Pulsing subtle radar ring */}
-        <circle r="14" fill={color} opacity="0.18" className="animate-ping" />
+        <circle r="14" fill={color} opacity="0.22" className="animate-ping pointer-events-none" />
 
-        {/* Pin Body */}
-        <g transform={`translate(${offsetX}, ${offsetY}) rotate(${rotation})`}>
+        {/* Pin Body pointing towards card */}
+        <g transform={`rotate(${rotation}) translate(0, -22)`}>
           {/* Teardrop Pin Shape */}
           <path
             d="M 0 22 C -2 19 -16 4 -16 -8 A 16 16 0 1 1 16 -8 C 16 4 2 19 0 22 Z"
@@ -580,10 +620,10 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
           {/* White Inner Circle */}
           <circle cx="0" cy="-8" r="11" fill="#ffffff" />
 
-          {/* Avatar Clip or Initial/Badge text */}
+          {/* Avatar Clip or Initial/Badge text (kept upright) */}
           {item.avatar ? (
             <>
-              <clipPath id={`clip-scaled-${item.id}`}>
+              <clipPath id={`clip-scaled-${displayId}`}>
                 <circle cx="0" cy="-8" r="10" />
               </clipPath>
               <image
@@ -592,8 +632,9 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
                 y="-18"
                 width="20"
                 height="20"
-                clipPath={`url(#clip-scaled-${item.id})`}
+                clipPath={`url(#clip-scaled-${displayId})`}
                 preserveAspectRatio="xMidYMid slice"
+                transform={isTop ? "rotate(180 0 -8)" : undefined}
               />
             </>
           ) : (
@@ -604,6 +645,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
               fill={color}
               fontSize="8"
               fontWeight="bold"
+              transform={isTop ? "rotate(180 0 -7)" : undefined}
             >
               {item.badge || item.name?.charAt(0) || "★"}
             </text>
@@ -625,11 +667,28 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
 
       {/* Section Header */}
       <div className="text-center mb-4 w-full max-w-4xl mx-auto px-4">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full mb-2 border border-white/10 bg-white/5 backdrop-blur-md">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-xs uppercase tracking-wider font-semibold text-emerald-400">
-            Student Milestones ({feedbacksList.length})
-          </span>
+        <div className="flex items-center justify-center gap-2.5 mb-2 flex-wrap">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-white/10 bg-white/5 backdrop-blur-md">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs uppercase tracking-wider font-semibold text-emerald-400">
+              Student Milestones ({feedbacksList.length})
+            </span>
+          </div>
+
+          {/* Auto-scroll toggle pill */}
+          <button
+            type="button"
+            onClick={handleTogglePause}
+            className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-semibold backdrop-blur-md border transition-all duration-300 shadow-sm cursor-pointer ${
+              isPaused
+                ? "bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30 shadow-amber-500/10"
+                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30 shadow-emerald-500/10"
+            }`}
+            title={isPaused ? "Tap to play auto-scroll" : "Tap to pause auto-scroll"}
+          >
+            <span className={`w-2 h-2 rounded-full ${isPaused ? "bg-amber-400" : "bg-emerald-400 animate-ping"}`} />
+            <span>{isPaused ? "⏸ Paused (Tap to play)" : "▶ Auto-scrolling (Tap to pause)"}</span>
+          </button>
         </div>
         <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           Student's Feedback
@@ -645,14 +704,9 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
         <button
           type="button"
           onClick={() => scrollByDirection("prev")}
-          disabled={!canScrollLeft}
           aria-label="Previous Milestones"
           title="Previous (←)"
-          className={`absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-11 md:h-11 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer ${
-            !canScrollLeft
-              ? "opacity-25 cursor-not-allowed pointer-events-none"
-              : "hover:scale-110 active:scale-95 hover:border-purple-400/60"
-          } ${
+          className={`absolute left-0 sm:left-2 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-11 md:h-11 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer hover:scale-110 active:scale-95 hover:border-purple-400/60 ${
             theme === "dark"
               ? "bg-slate-900/80 border-white/20 text-white shadow-purple-500/10"
               : "bg-white/85 border-white text-slate-900 shadow-indigo-500/15"
@@ -667,14 +721,9 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
         <button
           type="button"
           onClick={() => scrollByDirection("next")}
-          disabled={!canScrollRight}
           aria-label="Next Milestones"
           title="Next (→)"
-          className={`absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-11 md:h-11 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer ${
-            !canScrollRight
-              ? "opacity-25 cursor-not-allowed pointer-events-none"
-              : "hover:scale-110 active:scale-95 hover:border-purple-400/60"
-          } ${
+          className={`absolute right-0 sm:right-2 top-1/2 -translate-y-1/2 z-30 w-10 h-10 md:w-11 md:h-11 rounded-2xl border backdrop-blur-xl flex items-center justify-center transition-all duration-300 shadow-xl cursor-pointer hover:scale-110 active:scale-95 hover:border-purple-400/60 ${
             theme === "dark"
               ? "bg-slate-900/80 border-white/20 text-white shadow-purple-500/10"
               : "bg-white/85 border-white text-slate-900 shadow-indigo-500/15"
@@ -685,7 +734,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
           </svg>
         </button>
 
-        {/* Scrollable Viewport (Smooth horizontal scroll left-to-right, hidden scrollbar) */}
+        {/* Scrollable Viewport (Smooth continuous loop scroll, hidden scrollbar) */}
         <div
           ref={viewportRef}
           onWheel={handleWheel}
@@ -693,6 +742,7 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onClick={handleTogglePause}
           className="w-full overflow-x-auto overflow-y-hidden cursor-grab active:cursor-grabbing bg-transparent"
           style={{
             height: `${ROAD_CANVAS_HEIGHT}px`,
@@ -721,23 +771,23 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
                 </filter>
               </defs>
 
-              {/* 1. Road Outer Shadow / Curb */}
+              {/* 1. Road Outer Shadow / Curb - Broad */}
               <path
                 d={pathD}
                 fill="none"
                 stroke={theme === "dark" ? "#1a202c" : "#94a3b8"}
-                strokeWidth="38"
+                strokeWidth="50"
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 filter="url(#road-subtle-glow)"
               />
 
-              {/* 2. Main Road Surface (Thick Winding Ribbon) */}
+              {/* 2. Main Road Surface (Thick Central Ribbon) - Broad */}
               <path
                 d={pathD}
                 fill="none"
                 stroke={theme === "dark" ? "#2d3748" : "#cbd5e1"}
-                strokeWidth="32"
+                strokeWidth="42"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -747,126 +797,140 @@ const FeedbackRoadJourney = ({ theme = "dark", feedbacks: propFeedbacks, onOpenA
                 d={pathD}
                 fill="none"
                 stroke="#ffffff"
-                strokeWidth="2.5"
-                strokeDasharray="9 9"
+                strokeWidth="3"
+                strokeDasharray="10 10"
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity="0.9"
+                opacity="0.95"
               />
 
-              {/* START Badge */}
-              <g transform={`translate(16, ${Y_BOTTOM})`}>
-                <rect
-                  x="-8"
-                  y="-12"
-                  width="52"
-                  height="24"
-                  rx="12"
-                  fill={theme === "dark" ? "#1e293b" : "#ffffff"}
-                  stroke="#10b981"
-                  strokeWidth="1.5"
-                  filter="drop-shadow(0 2px 4px rgba(0,0,0,0.3))"
-                />
-                <circle cx="2" cy="0" r="3" fill="#10b981" />
-                <text
-                  x="12"
-                  y="3"
-                  fill={theme === "dark" ? "#ffffff" : "#0f172a"}
-                  fontSize="8.5"
-                  fontWeight="bold"
-                  letterSpacing="0.5"
-                >
-                  START
-                </text>
-              </g>
+              {/* Connecting Dotted Stems from Road to Cards */}
+              {displayPositions.map((pos) => {
+                const item = pos.item;
+                const y1 = pos.isTop ? pos.roadY - 21 : pos.roadY + 21;
+                const y2 = pos.isTop ? pos.cardY + CARD_HEIGHT : pos.cardY;
 
-              {/* FINISH Badge (Dynamically placed at the end of the completed road) */}
-              <g transform={`translate(${endBadgePos.x}, ${endBadgePos.y})`}>
-                <rect
-                  x="-8"
-                  y="-12"
-                  width="52"
-                  height="24"
-                  rx="12"
-                  fill={theme === "dark" ? "#1e293b" : "#ffffff"}
-                  stroke="#f59e0b"
-                  strokeWidth="1.5"
-                  filter="drop-shadow(0 2px 4px rgba(0,0,0,0.3))"
-                />
-                <text
-                  x="18"
-                  y="3"
-                  textAnchor="middle"
-                  fill={theme === "dark" ? "#ffffff" : "#0f172a"}
-                  fontSize="9"
-                  fontWeight="bold"
-                >
-                  🏁 END
-                </text>
-              </g>
+                return (
+                  <line
+                    key={`stem-${pos.displayId}`}
+                    x1={pos.roadX}
+                    y1={y1}
+                    x2={pos.roadX}
+                    y2={y2}
+                    stroke={item.color || "#6366f1"}
+                    strokeWidth="2.5"
+                    strokeDasharray="3 3"
+                    strokeLinecap="round"
+                    opacity="0.9"
+                  />
+                );
+              })}
+
+              {/* START Badges */}
+              {startBadges.map((b, bIdx) => (
+                <g key={`start-badge-${bIdx}`} transform={`translate(${b.x}, ${b.y})`}>
+                  <rect
+                    x="-8"
+                    y="-13"
+                    width="54"
+                    height="26"
+                    rx="13"
+                    fill={theme === "dark" ? "#1e293b" : "#ffffff"}
+                    stroke="#10b981"
+                    strokeWidth="1.5"
+                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.3))"
+                  />
+                  <circle cx="2" cy="0" r="3.5" fill="#10b981" />
+                  <text
+                    x="12"
+                    y="3.5"
+                    fill={theme === "dark" ? "#ffffff" : "#0f172a"}
+                    fontSize="8.5"
+                    fontWeight="bold"
+                    letterSpacing="0.5"
+                  >
+                    START
+                  </text>
+                </g>
+              ))}
+
+              {/* FINISH / LOOP Badges */}
+              {loopBadges.map((b, bIdx) => (
+                <g key={`loop-badge-${bIdx}`} transform={`translate(${b.x}, ${b.y})`}>
+                  <rect
+                    x="-8"
+                    y="-13"
+                    width="56"
+                    height="26"
+                    rx="13"
+                    fill={theme === "dark" ? "#1e293b" : "#ffffff"}
+                    stroke="#f59e0b"
+                    strokeWidth="1.5"
+                    filter="drop-shadow(0 2px 4px rgba(0,0,0,0.3))"
+                  />
+                  <text
+                    x="20"
+                    y="3.5"
+                    textAnchor="middle"
+                    fill={theme === "dark" ? "#ffffff" : "#0f172a"}
+                    fontSize="9"
+                    fontWeight="bold"
+                  >
+                    🏁 END
+                  </text>
+                </g>
+              ))}
 
               {/* Map Pin Markers attached directly to the road */}
-              {feedbacksList.map((f, idx) => {
-                const pos = milestonePositions[idx];
-                if (!pos) return null;
-                return renderPin(f, pos);
-              })}
+              {displayPositions.map((pos) => renderPin(pos))}
             </svg>
 
-            {/* HTML Feedback Cards with full bottom padding (no cut-off) */}
-            {feedbacksList.map((item, idx) => {
-              const pos = milestonePositions[idx];
-              if (!pos) return null;
-
+            {/* HTML Feedback Cards - Alternating Top & Bottom */}
+            {displayPositions.map((pos) => {
+              const item = pos.item;
               const starCount = Math.max(1, Math.min(5, Number(item.stars) || 5));
 
               return (
                 <div
-                  key={`card-${item.id}`}
-                  className="absolute z-20 group transition-all duration-300 pointer-events-auto"
+                  key={`card-${pos.displayId}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsPaused((prev) => !prev);
+                  }}
+                  onMouseEnter={() => {
+                    isUserInteractingRef.current = true;
+                  }}
+                  onMouseLeave={() => {
+                    if (!isDraggingRef.current) {
+                      isUserInteractingRef.current = false;
+                    }
+                  }}
+                  className="absolute z-20 group transition-all duration-300 pointer-events-auto cursor-pointer"
                   style={{
                     left: `${pos.cardX}px`,
                     top: `${pos.cardY}px`,
-                    width: "205px",
+                    width: `${CARD_WIDTH}px`,
                   }}
+                  title="Tap to pause/resume auto-scroll"
                 >
-                  {/* Dotted connecting stem */}
-                  {pos.stemType === "down" && (
-                    <div
-                      className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-0.5 h-2.5 border-l-2 border-dashed"
-                      style={{ borderColor: item.color }}
-                    />
-                  )}
-                  {pos.stemType === "top_hanging" && (
-                    <div
-                      className="absolute -top-2.5 left-1/2 -translate-x-1/2 w-0.5 h-2.5 border-l-2 border-dashed"
-                      style={{ borderColor: item.color }}
-                    />
-                  )}
-                  {pos.stemType === "right" && (
-                    <div
-                      className="absolute top-1/2 -left-2.5 -translate-y-1/2 h-0.5 w-2.5 border-t-2 border-dashed"
-                      style={{ borderColor: item.color }}
-                    />
-                  )}
-                  {pos.stemType === "left" && (
-                    <div
-                      className="absolute top-1/2 -right-2.5 -translate-y-1/2 h-0.5 w-2.5 border-t-2 border-dashed"
-                      style={{ borderColor: item.color }}
-                    />
-                  )}
-
                   {/* Card Body: Glassmorphism directly over homepage background */}
                   <div
                     className={`relative p-3.5 rounded-2xl backdrop-blur-xl transition-all duration-300 transform group-hover:-translate-y-1 shadow-lg border ${
                       theme === "dark"
-                        ? "bg-slate-900/80 hover:bg-slate-900/90 border-white/15 hover:border-purple-400/50 shadow-black/40 text-white"
-                        : "bg-white/80 hover:bg-white border-white/80 shadow-slate-300/60 text-slate-800"
+                        ? "bg-slate-900/85 hover:bg-slate-900/95 border-white/15 hover:border-purple-400/50 shadow-black/40 text-white"
+                        : "bg-white/85 hover:bg-white border-white/80 shadow-slate-300/60 text-slate-800"
                     }`}
-                    style={{
-                      borderTopColor: item.color,
-                      borderTopWidth: "2.5px",
-                    }}
+                    style={
+                      pos.isTop
+                        ? {
+                            borderBottomColor: item.color,
+                            borderBottomWidth: "3px",
+                          }
+                        : {
+                            borderTopColor: item.color,
+                            borderTopWidth: "3px",
+                          }
+                    }
                   >
                     {/* Header: Tag & Stars */}
                     <div className="flex items-center justify-between gap-1 mb-1.5">

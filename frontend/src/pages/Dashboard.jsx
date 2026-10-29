@@ -4,6 +4,9 @@ import { useAppContext } from "../context/AppContext";
 import API_BASE from "../services/apiBase";
 import Navbar from "../components/Navbar";
 import PageIntroCard from "../components/PageIntroCard";
+import totalTabSwitchesIcon from "../assets/icons/total tab switches.png";
+import switchesTodayIcon from "../assets/icons/switches today.png";
+import videosIcon from "../assets/icons/videos.png";
 import { eachDayOfInterval, format, startOfMonth, endOfMonth } from "date-fns";
 
 const MONTHS = [
@@ -335,7 +338,7 @@ const Dashboard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase opacity-75">
                 Total Tab Switches
               </span>
-              <span className="text-2xl select-none">🔁</span>
+              <img src={totalTabSwitchesIcon} alt="Total Tab Switches" className="w-7 h-7 object-contain select-none" />
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black tracking-tight text-purple-600 dark:text-purple-400">
@@ -359,7 +362,7 @@ const Dashboard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase opacity-75">
                 Switches Today
               </span>
-              <span className="text-2xl select-none">⚡</span>
+              <img src={switchesTodayIcon} alt="Switches Today" className="w-7 h-7 object-contain select-none" />
             </div>
             <div>
               <div className={`text-2xl sm:text-3xl font-black tracking-tight ${
@@ -387,7 +390,7 @@ const Dashboard = () => {
               <span className="text-xs sm:text-sm font-bold tracking-tight uppercase opacity-75">
                 Videos Watched
               </span>
-              <span className="text-2xl select-none">🎬</span>
+              <img src={videosIcon} alt="Videos Watched" className="w-7 h-7 object-contain select-none" />
             </div>
             <div>
               <div className="text-2xl sm:text-3xl font-black tracking-tight text-blue-600 dark:text-blue-400">

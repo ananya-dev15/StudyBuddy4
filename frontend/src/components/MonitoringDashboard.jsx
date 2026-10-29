@@ -5,6 +5,20 @@ import API_BASE from "../services/apiBase";
 import ThemeToggle from "./ThemeToggle";
 import Navbar from "./Navbar";
 import PageIntroCard from "./PageIntroCard";
+import videoTrackerIcon from "../assets/icons/video tracker.png";
+import monitoringDashboardIcon from "../assets/icons/monitoring dashboard.png";
+import totalRecordsIcon from "../assets/icons/total records.png";
+import timeFocusedIcon from "../assets/icons/time focused.png";
+import averageFocusScoreIcon from "../assets/icons/average focus score.png";
+import overallAverageFocusScoreIcon from "../assets/icons/overall average focus score.png";
+import distractionBreakdownIcon from "../assets/icons/distraction breakdown.png";
+import phoneDistractionIcon from "../assets/icons/phone distraction.png";
+import exportReportIcon from "../assets/icons/export report.png";
+import comparisonIcon from "../assets/icons/comparison.png";
+import historyTrendsIcon from "../assets/icons/history trends.png";
+import rawLogsIcon from "../assets/icons/raw logs.png";
+import clearLocalLogsIcon from "../assets/icons/clear local logs.png";
+import exportCsvIcon from "../assets/icons/export csv.png";
 import { jsPDF } from "jspdf";
 import {
   getAvailableDates,
@@ -507,13 +521,34 @@ const MonitoringDashboard = () => {
   };
 
   const tabs = [
-    { label: "Overview", icon: "📊" },
-    { label: "Distraction Breakdown", icon: "📈" },
-    { label: "Phone Timeline", icon: "📱" },
-    { label: "Export Reports", icon: "📅" },
-    { label: "Comparison", icon: "🔄" },
-    { label: "History Trend", icon: "📊" },
-    { label: "Raw Log", icon: "🗂️" },
+    {
+      label: "Overview",
+      icon: <img src={monitoringDashboardIcon} alt="Overview" className="w-4 h-4 object-contain select-none" />,
+    },
+    {
+      label: "Distraction Breakdown",
+      icon: <img src={distractionBreakdownIcon} alt="Distraction Breakdown" className="w-4 h-4 object-contain select-none" />,
+    },
+    {
+      label: "Phone Timeline",
+      icon: <img src={phoneDistractionIcon} alt="Phone Timeline" className="w-4 h-4 object-contain select-none" />,
+    },
+    {
+      label: "Export Reports",
+      icon: <img src={exportReportIcon} alt="Export Reports" className="w-4 h-4 object-contain select-none" />,
+    },
+    {
+      label: "Comparison",
+      icon: <img src={comparisonIcon} alt="Comparison" className="w-4 h-4 object-contain select-none" />,
+    },
+    {
+      label: "History Trend",
+      icon: <img src={historyTrendsIcon} alt="History Trend" className="w-4 h-4 object-contain select-none" />,
+    },
+    {
+      label: "Raw Log",
+      icon: <img src={rawLogsIcon} alt="Raw Log" className="w-4 h-4 object-contain select-none" />,
+    },
   ];
 
   return (
@@ -608,7 +643,12 @@ const MonitoringDashboard = () => {
                   : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
               }`}
             >
-              <span>🎥</span>
+              <img
+                src={videoTrackerIcon}
+                alt="Video Tracker"
+                className="w-5 h-5 object-contain select-none"
+                draggable={false}
+              />
               <span>Start Camera Analysis</span>
             </Link>
           </div>
@@ -630,7 +670,7 @@ const MonitoringDashboard = () => {
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-purple-400">Total Records</span>
-                  <span className="text-2xl">📝</span>
+                  <img src={totalRecordsIcon} alt="Total Records" className="w-7 h-7 object-contain select-none" />
                 </div>
                 <div className="text-3xl sm:text-4xl font-extrabold">{kpis.total}</div>
                 <div className="text-xs text-slate-400 mt-1">Logged data points (~1 record/sec)</div>
@@ -645,7 +685,7 @@ const MonitoringDashboard = () => {
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Time Focused</span>
-                  <span className="text-2xl">🎯</span>
+                  <img src={timeFocusedIcon} alt="Time Focused" className="w-7 h-7 object-contain select-none" />
                 </div>
                 <div className="text-3xl sm:text-4xl font-extrabold text-emerald-500">{kpis.focusPct}%</div>
                 <div className="text-xs text-slate-400 mt-1">Screen & Notebook focus time</div>
@@ -660,7 +700,7 @@ const MonitoringDashboard = () => {
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-indigo-400">Average Focus Score</span>
-                  <span className="text-2xl">⚡</span>
+                  <img src={averageFocusScoreIcon} alt="Average Focus Score" className="w-7 h-7 object-contain select-none" />
                 </div>
                 <div className="text-3xl sm:text-4xl font-extrabold text-indigo-400">{kpis.avgScore} / 100</div>
                 <div className="text-xs text-slate-400 mt-1">Continuous biometric score average</div>
@@ -675,7 +715,7 @@ const MonitoringDashboard = () => {
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-amber-400">Overall Average Focus Score</span>
-                  <span className="text-2xl">🌟</span>
+                  <img src={overallAverageFocusScoreIcon} alt="Overall Average Focus Score" className="w-7 h-7 object-contain select-none" />
                 </div>
                 <div className="text-3xl sm:text-4xl font-extrabold text-amber-400">{overallAvgScore} / 100</div>
                 <div className="text-xs text-slate-400 mt-1">All-time history biometric average</div>
@@ -1302,13 +1342,17 @@ const MonitoringDashboard = () => {
                         : "bg-[#1b3f30] hover:bg-[#143024] shadow-emerald-950/20"
                     }`}
                   >
-                    ⬇️ Export CSV
+                    <span className="flex items-center gap-1.5">
+                      <img src={exportCsvIcon} alt="Export CSV" className="w-3.5 h-3.5 object-contain" />
+                      <span>Export CSV</span>
+                    </span>
                   </button>
                   <button
                     onClick={handleClearData}
-                    className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow transition hover:scale-105 active:scale-95"
+                    className="px-4 py-2 rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white shadow transition hover:scale-105 active:scale-95 flex items-center gap-1.5"
                   >
-                    🗑️ Clear Local Logs
+                    <img src={clearLocalLogsIcon} alt="Clear Local Logs" className="w-3.5 h-3.5 object-contain" />
+                    <span>Clear Local Logs</span>
                   </button>
                 </div>
               </div>

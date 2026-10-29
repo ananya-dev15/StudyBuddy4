@@ -2,6 +2,16 @@ import React, { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 import { useAppContext } from "../context/AppContext";
 import studyBannerBg from "../assets/study_banner_bg.jpg";
+import videoTrackerIcon from "../assets/icons/video tracker.png";
+import monitoringDashboardIcon from "../assets/icons/monitoring dashboard.png";
+import leaderboardIcon from "../assets/icons/leaderboard.png";
+import performanceDashboardIcon from "../assets/good-feedback.png";
+import analyticsIcon from "../assets/icons/analytics.png";
+import assignmentsIcon from "../assets/icons/assignments.png";
+import blogIcon from "../assets/icons/blog.png";
+import contactUsIcon from "../assets/icons/contact us.png";
+import smartAlarmIcon from "../assets/icons/smart alarm.png";
+import focusCompanionIcon from "../assets/icons/focus companion.png";
 
 /**
  * Route-specific default intro data dictionary.
@@ -11,52 +21,122 @@ const ROUTE_INTRO_CONFIG = {
   "/dashboard": {
     title: "Dashboard",
     description: "Your personalized overview of study progress and focus.",
-    icon: "📈",
+    icon: (
+      <img
+        src={performanceDashboardIcon}
+        alt="Dashboard"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/videos": {
     title: "Video Tracker",
     description: "Track your learning videos and stay focused.",
-    icon: "🎥",
+    icon: (
+      <img
+        src={videoTrackerIcon}
+        alt="Video Tracker"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/monitoring": {
     title: "Monitoring Dashboard",
     description: "Real-time biometric focus tracking, attention analytics, and session insights.",
-    icon: "🎯",
+    icon: (
+      <img
+        src={monitoringDashboardIcon}
+        alt="Monitoring Dashboard"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/analytics": {
     title: "Analytics",
     description: "Understand your focus patterns and study performance.",
-    icon: "📊",
+    icon: (
+      <img
+        src={analyticsIcon}
+        alt="Analytics"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/assignments": {
     title: "Assignments",
     description: "Organize your academic tasks, deadlines, and study reminders.",
-    icon: "📝",
+    icon: (
+      <img
+        src={assignmentsIcon}
+        alt="Assignments"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/leaderboard": {
     title: "Leaderboard",
     description: "See your progress and stay motivated.",
-    icon: "🏆",
+    icon: (
+      <img
+        src={leaderboardIcon}
+        alt="Leaderboard"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/blogs": {
     title: "Blogs",
     description: "Explore useful insights, tips, and learning resources.",
-    icon: "📚",
+    icon: (
+      <img
+        src={blogIcon}
+        alt="Blogs"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/contact": {
     title: "Contact Us",
     description: "Connect with the StudyBuddy team.",
-    icon: "📬",
+    icon: (
+      <img
+        src={contactUsIcon}
+        alt="Contact Us"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/reminders": {
     title: "Reminders & Alerts",
     description: "Manage your study alarms, deadlines, and smart focus notifications.",
-    icon: "⏰",
+    icon: (
+      <img
+        src={smartAlarmIcon}
+        alt="Reminders"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/chatbot": {
     title: "AI Study Buddy",
     description: "Instant help, Q&A, and motivation while studying.",
-    icon: "🤖",
+    icon: (
+      <img
+        src={focusCompanionIcon}
+        alt="AI Study Buddy"
+        className="w-10 h-10 sm:w-12 sm:h-12 object-contain select-none"
+        draggable={false}
+      />
+    ),
   },
   "/login": {
     title: "Login",
@@ -177,14 +257,10 @@ export default function PageIntroCard({ title, description, icon, className = ""
             </p>
           </div>
 
-          {/* Icon Badge in Theme Squircle */}
+          {/* Icon Badge */}
           {displayIcon && (
             <div
-              className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-2xl sm:text-3xl shrink-0 transition-transform duration-300 hover:scale-105 select-none shadow-sm backdrop-blur-md ${
-                isDark
-                  ? "bg-slate-900/80 border border-emerald-500/30 text-emerald-200 shadow-[0_0_16px_rgba(16,185,129,0.2)]"
-                  : "bg-white/85 border border-[#e4decb] text-[#1b3f30] shadow-[0_4px_16px_rgba(0,0,0,0.05)]"
-              }`}
+              className="w-12 h-12 sm:w-14 sm:h-14 flex items-center justify-center shrink-0 transition-transform duration-300 hover:scale-105 select-none"
               aria-hidden="true"
             >
               {displayIcon}
